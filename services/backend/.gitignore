@@ -1,0 +1,5 @@
+# Root .gitignore's `dist/` pattern does not match `dist-test/` (different
+# name, not a prefix) — this test-only build output (tsconfig.test.json,
+# `npm test`'s `pretest` step) needs its own ignore rule. Scoped here rather
+# than editing the root .gitignore (outside this task's boundary).
+dist-test/

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildServer } from "../server.ts";
+import { buildServer } from "../server.js";
 
 void test("GET /health responds 200 with { status: 'ok' }", async () => {
   const app = buildServer();

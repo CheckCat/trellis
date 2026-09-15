@@ -2,8 +2,8 @@ import { pathToFileURL } from "node:url";
 
 import Fastify, { type FastifyInstance } from "fastify";
 
-import { parseConfig } from "./config.ts";
-import healthRoutes from "./routes/health.ts";
+import { parseConfig } from "./config.js";
+import healthRoutes from "./routes/health.js";
 
 /**
  * Builds a configured Fastify instance with all core plugins registered, but

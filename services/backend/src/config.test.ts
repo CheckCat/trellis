@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseConfig } from "./config.ts";
+import { parseConfig } from "./config.js";
 
 const validEnv = {
   DATABASE_URL: "postgres://trellis_app:pw@localhost:5432/trellis",

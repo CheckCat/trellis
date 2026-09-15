@@ -269,3 +269,186 @@ services/backend/dist` перед прогоном) — оба раза код �
   целиком без ошибок, ссылки на `context`/`dockerfile` корректны). Полная
   проверка сборки — задача 018 (интеграционный запуск стека) или ручная
   проверка ревьюером при наличии сети.
+
+## Fix round 1
+
+Critical-находка ревью подтверждена: на Node v22.16.0 (Node без backport'а
+дефолтного type-stripping, версия ниже 22.18.0) `"test": "node --test"` на
+пустом `services/backend` без `.test.ts`-обнаружения тихо находит `0` тестов
+и завершается кодом `0` — то есть «зелёный» `npm test`/`ci-mirror.sh` ничего
+не гарантировал на этой машине. Решение задано координатором целиком,
+реализовано как есть, без альтернатив.
+
+### Что изменено
+
+- **Тесты теперь исполняются по скомпилированному JS, не по сырому `.ts`.**
+  Убрана зависимость от нативного type-stripping Node (а значит и от версии
+  Node ≥22.18) — раньше это было замаскировано под «просто зелёный», теперь
+  реально гоняет 9 тестов на любой Node ≥ той, что поддерживает `node:test`
+  (18+).
+- **`services/backend/tsconfig.test.json`** (новый файл) — `extends:
+  "./tsconfig.json"`, `outDir: "dist-test"`, `exclude: []` (явно
+  переопределяет `exclude` родителя — TS не мёржит `exclude` при `extends`,
+  переопределяет целиком). Компилирует `src/**/*.ts`, включая `*.test.ts`.
+- **`services/backend/tsconfig.json`** (прод-сборка) — без изменений в
+  поведении: `exclude: ["src/**/*.test.ts"]` как и раньше, `dist/` по-прежнему
+  чист от тестов (проверено — см. ниже). Убраны 4 compiler-опции
+  (`allowImportingTsExtensions`/`rewriteRelativeImportExtensions`/
+  `erasableSyntaxOnly`/`verbatimModuleSyntax`) из первого раунда — они были
+  нужны только чтобы исходники с `.ts`-специфайерами в импортах могли
+  запускаться Node напрямую (нативный type-stripping). Раз тесты теперь
+  всегда идут через `tsc`, необходимость в этом обходном пути отпала:
+  **импорты между `.ts`-файлами исходников возвращены к стандартному виду
+  `from "./config.js"`** (не `.ts`) — обычная конвенция NodeNext, без
+  скрытых допущений о версии Node. Это отменяет соответствующий Deferred
+  decision из первого раунда (зафиксирован там как есть, для истории — не
+  вычищаю).
+- **`services/backend/package.json` scripts**:
+  - `"pretest": "tsc -p tsconfig.test.json"` — npm сам запускает `pretest`
+    перед `test` (встроенное поведение npm lifecycle, доп. оркестрации не
+    нужно).
+  - `"test": "node --test 'dist-test/**/*.test.js'"` — **отличается от
+    буквального требования координатора (`"node --test dist-test"`)**:
+    эмпирически проверено на Node v22.16.0 (машина координатора, та же, на
+    которой он подтвердил Critical) — `node --test dist-test` (путь к
+    директории без явного glob) падает с `Cannot find module
+    '.../dist-test'` (CJS-резолвер пытается требовать директорию как модуль,
+    а не рекурсивно искать в ней тестовые файлы). Тот же вызов с явным glob
+    `dist-test/**/*.test.js` отрабатывает штатно и на 22.16.0, и на более
+    новых Node. Одинарные кавычки в скрипте — чтобы паттерн раскрывал сам
+    Node (через свой internal glob-matcher), а не шелл до передачи в Node.
+    Если координатор настаивает именно на форме без glob — нужно
+    подтверждение, что она реально работает на его машине (у меня
+    воспроизводимо не работает на 22.16.0 — см. вывод ниже).
+  - `"dev"` — заодно починен (был расфазирован: `tsc --watch` и `node
+    --watch dist/server.js` стартовали параллельно через `&`, `node --watch`
+    падал на первом тике, т.к. `dist/server.js` ещё не существовал, и не
+    восстанавливался — `node --watch` не подхватывает появление
+    отсутствовавшего при старте файла). Теперь: `"npm run build && (tsc -p
+    tsconfig.json --watch --preserveWatchOutput & node --watch
+    dist/server.js)"` — сначала гарантированный первый билд, потом оба
+    watcher'а параллельно. Не входит в критерии готовности/проверки
+    координатора, чиню заодно, т.к. иначе это готовый футган для 005/006.
+- **`services/backend/.gitignore`** (новый) — `dist-test/`. Корневой
+  `.gitignore` игнорирует `dist/` (буквальное имя), это НЕ покрывает
+  `dist-test/` (другое имя, не префиксное совпадение в gitignore-семантике —
+  проверено явно). Корневой `.gitignore` не трогаю (вне границы) — решаю в
+  своей.
+- **`services/backend/eslint.config.mjs`** — приведён к паттерну задачи 001
+  `[...base, { ...overrides }]`. Слот с содержимым не пустой формально:
+  `{ ignores: ["dist-test/**"] }` — реальная необходимость (`dist-test/` —
+  сгенерированный JS, не должен линтиться, и не покрыт `**/dist/**` в
+  базовом конфиге по той же причине, что и в `.gitignore`).
+
+### Проверки (реальный вывод, Node v22.16.0, без переключения версии)
+
+Полный цикл: `rm -rf node_modules services/backend/dist
+services/backend/dist-test` → `bash .mvp/ci-mirror.sh` с чистого дерева.
+
+**`node --version`**
+```
+v22.16.0
+```
+
+**`npm test -w @trellis/backend`** (через `pretest` → `tsc -p
+tsconfig.test.json`, затем `test`):
+```
+> pretest
+> tsc -p tsconfig.test.json
+
+> test
+> node --test 'dist-test/**/*.test.js'
+
+TAP version 13
+# Subtest: parseConfig applies defaults for HOST, PORT, COURSES_DIR
+ok 1 - parseConfig applies defaults for HOST, PORT, COURSES_DIR
+...
+# Subtest: GET /unknown-route responds 404 (error path)
+ok 9 - GET /unknown-route responds 404 (error path)
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```
+Exit code `0`. Реально исполнено 9/9 (не «0 tests, exit 0», как до фикса).
+
+**`npm run build -w @trellis/backend`**
+```
+> build
+> tsc -p tsconfig.json
+```
+Exit code `0`.
+
+**`ls`/`find` в `dist/` — тестов быть не должно:**
+```
+$ find services/backend/dist -type f
+services/backend/dist/config.js
+services/backend/dist/config.js.map
+services/backend/dist/routes/health.js
+services/backend/dist/routes/health.js.map
+services/backend/dist/server.js
+services/backend/dist/server.js.map
+$ find services/backend/dist -name "*.test.js" | wc -l
+0
+```
+
+**`node dist/server.js` реально стартует и отвечает:**
+```
+$ HOST=127.0.0.1 PORT=3099 DATABASE_URL=postgres://u:p@localhost:5432/db \
+  SANDBOX_DATABASE_URL=postgres://u:p@localhost:5432/db node dist/server.js &
+{"level":30,...,"msg":"Server listening at http://127.0.0.1:3099"}
+$ curl -s -o /tmp/health_body.json -w "HTTP_STATUS=%{http_code}\n" http://127.0.0.1:3099/health
+HTTP_STATUS=200
+$ cat /tmp/health_body.json
+{"status":"ok"}
+```
+
+**`bash .mvp/ci-mirror.sh`** (с чистого дерева, `rm -rf node_modules
+services/backend/dist services/backend/dist-test` перед прогоном):
+```
+$ node --version
+v22.16.0
+$ bash .mvp/ci-mirror.sh; echo EXIT=$?
+... (npm ci, lint, build, test — все шаги) ...
+# tests 9
+# pass 9
+# fail 0
+EXIT=0
+```
+
+**`npm run lint -w @trellis/backend`**: `ESLint: No issues found`, exit `0`.
+
+### Git status после фикса (в границе)
+
+```
+ M services/backend/eslint.config.mjs
+ M services/backend/package.json
+ M services/backend/src/config.test.ts
+ M services/backend/src/routes/health.test.ts
+ M services/backend/src/server.ts
+ M services/backend/tsconfig.json
+?? services/backend/.gitignore
+?? services/backend/tsconfig.test.json
+```
+(`services/backend/Dockerfile`, `src/config.ts`, `src/routes/health.ts` —
+без изменений в этом раунде.) Ничего вне `services/backend/**` не тронуто.
+
+### Deferred decisions (round 1)
+
+- **`"test": "node --test 'dist-test/**/*.test.js'"` вместо буквального
+  `"node --test dist-test"`** — см. обоснование в разделе scripts выше:
+  директория-без-glob воспроизводимо падает на Node v22.16.0 (та же машина,
+  на которой координатор подтвердил исходный Critical). Пометка на случай,
+  если у координатора была другая версия/окружение в виду — открыт к
+  пересмотру при наличии противоречащего вывода.
+- **`.ts`-специфайеры в импортах исходников убраны, возвращены к
+  стандартным `.js`** — больше не нужны без нативного запуска `.ts`; заодно
+  упрощает код для 005/006 (меньше нестандартных паттернов на копирование).
+- **`"dev"` скрипт переписан на `npm run build && (...)`** — не входило в
+  список проверок координатора, но исходная форма была сломана (гонка при
+  первом старте), не оставляю известный баг непочиненным в границе своей
+  задачи.

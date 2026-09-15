@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist-test"
+  },
+  // Overrides tsconfig.json's `exclude` (not merged — a child config that
+  // redeclares `exclude` replaces the parent's, it doesn't add to it): this
+  // project compiles *.test.ts too, into dist-test/, kept out of dist/ and
+  // out of the Docker image (fix round 1, task-003 report — tests now run
+  // against compiled JS via `node --test dist-test`, not raw .ts, so the
+  // test run no longer depends on a Node version with type-stripping
+  // enabled by default).
+  "exclude": []
+}
