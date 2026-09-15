@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"],
+    // Source imports use ".ts" specifiers (e.g. `from "./config.ts"`) so the
+    // same source runs unmodified two ways: `tsc` (this build) rewrites
+    // them to ".js" for dist/, and `node --test` runs the .ts test files
+    // directly via built-in type stripping, which resolves specifiers
+    // literally and does not rewrite ".js" to ".ts" on its own (confirmed
+    // against Node's typescript.html docs — see task-003 report, Deferred
+    // decisions). erasableSyntaxOnly keeps the source restricted to syntax
+    // that native type stripping can erase (no enums/namespaces/parameter
+    // properties).
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}
