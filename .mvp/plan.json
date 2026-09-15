@@ -16,8 +16,9 @@
       ],
       "depends_on": [],
       "estimate_tokens": 9000,
-      "status": "pending",
-      "complexity_class": "boilerplate"
+      "status": "done",
+      "complexity_class": "boilerplate",
+      "actual_tokens": 152034
     },
     {
       "id": "002",
@@ -32,7 +33,9 @@
         "docker/postgres/init/02-schemas.sql",
         ".env.example"
       ],
-      "depends_on": ["001"],
+      "depends_on": [
+        "001"
+      ],
       "estimate_tokens": 14000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -52,7 +55,9 @@
         "services/backend/src/routes/health.ts",
         "services/backend/Dockerfile"
       ],
-      "depends_on": ["001"],
+      "depends_on": [
+        "001"
+      ],
       "estimate_tokens": 12000,
       "status": "pending",
       "complexity_class": "boilerplate"
@@ -72,7 +77,9 @@
         "services/frontend/src/main.tsx",
         "services/frontend/Dockerfile"
       ],
-      "depends_on": ["001"],
+      "depends_on": [
+        "001"
+      ],
       "estimate_tokens": 12000,
       "status": "pending",
       "complexity_class": "boilerplate"
@@ -90,7 +97,10 @@
         "services/backend/migrations/001_progress.sql",
         "services/backend/src/lifecycle.ts"
       ],
-      "depends_on": ["002", "003"],
+      "depends_on": [
+        "002",
+        "003"
+      ],
       "estimate_tokens": 16000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -109,7 +119,9 @@
         "services/backend/src/courses/registry.ts",
         "services/backend/src/routes/courses.ts"
       ],
-      "depends_on": ["003"],
+      "depends_on": [
+        "003"
+      ],
       "estimate_tokens": 22000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -128,7 +140,10 @@
         "services/backend/src/routes/progress.ts",
         "services/backend/src/routes/quiz.ts"
       ],
-      "depends_on": ["005", "006"],
+      "depends_on": [
+        "005",
+        "006"
+      ],
       "estimate_tokens": 20000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -146,7 +161,10 @@
         "services/backend/src/sandbox/provisioner.ts",
         "services/backend/src/routes/sandbox.ts"
       ],
-      "depends_on": ["005", "006"],
+      "depends_on": [
+        "005",
+        "006"
+      ],
       "estimate_tokens": 22000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -163,7 +181,10 @@
         "services/backend/src/practice/check.ts",
         "services/backend/src/routes/practice.ts"
       ],
-      "depends_on": ["007", "008"],
+      "depends_on": [
+        "007",
+        "008"
+      ],
       "estimate_tokens": 18000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -181,7 +202,9 @@
         "services/backend/src/transfer/format.ts",
         "services/backend/src/routes/transfer.ts"
       ],
-      "depends_on": ["007"],
+      "depends_on": [
+        "007"
+      ],
       "estimate_tokens": 18000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -201,7 +224,10 @@
         "services/frontend/src/ui/theme.css",
         "services/frontend/src/ui/Layout.tsx"
       ],
-      "depends_on": ["004", "007"],
+      "depends_on": [
+        "004",
+        "007"
+      ],
       "estimate_tokens": 16000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -219,7 +245,10 @@
         "services/backend/tests/sandbox.test.ts",
         "services/backend/tests/transfer.test.ts"
       ],
-      "depends_on": ["009", "010"],
+      "depends_on": [
+        "009",
+        "010"
+      ],
       "estimate_tokens": 20000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -237,7 +266,9 @@
         "services/frontend/src/features/lesson/LessonView.tsx",
         "services/frontend/src/features/lesson/Markdown.tsx"
       ],
-      "depends_on": ["011"],
+      "depends_on": [
+        "011"
+      ],
       "estimate_tokens": 18000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -254,7 +285,9 @@
         "services/frontend/src/features/quiz/AnswerOption.tsx",
         "services/frontend/src/features/quiz/useQuiz.ts"
       ],
-      "depends_on": ["011"],
+      "depends_on": [
+        "011"
+      ],
       "estimate_tokens": 14000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -272,7 +305,9 @@
         "services/frontend/src/features/practice/ResultTable.tsx",
         "services/frontend/src/features/practice/usePractice.ts"
       ],
-      "depends_on": ["011"],
+      "depends_on": [
+        "011"
+      ],
       "estimate_tokens": 20000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -288,7 +323,9 @@
         "services/frontend/src/features/transfer/TransferPage.tsx",
         "services/frontend/src/features/transfer/ImportDialog.tsx"
       ],
-      "depends_on": ["011"],
+      "depends_on": [
+        "011"
+      ],
       "estimate_tokens": 12000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -306,7 +343,10 @@
         "courses/pilot-sql/sandbox/seed.sql",
         "courses/README.md"
       ],
-      "depends_on": ["006", "008"],
+      "depends_on": [
+        "006",
+        "008"
+      ],
       "estimate_tokens": 18000,
       "status": "pending",
       "complexity_class": "follow-pattern"
@@ -323,7 +363,9 @@
         "start.bat",
         "docs/run-windows.md"
       ],
-      "depends_on": ["002"],
+      "depends_on": [
+        "002"
+      ],
       "estimate_tokens": 14000,
       "status": "pending",
       "complexity_class": "novel-design"
@@ -339,7 +381,13 @@
         "tests/e2e/stack.test.ts",
         "tests/e2e/helpers/compose.ts"
       ],
-      "depends_on": ["013", "014", "015", "016", "017"],
+      "depends_on": [
+        "013",
+        "014",
+        "015",
+        "016",
+        "017"
+      ],
       "estimate_tokens": 16000,
       "status": "pending",
       "complexity_class": "novel-design"
