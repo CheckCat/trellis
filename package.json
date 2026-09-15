@@ -1,0 +1,22 @@
+{
+  "name": "trellis",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "services/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "sh -c 'if [ -d services ] && [ -n \"$(ls -A services 2>/dev/null)\" ]; then npm run lint --workspaces --if-present; fi'",
+    "build": "sh -c 'if [ -d services ] && [ -n \"$(ls -A services 2>/dev/null)\" ]; then npm run build --workspaces --if-present; fi'",
+    "test": "sh -c 'if [ -d services ] && [ -n \"$(ls -A services 2>/dev/null)\" ]; then npm run test --workspaces --if-present; fi'"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0"
+  }
+}
