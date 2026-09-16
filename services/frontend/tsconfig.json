@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "noEmit": true,
+    // Base sets module/moduleResolution to NodeNext, tuned for the backend's
+    // Node runtime. This project is never executed by Node directly — Vite
+    // (esbuild/rollup) resolves and bundles it — so NodeNext's Node-runtime
+    // resolution rules (mandatory extensions on relative specifiers, etc.)
+    // don't apply and only get in the way of idiomatic Vite imports
+    // (`from "./App"`). "bundler" is TypeScript's resolution mode built for
+    // exactly this case; it requires "module" to be ESNext/Preserve, hence
+    // both are overridden together.
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["src"]
+}

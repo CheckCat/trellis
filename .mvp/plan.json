@@ -60,8 +60,9 @@
         "001"
       ],
       "estimate_tokens": 12000,
-      "status": "pending",
-      "complexity_class": "boilerplate"
+      "status": "done",
+      "complexity_class": "boilerplate",
+      "actual_tokens": 475000
     },
     {
       "id": "004",

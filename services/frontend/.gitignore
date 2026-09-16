@@ -1,0 +1,6 @@
+# `tsc -b` (build mode, used by the `build` script) always writes an
+# incremental build-info file next to the project's tsconfig, even with
+# `noEmit: true` — root .gitignore doesn't know this filename, so it's
+# ignored here (mirrors services/backend/.gitignore's local-artifact
+# pattern from task-003).
+tsconfig.tsbuildinfo
