@@ -49,25 +49,29 @@ jobs:
           node-version: 22
           cache: npm
       - name: Set up CI database roles and schemas (mirrors docker/postgres/init/00-init.sh)
-        # Reuses the exact same .sql files docker-compose's postgres service
-        # applies via 00-init.sh, so CI's role/schema setup never drifts
-        # from local/prod (single source of truth: docker/postgres/init/).
+        # Runs docker/postgres/init/apply-all.sh — the same script
+        # docker-compose's postgres service runs via 00-init.sh — so CI's
+        # role/schema setup never drifts from local/prod (single source of
+        # truth: docker/postgres/init/, enumerated by apply-all.sh itself,
+        # not listed by hand here). A new docker/postgres/init/NNN-*.sql
+        # file is picked up by every caller automatically (see
+        # ci-mirror-db-provisioning report — previously this step listed
+        # 01-roles.sql/02-schemas.sql by hand and a new file would apply in
+        # the real stack but silently never run here).
         # 02-schemas.sql's sandbox GRANT targets a database literally named
         # `trellis` (unparameterized, matches prod's POSTGRES_DB) — the
         # throwaway `CREATE DATABASE trellis` below exists solely so that
         # statement resolves; nothing else ever connects to it.
         env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
           PGPASSWORD: postgres
           APP_DB_PASSWORD: ci-app-role-password
           SANDBOX_DB_PASSWORD: ci-sandbox-role-password
         run: |
-          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE trellis;"
-          psql -h localhost -U postgres -d trellis_test -v ON_ERROR_STOP=1 \
-            -v app_password="$APP_DB_PASSWORD" \
-            -v sandbox_password="$SANDBOX_DB_PASSWORD" \
-            -f docker/postgres/init/01-roles.sql
-          psql -h localhost -U postgres -d trellis_test -v ON_ERROR_STOP=1 \
-            -f docker/postgres/init/02-schemas.sql
+          psql -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE trellis;"
+          PGDATABASE=trellis_test sh docker/postgres/init/apply-all.sh docker/postgres/init
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm run build --if-present

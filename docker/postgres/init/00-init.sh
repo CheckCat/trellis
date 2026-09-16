@@ -5,6 +5,13 @@
 # смонтированы отдельно в /sql:ro — если бы они тоже лежали в
 # /docker-entrypoint-initdb.d, entrypoint прогнал бы их ещё раз сам, уже без
 # переменных, и упал бы.
+#
+# Список файлов и порядок применения здесь не перечисляются — за это
+# отвечает apply-all.sh (тоже смонтирован в /sql, рядом с *.sql), общий для
+# этого скрипта, CI (.github/workflows/ci.yml) и .mvp/ci-mirror.sh. Раньше
+# каждый вызывающий сам перечислял 01-roles.sql/02-schemas.sql вручную —
+# новый NNN-*.sql файл подхватывали бы не все из них одинаково (см.
+# ci-mirror-db-provisioning report).
 set -euo pipefail
 
 if [ -z "${APP_DB_PASSWORD:-}" ]; then
@@ -17,16 +24,9 @@ if [ -z "${SANDBOX_DB_PASSWORD:-}" ]; then
   exit 1
 fi
 
-psql -v ON_ERROR_STOP=1 \
-  --username "$POSTGRES_USER" \
-  --dbname "$POSTGRES_DB" \
-  -v app_password="$APP_DB_PASSWORD" \
-  -v sandbox_password="$SANDBOX_DB_PASSWORD" \
-  -f /sql/01-roles.sql
+export PGUSER="$POSTGRES_USER"
+export PGDATABASE="$POSTGRES_DB"
 
-psql -v ON_ERROR_STOP=1 \
-  --username "$POSTGRES_USER" \
-  --dbname "$POSTGRES_DB" \
-  -f /sql/02-schemas.sql
+sh /sql/apply-all.sh /sql
 
 echo "00-init.sh: роли и схемы созданы (trellis_app/core, trellis_sandbox/sandbox)"
