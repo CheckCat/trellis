@@ -76,7 +76,18 @@ export default async function coursesRoutes(fastify: FastifyInstance): Promise<v
       // 1). This handler's only job is to shape the HTTP response.
       const result = fastify.courses.rescan();
       const rejectedCourses = fastify.courses.listRejected();
-      return { accepted: result.accepted, rejected: result.rejected, rejectedCourses };
+      // Fix round 2: `scanFailed`/`scanError` must reach the HTTP client,
+      // not just the server log — this is a local single-user app, nobody
+      // is tailing logs for the person who clicked "rescan". Without this,
+      // a failed scan (e.g. COURSES_DIR became unreadable) came back
+      // indistinguishable from a genuine successful no-op rescan.
+      return {
+        accepted: result.accepted,
+        rejected: result.rejected,
+        rejectedCourses,
+        scanFailed: result.scanFailed,
+        scanError: result.scanError,
+      };
     },
   );
 }
@@ -296,10 +307,19 @@ const rejectedCourseSchema = {
 const rescanResponseSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["accepted", "rejected", "rejectedCourses"],
+  // scanFailed is required (always present, true or false) so a client
+  // can't mistake its absence for "false" — scanError stays optional,
+  // present only when scanFailed is true (fix round 2).
+  required: ["accepted", "rejected", "rejectedCourses", "scanFailed"],
   properties: {
+    // When scanFailed is true, these describe the PREVIOUS (unchanged)
+    // state, not a fresh scan's result — see RescanResult's doc comment in
+    // courses/registry.ts. A client must check scanFailed before reading
+    // these as "what this rescan found".
     accepted: { type: "integer" },
     rejected: { type: "integer" },
     rejectedCourses: { type: "array", items: rejectedCourseSchema },
+    scanFailed: { type: "boolean" },
+    scanError: { type: "string" },
   },
 } as const;

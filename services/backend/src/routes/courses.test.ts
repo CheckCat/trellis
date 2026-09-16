@@ -156,6 +156,8 @@ void test("POST /courses/rescan reports accepted/rejected counts and rejection r
     const beforeBody = before.json();
     assert.equal(beforeBody.accepted, 1);
     assert.equal(beforeBody.rejected, 1);
+    assert.equal(beforeBody.scanFailed, false);
+    assert.equal(beforeBody.scanError, undefined);
     assert.equal(beforeBody.rejectedCourses[0].dir, "broken-course");
     assert.ok(beforeBody.rejectedCourses[0].errors.length > 0);
 
@@ -172,3 +174,71 @@ void test("POST /courses/rescan reports accepted/rejected counts and rejection r
     assert.equal(listAfterRescan.json().courses.length, 2);
   });
 });
+
+void test(
+  "POST /courses/rescan on an unreadable COURSES_DIR reports scanFailed with a reason, distinct from a real success, and GET /courses still shows the previously loaded course (fix round 2)",
+  async (t) => {
+    const coursesDir = makeTempDir();
+    try {
+      writeCoursePackage(coursesDir, "good-course", validManifestYaml("good-course"), validCourseFixtureFiles());
+      const app = buildServer({ pool: fakePool(), registry: createCourseRegistry(coursesDir) });
+      try {
+        const before = await app.inject({ method: "GET", url: "/courses" });
+        assert.equal(before.json().courses.length, 1);
+
+        // Same permission-enforcement self-check as
+        // courses/registry.test.ts's equivalent unit test — running as root
+        // would make chmod 000 a no-op and this test meaningless, so skip
+        // rather than false-green.
+        fs.chmodSync(coursesDir, 0o000);
+        let permissionsAreEnforced = true;
+        try {
+          fs.readdirSync(coursesDir);
+          permissionsAreEnforced = false;
+        } catch {
+          // expected: EACCES
+        }
+        if (!permissionsAreEnforced) {
+          fs.chmodSync(coursesDir, 0o755);
+          t.skip("file permissions are not enforced for this process (likely running as root) — skipping");
+          return;
+        }
+
+        try {
+          // This is the exact scenario the reviewer reproduced: before the
+          // fix, this response was `200 {"accepted":1,"rejected":0,
+          // "rejectedCourses":[]}` — byte-for-byte identical to a genuine
+          // successful no-op rescan, with no way for an HTTP client (or a
+          // user clicking "rescan" in a UI) to tell the two apart.
+          const rescanResponse = await app.inject({ method: "POST", url: "/courses/rescan" });
+          assert.equal(rescanResponse.statusCode, 200);
+          const body = rescanResponse.json();
+
+          assert.equal(body.scanFailed, true);
+          assert.equal(typeof body.scanError, "string");
+          assert.ok(body.scanError.length > 0);
+          assert.ok(
+            !/EACCES|ENOTDIR|errno|at\s+\S+\s*\(/.test(body.scanError),
+            "scanError must read as installer-style prose, not a raw errno/stack trace",
+          );
+          // Previous state, honestly labeled — not a fresh scan's result.
+          assert.equal(body.accepted, 1);
+          assert.equal(body.rejected, 0);
+
+          // The actual defect: the previously loaded course must still be
+          // visible through the normal read endpoint after a failed rescan.
+          const after = await app.inject({ method: "GET", url: "/courses" });
+          assert.equal(after.statusCode, 200);
+          assert.equal(after.json().courses.length, 1);
+          assert.equal(after.json().courses[0].id, "good-course");
+        } finally {
+          fs.chmodSync(coursesDir, 0o755);
+        }
+      } finally {
+        await app.close();
+      }
+    } finally {
+      fs.rmSync(coursesDir, { recursive: true, force: true });
+    }
+  },
+);

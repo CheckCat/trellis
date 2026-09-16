@@ -565,3 +565,145 @@ frontend 4/4 vitest).
   инсталлятор-стиля приложения.
 - **`description`/`quizOption.text` не получили `pattern: "\\S"`** — находка
   явно называла `title`/`question`/`prompt`; не расширял произвольно.
+
+## Fix round 2
+
+Единственная находка: сохранение предыдущего состояния реестра при провале
+скана (сознательное решение из round 1, подтверждённое координатором) делало
+сам факт провала невидимым для HTTP-клиента — `POST /courses/rescan` на
+`chmod 000`-нутой `COURSES_DIR` отдавал `200 {"accepted":1,"rejected":0,
+"rejectedCourses":[]}`, неотличимое от честного успешного пересканирования,
+нашедшего тот же курс. Единственный след был в серверном логе, который
+пользователь локального однопользовательского приложения никогда не увидит.
+
+### Что изменено
+
+- **`RescanResult`** (`courses/registry.ts`) — два новых поля:
+  `readonly scanFailed: boolean` (всегда присутствует, `true`/`false`, не
+  опционально — чтобы отсутствие поля нельзя было спутать с `false`) и
+  `readonly scanError?: string` (только при `scanFailed: true`). Doc-comment
+  явно проговаривает: при `scanFailed: true` значения `accepted`/`rejected`
+  описывают ПРЕДЫДУЩЕЕ состояние, не результат этого скана — тем самым и в
+  README-стиле комментария, и в самой структуре типа зафиксировано различие
+  «ничего нового не нашли» vs «скан не смог даже прочитать директорию».
+- **`rescan()`** (`courses/registry.ts`) — ветка `catch` теперь строит
+  человекочитаемое сообщение через новую `describeScanFailure(coursesDir,
+  err)` и возвращает `{ accepted: courses.size, rejected: rejected.length,
+  scanFailed: true, scanError }` вместо прежнего `{ accepted, rejected }`
+  без разметки. Успешная ветка возвращает `scanFailed: false` явно.
+- **`describeScanFailure`** (новая приватная функция, `courses/registry.ts`) —
+  installer-стиль, без errno/стека:
+  - `EACCES`/`EPERM` → `The courses folder ("<dir>") could not be read — check that this app has permission to read it.`
+  - `ENOTDIR` → `"<dir>" is not a folder — check that the courses location points at a directory, not a file.`
+  - иначе (fallback) → `The courses folder ("<dir>") could not be scanned: <err.message>.`
+  Проверено тестом на отсутствие паттернов `EACCES|ENOTDIR|errno|at\s+\S+\s*\(`
+  в реальном сообщении.
+- **`routes/courses.ts`** — `POST /courses/rescan` теперь прокидывает
+  `scanFailed`/`scanError` из `RescanResult` в тело ответа; схема
+  `rescanResponseSchema` дополнена `scanFailed: { type: "boolean" }`
+  (добавлено в `required`, чтобы поле не могло молча пропасть — схема с
+  `additionalProperties: false` иначе просто вырезала бы недекларированное
+  поле, что и было бы тихим провалом фикса) и `scanError: { type: "string"
+  }` (опционально).
+- Логирование (`logger.warn`) при провале скана не изменилось по сути
+  (текст чуть подрихтован под общую фразу `describeScanFailure`), это по-
+  прежнему server-side канал; фикс именно в том, что теперь то же самое
+  сообщение долетает и до HTTP-клиента через `scanError`.
+
+### Обновлённая форма ответа `POST /courses/rescan`
+
+```json
+// успешный скан (включая "ничего не изменилось")
+{"accepted": 1, "rejected": 0, "rejectedCourses": [], "scanFailed": false}
+
+// провалившийся скан — COURSES_DIR не читается
+{
+  "accepted": 1, "rejected": 0, "rejectedCourses": [],
+  "scanFailed": true,
+  "scanError": "The courses folder (\"/courses\") could not be read — check that this app has permission to read it."
+}
+```
+`accepted`/`rejected` во втором случае — это снимок ДО попытки скана
+(«ничего не поменялось»), не результат нового скана; клиент обязан сначала
+проверить `scanFailed`.
+
+### Тесты (новые, +2 к прошлому раунду)
+
+- `courses/registry.test.ts` — `rescan() on a coursesDir that turns
+  unreadable reports scanFailed with a reason...`: один курс успешно
+  загружен → `chmod 000` на саму `coursesDir` → `rescan()` возвращает
+  `scanFailed: true`, `scanError` — непустая строка без errno/стек-паттернов,
+  `accepted`/`rejected` равны предыдущему состоянию (1/0), и
+  `registry.list()`/`registry.get(...)` по-прежнему показывают ранее
+  загруженный курс. Тест сам детектирует запуск от root (permissions не
+  работают) и делает `t.skip(...)` вместо ложного зелёного — тем же
+  паттерном, что и unreadable-lesson-content тест из round 1.
+- `routes/courses.test.ts` — HTTP-версия того же сценария
+  (`POST /courses/rescan on an unreadable COURSES_DIR reports scanFailed...`):
+  воспроизводит ровно то, что нашёл ревьюер — курс загружен, `chmod 000` на
+  `coursesDir`, `POST /courses/rescan` → `200` с `scanFailed: true` и
+  читаемым `scanError`, `accepted`/`rejected` равны предыдущему состоянию, и
+  `GET /courses` после этого по-прежнему показывает ранее загруженный курс.
+  Также добавлена проверка `scanFailed === false`/`scanError === undefined`
+  в уже существующий тест на честный успешный rescan (регрессия на «в
+  обычном случае поле есть и оно `false`»).
+
+### Проверки — реальный вывод
+
+**`npm test -w @trellis/backend`** (без поднятой БД):
+```
+1..56
+# tests 56
+# suites 0
+# pass 51
+# fail 0
+# cancelled 0
+# skipped 5
+# todo 0
+```
+Было 54 (49 pass/5 skip) → стало 56 (51 pass/5 skip): +2 теста, оба нацелены
+на эту находку, оба реально исполнены (не skip — процесс в этой песочнице не
+root, permissions реально проверены).
+
+**`npm run build -w @trellis/backend`**: код `0`.
+
+**`bash .mvp/ci-mirror.sh`** (с чистого дерева: `rm -rf node_modules
+services/backend/dist services/backend/dist-test services/frontend/dist
+services/frontend/node_modules`): код `0` — `npm ci` → lint (чисто) → build
+→ test (backend 56/56 исполнено, 51 pass + 5 skip; frontend 4/4 vitest).
+
+**`npm run lint -w @trellis/backend`**: без вывода, код `0`.
+
+**Ручное воспроизведение ровно сценария ревьюера** (`app.inject()`,
+одноразовый скрипт): честный успешный rescan →
+`200 {"accepted":1,"rejected":0,"rejectedCourses":[],"scanFailed":false}`;
+затем `chmod 000` на `coursesDir`, тот же `POST /courses/rescan` →
+`200 {"accepted":1,"rejected":0,"rejectedCourses":[],"scanFailed":true,
+"scanError":"The courses folder (\"...\") could not be read — check that
+this app has permission to read it."}` — счётчики те же (как и задумано —
+это предыдущее состояние), но теперь есть однозначный машиночитаемый
+признак и человекочитаемая причина; `GET /courses` сразу после этого
+по-прежнему отдаёт ранее загруженный курс.
+
+### Git status после фикс-раунда 2 (в границе)
+
+```
+ M services/backend/src/courses/registry.test.ts
+ M services/backend/src/courses/registry.ts
+ M services/backend/src/routes/courses.test.ts
+ M services/backend/src/routes/courses.ts
+```
+Ничего вне `services/backend/**` не тронуто.
+
+### Deferred decisions (fix round 2)
+
+- **Имена полей `scanFailed`/`scanError`** — координатор явно оставил имена
+  на моё усмотрение при условии «признак обязан быть машиночитаемым»;
+  выбрал буквальные, без сокращений, по аналогии с уже существующими
+  `accepted`/`rejected`/`rejectedCourses` в том же объекте.
+- **`scanFailed` — обязательное поле (`required`) со значением `boolean`,
+  а не опциональный флаг, который есть только при провале** — сознательно:
+  опциональность «поле есть только когда true» создала бы ту же двусмысленность
+  (отсутствие поля можно спутать со старым форматом ответа/багом сериализации),
+  которую фиксит весь раунд. `scanError`, наоборот, опционален — ему
+  действительно нечего сказать при успехе.

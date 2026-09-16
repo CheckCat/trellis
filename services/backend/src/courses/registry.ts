@@ -21,8 +21,31 @@ export interface RegistryRejectedCourse {
 }
 
 export interface RescanResult {
+  /**
+   * Fix round 2: when `scanFailed` is true, these two counts describe the
+   * PREVIOUS (unchanged) state, not a fresh scan's result — the scan
+   * itself never ran to completion (couldn't even read `coursesDir`), so
+   * there is nothing new to count. Callers (routes/courses.ts) must check
+   * `scanFailed` before presenting `accepted`/`rejected` as "what this
+   * rescan found" — otherwise a failed scan that happens to match the
+   * previous count (e.g. the common case: nothing changed since the last
+   * successful scan) is indistinguishable from a real, successful rescan
+   * that found the same numbers. That indistinguishability was the actual
+   * bug this round fixes: `POST /courses/rescan` on an unreadable
+   * `coursesDir` used to come back byte-for-byte identical to a genuine
+   * success.
+   */
   readonly accepted: number;
   readonly rejected: number;
+  /** True when this scan could not read `coursesDir` at all (missing
+   * permissions, `coursesDir` turned out to be a file, ...) — see
+   * `scanError` for a human-readable reason. False on every ordinary scan,
+   * including one that found 0 courses. */
+  readonly scanFailed: boolean;
+  /** Set only when `scanFailed` is true. Installer-style wording (see
+   * describeScanFailure below) — safe to show directly to the person who
+   * clicked "rescan" in a UI, not a raw errno/stack trace. */
+  readonly scanError?: string;
 }
 
 /** Same "optional logger, no-op by default" convention as migrate.ts's
@@ -48,7 +71,11 @@ export interface CourseRegistry {
   listRejected(): RegistryRejectedCourse[];
   /** Re-reads `coursesDir` from scratch and replaces the in-memory state
    * atomically (readers never see a partial scan) — the only way courses
-   * are (re)loaded; there is no filesystem watcher (task-006 brief). */
+   * are (re)loaded; there is no filesystem watcher (task-006 brief). If
+   * `coursesDir` itself can't be read at all, the previous state is left in
+   * place and the result comes back with `scanFailed: true` (fix round 2) —
+   * check that flag before treating `accepted`/`rejected` as this scan's
+   * result. */
   rescan(): RescanResult;
 }
 
@@ -90,11 +117,18 @@ export function createCourseRegistry(coursesDir: string, logger: RegistryLogger 
     try {
       scanned = scanCoursesDir(coursesDir);
     } catch (err) {
-      logger.warn(
-        `Could not read courses directory "${coursesDir}": ${describeError(err)} — keeping the previous course list ` +
-          "unchanged (0 courses if this is the initial scan at startup). Check that COURSES_DIR points at a readable directory.",
-      );
-      return { accepted: courses.size, rejected: rejected.length };
+      // Fix round 2: the caller (routes/courses.ts, ultimately whoever
+      // clicked "rescan") needs a machine-readable way to tell "this scan
+      // failed, these are stale counts" apart from "this scan genuinely
+      // found the same numbers as before" — before this, both cases
+      // returned the exact same `{ accepted, rejected }` shape, so a failed
+      // rescan of a `chmod 000`'d coursesDir looked byte-for-byte identical
+      // to a real, successful no-op rescan. `scanFailed`/`scanError` make
+      // the failure visible to the HTTP client, not just the server log
+      // (this is a local single-user app — nobody is tailing server logs).
+      const scanError = describeScanFailure(coursesDir, err);
+      logger.warn(`${scanError} Keeping the previous course list unchanged.`);
+      return { accepted: courses.size, rejected: rejected.length, scanFailed: true, scanError };
     }
     const { courses: loaded, rejected: loadRejected } = scanned;
 
@@ -134,7 +168,7 @@ export function createCourseRegistry(coursesDir: string, logger: RegistryLogger 
 
     courses = nextCourses;
     rejected = nextRejected;
-    return { accepted: courses.size, rejected: rejected.length };
+    return { accepted: courses.size, rejected: rejected.length, scanFailed: false };
   }
 
   rescan();
@@ -153,6 +187,29 @@ function fromLoaderRejection(rejection: RejectedCourse): RegistryRejectedCourse 
 
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Turns a `scanCoursesDir` failure into an installer-style sentence: no
+ * errno, no stack trace, just what's wrong with the folder and what to do
+ * about it. This is what ends up in `RescanResult.scanError` and gets
+ * echoed back over HTTP — the person who clicked "rescan" in a UI needs to
+ * understand it without ever opening a server log (fix round 2).
+ */
+function describeScanFailure(coursesDir: string, err: unknown): string {
+  if (isErrnoException(err)) {
+    if (err.code === "EACCES" || err.code === "EPERM") {
+      return `The courses folder ("${coursesDir}") could not be read — check that this app has permission to read it.`;
+    }
+    if (err.code === "ENOTDIR") {
+      return `"${coursesDir}" is not a folder — check that the courses location points at a directory, not a file.`;
+    }
+  }
+  return `The courses folder ("${coursesDir}") could not be scanned: ${describeError(err)}.`;
+}
+
+function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && "code" in err;
 }
 
 // Makes `fastify.courses` (decorated in server.ts) known to the type system
