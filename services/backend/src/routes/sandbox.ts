@@ -19,7 +19,7 @@ import { sendCourseNotFound } from "./progress.js";
  * as data (and exhaustive by `Record<SandboxErrorKind, ...>`, so adding a
  * kind without deciding its status is a compile error) rather than a chain
  * of ifs that could quietly answer 500 for a new kind. */
-const STATUS_BY_KIND: Record<SandboxErrorKind, number> = {
+export const STATUS_BY_KIND: Record<SandboxErrorKind, number> = {
   course_not_found: 404,
   sandbox_not_found: 404,
   ambiguous_sandbox: 400,
@@ -104,7 +104,12 @@ function toStatusPayload(state: SandboxState | undefined) {
   };
 }
 
-function sendSandboxError(request: FastifyRequest, reply: FastifyReply, err: unknown): FastifyReply {
+/** Shared with routes/practice.ts (task 009): preparing a course's sandbox
+ * before running practice SQL goes through the same `fastify.sandbox.ensure`
+ * and can fail in exactly the same ways, so both surfaces must answer the
+ * same status and the same body for the same `SandboxError` — a second copy
+ * of this mapping would be free to drift. */
+export function sendSandboxError(request: FastifyRequest, reply: FastifyReply, err: unknown): FastifyReply {
   if (!isSandboxError(err)) {
     // Not ours to translate — let Fastify's own error handler produce the
     // 500 and log it, rather than dressing an unknown bug up as a tidy

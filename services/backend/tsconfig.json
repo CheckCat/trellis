@@ -28,6 +28,7 @@
     "src/courses/testSupport.ts",
     "src/db/testSupport.ts",
     "src/progress/testSupport.ts",
-    "src/sandbox/testSupport.ts"
+    "src/sandbox/testSupport.ts",
+    "src/practice/testSupport.ts"
   ]
 }
