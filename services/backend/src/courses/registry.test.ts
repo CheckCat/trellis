@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { createCourseRegistry } from "./registry.js";
@@ -68,6 +69,26 @@ void test("createCourseRegistry rejects the second of two directories that decla
     assert.equal(registry.listRejected().length, 1);
     assert.equal(registry.listRejected()[0]?.dir, "zzz-dir");
     assert.ok(registry.listRejected()[0]?.errors.some((err) => /duplicate course id/i.test(err.message)));
+  });
+});
+
+void test("createCourseRegistry over a coursesDir that is actually a file starts up with a readable warning, not a crash (fix round 1, Important 3)", () => {
+  withTempDir((tempDir) => {
+    const notADirectory = path.join(tempDir, "courses-is-a-file");
+    fs.writeFileSync(notADirectory, "oops, this is a file, not a directory", "utf8");
+
+    const warnings: string[] = [];
+    // The whole point: this constructor call must not throw (readdirSync on
+    // a file throws ENOTDIR) — before fix round 1 this propagated straight
+    // out of createCourseRegistry with a bare Node stack trace, which is
+    // exactly what an installer-style local app (.mvp/invariants.md) must
+    // never show the user at startup.
+    const registry = createCourseRegistry(notADirectory, { warn: (message) => warnings.push(message) });
+
+    assert.deepEqual(registry.list(), []);
+    assert.equal(warnings.length, 1);
+    assert.ok(warnings[0]?.includes(notADirectory));
+    assert.ok(!/\bat\s+\S+\s*\(/.test(warnings[0] ?? ""), "warning message must not look like a raw stack trace");
   });
 });
 

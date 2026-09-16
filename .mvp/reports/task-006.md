@@ -380,3 +380,188 @@ count"`, а не только сравнивает JSON-форму.
   `allErrors: true`; семантика: ни один `return` при первой находке,
   собираем всё через общий массив `errors`) — просто фазы не смешиваются
   между собой.
+
+## Fix round 1
+
+Ревью подтвердило секретность ответов (прямая атака на `toLessonResponse` —
+подмена, чтобы эмитил `correct`/`explanation`/`check`, — не пробила схему
+ответа с `additionalProperties: false`) и защиту путей (симлинки на файл и
+директорию, `..\..\`, сбегающий `seed[]`, дубль id урока между модулями).
+Найдено 1 Critical, 2 Important, 3 мелочи — все закрыты.
+
+### Critical 1 — нечитаемый файл урока ронял старт приложения
+
+`loader.ts`: чтение `lesson.contentPath` теперь в `try/catch`; ошибка чтения
+(включая TOCTOU-окно между тем, что `validate.ts` подтвердил существование
+файла, и фактическим чтением — права могли измениться) собирается в
+`ValidationError` с путём `modules[i].lessons[j].content` и приводит к
+`{ ok: false, errors }` для пакета целиком (все такие ошибки по уроку
+собираются, не первая-и-до-свидания), а не к необработанному throw.
+Doc-comment функции теперь соответствует реальности ("Never throws").
+Тест: `loader.test.ts` — `chmod 000` на файл урока после валидации →
+`loadCoursePackage` возвращает `{ok:false}` с ожидаемым путём/сообщением, не
+бросает; тест сам детектирует, если процесс исполняется от root (permissions
+не работают), и делает `t.skip(...)` с причиной вместо ложного зелёного.
+
+### Important 2 — id модуля/урока не был ограничен по символам
+
+`manifest.schema.json`: добавлен `pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"`
+только для `$defs/module.id` и `$defs/lesson.id` (не для `quizOption.id`/
+`sandbox.id` — они не появляются в URL, пример из брифа с `a`/`b` продолжает
+проходить, покрыто отдельным regression-тестом). Заодно закрывает пробелы-
+как-id и `.`/`..` как id (первый символ класса не включает пробел/точку).
+Тесты (`validate.test.ts`, +5): id со слэшем отклоняется, id из пробелов
+отклоняется, id `.` и `..` отклоняются, регресс-тест на однобуквенные id
+вариантов квиза (`a`/`b`) по-прежнему проходит.
+
+### Important 3 — «курсов нет» распознавалось только по ENOENT
+
+`registry.ts`: вызов `scanCoursesDir(coursesDir)` внутри `rescan()` обёрнут
+в `try/catch`. На любой другой ошибке чтения директории (`EACCES`,
+`ENOTDIR` — `COURSES_DIR` оказалась файлом, и т.п.) — читаемое
+`logger.warn(...)` вместо необработанного throw с голым стеком; предыдущее
+состояние реестра (`courses`/`rejected`) остаётся как есть (на самом первом
+скане при старте — это пустой список, т.е. приложение стартует с 0 курсов и
+предупреждением в логе, не падает). `loader.ts`'s `scanCoursesDir` не
+трогал — по-прежнему специально ловит только `ENOENT` как «курсов нет»,
+остальное пробрасывает; перехват шире `createCourseRegistry`, что и было
+одним из предложенных ревью вариантов.
+Тест: `registry.test.ts` — `COURSES_DIR`, указывающая на обычный файл →
+`createCourseRegistry(...)` не бросает, `list()` пустой, ровно одно
+`logger.warn` с именем пути, сообщение не похоже на голый stack trace
+(явная проверка регэкспом на отсутствие паттерна `at ... (`).
+
+### Мелочи
+
+4. **Двойное логирование отклонённых пакетов** — `routes/courses.ts`'s
+   `POST /courses/rescan` больше не логирует сам (было: цикл `fastify.log.warn`
+   по `rejectedCourses` после каждого rescan) — `registry.ts`'s `rescan()`
+   уже логирует ровно один раз на каждый отклонённый пакет при каждом скане
+   (включая инициированный через `POST /courses/rescan`). Хендлер теперь
+   только формирует HTTP-ответ.
+5. **Ранний `return` после структурных ошибок ajv теперь явно проговорён в
+   самом payload'е**, не только в комментарии: к списку структурных ошибок
+   добавляется финальная запись `{ path: "", message: "Structural errors
+   must be fixed first — semantic checks (...) were not run against this
+   manifest." }` — автор курса, чинящий опечатку, не будет считать список
+   ошибок исчерпывающим.
+6. **`title`/`question`/`prompt` из одних пробелов больше не проходят** —
+   добавлен `"pattern": "\\S"` (хотя бы один непробельный символ) рядом с
+   `minLength: 1` для: `title` курса, `module.title`, `lesson.title`,
+   `quiz.question`, `practice.prompt`. `description`/`quizOption.text` не
+   трогал — не были названы находкой явно. Тест: `validate.test.ts` — курс
+   с `title: "   "` отклоняется.
+
+### Решение координатора по Deferred decision (форма `GET /courses`)
+
+Применено буквально: `GET /courses` теперь возвращает `{ "courses": [...] }`,
+не голый массив (`routes/courses.ts`, схема `coursesListResponseSchema`
+обновлена в объект с `required: ["courses"]`, `additionalProperties: false`).
+Все use-сайты в `routes/courses.test.ts` обновлены на новую форму. Два других
+Deferred decision (semver-подобный regex, именованный импорт `{ Ajv2020 }`)
+оставлены как есть по прямому указанию координатора.
+
+### Обновлённая эталонная схема манифеста (для задачи 017)
+
+Изменения относительно версии в исходном отчёте — только эти два места (весь
+остальной текст схемы выше по файлу актуален):
+
+```json
+"module": {
+  ...
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    ...
+  }
+},
+"lesson": {
+  ...
+  "properties": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "content": { "type": "string", "minLength": 1 },
+    ...
+  }
+}
+```
+Плюс `"pattern": "\\S"` рядом с `minLength: 1` у корневого `title`,
+`quiz.question`, `practice.prompt` (курс-level `title` тоже). `quizOption.id`/
+`sandbox.id` — без изменений (`minLength: 1` only) — однобуквенные id из
+примера в брифе (`a`/`b`) по-прежнему валидны. Module/lesson id теперь не
+могут содержать `/`, пробелы, быть `.`/`..` — задача 017 должна использовать
+только `[A-Za-z0-9._-]`, начиная с буквы/цифры, до 64 символов.
+
+### Обновлённые формы ответов эндпоинтов
+
+Единственное изменение: **`GET /courses`** теперь `200 { "courses": [...] }`
+вместо голого массива. `GET /courses/:courseId`, `GET
+/courses/:courseId/lessons/:lessonId`, `POST /courses/rescan` — без
+изменений формы (см. примеры в исходном отчёте выше, они по-прежнему
+актуальны — перепроверено тем же ручным `app.inject()`-скриптом после всех
+фиксов).
+
+### Проверки — реальный вывод
+
+**`npm test -w @trellis/backend`** (без поднятой БД, после всех фиксов):
+```
+1..54
+# tests 54
+# suites 0
+# pass 49
+# fail 0
+# cancelled 0
+# skipped 5
+# todo 0
+```
+Было 47 (42 pass/5 skip) → стало 54 (49 pass/5 skip): +7 новых тестов
+(3 в `loader.test.ts`→было 5 стало 6: +1 unreadable-content; 5 новых в
+`validate.test.ts`: id-со-слэшем, id-из-пробелов, id `.`/`..`, regression на
+`a`/`b`, title-из-пробелов; 1 новый в `registry.test.ts`: `COURSES_DIR` —
+файл). Все явно нацелены на находки этого раунда — не «тесты ради числа».
+5 skip — те же, что и раньше, DB-зависимые тесты задачи 005 (`DATABASE_URL`/
+`TRELLIS_TEST_DATABASE_URL` не заданы), не связаны с этой задачей.
+
+**`npm run build -w @trellis/backend`**: код `0`.
+
+**`bash .mvp/ci-mirror.sh`** (с чистого дерева: `rm -rf node_modules
+services/backend/dist services/backend/dist-test services/frontend/dist
+services/frontend/node_modules`): код `0` — `npm ci` → lint (backend+frontend,
+чисто) → build (оба) → test (backend 54/54 исполнено, 49 pass + 5 skip;
+frontend 4/4 vitest).
+
+**`npm run lint -w @trellis/backend`**: без вывода, код `0`.
+
+**Ручная проверка нового payload'а** (`validateManifest` напрямую, манифест
+с опечаткой И дублирующимся полем): подтверждён финальный элемент
+`{path: "", message: "Structural errors must be fixed first..."}` в списке
+ошибок — см. пример вывода выше в этом разделе (продублирован при живой
+проверке после фикса, точный JSON приведён).
+
+### Git status после фикс-раунда (в границе)
+
+```
+ M services/backend/src/courses/loader.test.ts
+ M services/backend/src/courses/loader.ts
+ M services/backend/src/courses/manifest.schema.json
+ M services/backend/src/courses/registry.test.ts
+ M services/backend/src/courses/registry.ts
+ M services/backend/src/courses/validate.test.ts
+ M services/backend/src/courses/validate.ts
+ M services/backend/src/routes/courses.test.ts
+ M services/backend/src/routes/courses.ts
+```
+Ничего вне `services/backend/**` не тронуто.
+
+### Deferred decisions (fix round 1)
+
+- **При ошибке скана (`Important 3`) реестр сохраняет ПРЕДЫДУЩЕЕ состояние**,
+  а не сбрасывает в пусто — на первичном скане при старте предыдущего
+  состояния нет (пусто и так), но на explicit `rescan()` transient-ошибка
+  чтения директории не должна стирать ранее валидные курсы. Если ревьюер
+  сочтёт, что "сбрасывать в пусто" честнее ("данные соответствуют реальному
+  состоянию диска") — открыт к пересмотру, но посчитал потерю ранее рабочих
+  курсов из-за преходящей ошибки чтения худшим UX для локального
+  инсталлятор-стиля приложения.
+- **`description`/`quizOption.text` не получили `pattern: "\\S"`** — находка
+  явно называла `title`/`question`/`prompt`; не расширял произвольно.

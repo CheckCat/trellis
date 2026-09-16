@@ -70,14 +70,16 @@ void test("GET /courses lists only valid courses, in summary shape (happy path)"
   await withApp(async (app) => {
     const response = await app.inject({ method: "GET", url: "/courses" });
     assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.json(), [
-      {
-        id: "good-course",
-        version: "1.0.0",
-        title: "Fixture course",
-        description: "A synthetic course used only by backend tests.",
-      },
-    ]);
+    assert.deepEqual(response.json(), {
+      courses: [
+        {
+          id: "good-course",
+          version: "1.0.0",
+          title: "Fixture course",
+          description: "A synthetic course used only by backend tests.",
+        },
+      ],
+    });
   });
 });
 
@@ -161,12 +163,12 @@ void test("POST /courses/rescan reports accepted/rejected counts and rejection r
     // stay invisible until the next explicit rescan.
     writeCoursePackage(coursesDir, "late-course", validManifestYaml("late-course"), validCourseFixtureFiles());
     const listBeforeRescan = await app.inject({ method: "GET", url: "/courses" });
-    assert.equal(listBeforeRescan.json().length, 1);
+    assert.equal(listBeforeRescan.json().courses.length, 1);
 
     const after = await app.inject({ method: "POST", url: "/courses/rescan" });
     assert.equal(after.json().accepted, 2);
 
     const listAfterRescan = await app.inject({ method: "GET", url: "/courses" });
-    assert.equal(listAfterRescan.json().length, 2);
+    assert.equal(listAfterRescan.json().courses.length, 2);
   });
 });

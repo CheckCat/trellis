@@ -76,7 +76,27 @@ export function createCourseRegistry(coursesDir: string, logger: RegistryLogger 
   let rejected: RegistryRejectedCourse[] = [];
 
   function rescan(): RescanResult {
-    const { courses: loaded, rejected: loadRejected } = scanCoursesDir(coursesDir);
+    // scanCoursesDir only special-cases a *missing* coursesDir (ENOENT) as
+    // "no courses"; anything else it can't read (coursesDir is a file —
+    // ENOTDIR, or unreadable — EACCES) still throws. Fix round 1: a
+    // misconfigured mount must produce a readable log line, not an uncaught
+    // exception that takes down app startup with a bare Node stack trace —
+    // this is a local, installer-style app (see .mvp/invariants.md), not a
+    // service with an ops team reading stack traces. On such a failure the
+    // previous scan's state is kept as-is (nothing to replace it with) —
+    // deliberately not wiped to empty, so a transient/one-off read error on
+    // a *re*scan doesn't make previously-good courses disappear.
+    let scanned: ReturnType<typeof scanCoursesDir>;
+    try {
+      scanned = scanCoursesDir(coursesDir);
+    } catch (err) {
+      logger.warn(
+        `Could not read courses directory "${coursesDir}": ${describeError(err)} — keeping the previous course list ` +
+          "unchanged (0 courses if this is the initial scan at startup). Check that COURSES_DIR points at a readable directory.",
+      );
+      return { accepted: courses.size, rejected: rejected.length };
+    }
+    const { courses: loaded, rejected: loadRejected } = scanned;
 
     const nextCourses = new Map<string, Course>();
     const nextRejected: RegistryRejectedCourse[] = loadRejected.map(fromLoaderRejection);
@@ -129,6 +149,10 @@ export function createCourseRegistry(coursesDir: string, logger: RegistryLogger 
 
 function fromLoaderRejection(rejection: RejectedCourse): RegistryRejectedCourse {
   return { dir: rejection.dir, errors: rejection.errors };
+}
+
+function describeError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // Makes `fastify.courses` (decorated in server.ts) known to the type system

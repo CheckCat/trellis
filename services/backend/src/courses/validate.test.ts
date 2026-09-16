@@ -248,3 +248,119 @@ void test("validateManifest rejects a lesson with none of content/quiz/practice 
     assert.ok(result.errors.some((err) => err.path === "modules[0].lessons[0]" && /none of content\/quiz\/practice/i.test(err.message)));
   });
 });
+
+void test("validateManifest rejects a lesson id containing a slash (fix round 1, Important 2 — lesson id is a URL path segment)", () => {
+  withPackageDir((dir) => {
+    const yamlText = [
+      "id: fixture-course",
+      "version: 1.0.0",
+      "title: Fixture course",
+      "modules:",
+      "  - id: intro",
+      "    title: Intro",
+      "    lessons:",
+      '      - id: "les/son"',
+      "        title: Sloppy lesson id",
+      "        quiz:",
+      "          question: Q?",
+      "          options:",
+      "            - id: a",
+      "              text: 'Yes'",
+      "              correct: true",
+      "            - id: b",
+      "              text: 'No'",
+      "              explanation: Nope.",
+      "",
+    ].join("\n");
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+  });
+});
+
+void test("validateManifest rejects a module id that is only whitespace (fix round 1, Important 2)", () => {
+  withPackageDir((dir) => {
+    const yamlText = [
+      "id: fixture-course",
+      "version: 1.0.0",
+      "title: Fixture course",
+      "modules:",
+      '  - id: " "',
+      "    title: Intro",
+      "    lessons:",
+      "      - id: only-lesson",
+      "        title: Only lesson",
+      "        quiz:",
+      "          question: Q?",
+      "          options:",
+      "            - id: a",
+      "              text: 'Yes'",
+      "              correct: true",
+      "            - id: b",
+      "              text: 'No'",
+      "              explanation: Nope.",
+      "",
+    ].join("\n");
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+  });
+});
+
+void test('validateManifest rejects a lesson id of "." or ".." (fix round 1, Important 2)', () => {
+  withPackageDir((dir) => {
+    for (const badId of [".", ".."]) {
+      const yamlText = [
+        "id: fixture-course",
+        "version: 1.0.0",
+        "title: Fixture course",
+        "modules:",
+        "  - id: intro",
+        "    title: Intro",
+        "    lessons:",
+        `      - id: "${badId}"`,
+        "        title: Only lesson",
+        "        quiz:",
+        "          question: Q?",
+        "          options:",
+        "            - id: a",
+        "              text: 'Yes'",
+        "              correct: true",
+        "            - id: b",
+        "              text: 'No'",
+        "              explanation: Nope.",
+        "",
+      ].join("\n");
+      const result = validateManifest(parseYaml(yamlText), dir);
+      assert.equal(result.ok, false, `expected lesson id "${badId}" to be rejected`);
+    }
+  });
+});
+
+void test("validateManifest still accepts single-character quiz option ids (a/b, per the brief's own example — Important 2 must not regress this)", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const result = validateManifest(parseYaml(validManifestYaml()), dir);
+    assert.equal(result.ok, true);
+  });
+});
+
+void test("validateManifest rejects a title that is only whitespace (fix round 1, Important 6)", () => {
+  withPackageDir((dir) => {
+    const yamlText = [
+      "id: fixture-course",
+      "version: 1.0.0",
+      'title: "   "',
+      "modules:",
+      "  - id: intro",
+      "    title: Intro",
+      "    lessons:",
+      "      - id: only-lesson",
+      "        title: Only lesson",
+      "        content: lessons/missing.md",
+      "",
+    ].join("\n");
+    const result = validateManifest(parseYaml(yamlText), dir);
+    assert.equal(result.ok, false);
+  });
+});

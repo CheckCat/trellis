@@ -17,7 +17,11 @@ export default async function coursesRoutes(fastify: FastifyInstance): Promise<v
   fastify.get(
     "/courses",
     { schema: { response: { 200: coursesListResponseSchema } } },
-    async () => fastify.courses.list(),
+    // Object wrapper, not a bare array (fix round 1, coordinator's call):
+    // the other three endpoints all return objects, and an object here
+    // leaves room to add fields later (e.g. a rejected-package count)
+    // without a breaking response-shape change once 013 depends on this.
+    async () => ({ courses: fastify.courses.list() }),
   );
 
   fastify.get<{ Params: { courseId: string } }>(
@@ -65,14 +69,13 @@ export default async function coursesRoutes(fastify: FastifyInstance): Promise<v
     "/courses/rescan",
     { schema: { response: { 200: rescanResponseSchema } } },
     async () => {
+      // Logging a rejected package is the registry's job, not this route's
+      // (see courses/registry.ts's `logger.warn` inside `rescan()`) — it
+      // already logs one line per rejection on every scan, including this
+      // one; logging the same list again here would double it (fix round
+      // 1). This handler's only job is to shape the HTTP response.
       const result = fastify.courses.rescan();
       const rejectedCourses = fastify.courses.listRejected();
-      for (const rejected of rejectedCourses) {
-        fastify.log.warn(
-          { dir: rejected.dir, courseId: rejected.courseId, errors: rejected.errors },
-          "course package rejected during rescan",
-        );
-      }
       return { accepted: result.accepted, rejected: result.rejected, rejectedCourses };
     },
   );
@@ -159,8 +162,12 @@ const courseSummarySchema = {
 } as const;
 
 const coursesListResponseSchema = {
-  type: "array",
-  items: courseSummarySchema,
+  type: "object",
+  additionalProperties: false,
+  required: ["courses"],
+  properties: {
+    courses: { type: "array", items: courseSummarySchema },
+  },
 } as const;
 
 const courseParamsSchema = {

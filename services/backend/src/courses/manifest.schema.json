@@ -17,7 +17,7 @@
       "description": "Semver string.",
       "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
     },
-    "title": { "type": "string", "minLength": 1 },
+    "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
     "description": { "type": "string" },
     "sandboxes": {
       "type": "array",
@@ -48,8 +48,12 @@
       "additionalProperties": false,
       "required": ["id", "title", "lessons"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "title": { "type": "string", "minLength": 1 },
+        "id": {
+          "type": "string",
+          "description": "Stable module id — also used as a progress key (task 007) and appears unescaped in URLs (GET /courses/:courseId), so it's restricted to URL/id-safe characters (unlike quizOption.id/sandbox.id, which never appear in a URL path).",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "lessons": {
           "type": "array",
           "minItems": 1,
@@ -62,8 +66,12 @@
       "additionalProperties": false,
       "required": ["id", "title"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "title": { "type": "string", "minLength": 1 },
+        "id": {
+          "type": "string",
+          "description": "Stable lesson id — a progress key (task 007) AND a URL path segment (GET /courses/:courseId/lessons/:lessonId), so it's restricted to URL/id-safe characters — no \"/\", whitespace, or a bare \".\"/\"..\" (see module.id's doc comment for the same rule).",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "content": { "type": "string", "minLength": 1 },
         "quiz": { "$ref": "#/$defs/quiz" },
         "practice": { "$ref": "#/$defs/practice" }
@@ -74,7 +82,7 @@
       "additionalProperties": false,
       "required": ["question", "options"],
       "properties": {
-        "question": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "options": {
           "type": "array",
           "minItems": 2,
@@ -99,7 +107,7 @@
       "required": ["sandbox", "prompt"],
       "properties": {
         "sandbox": { "type": "string", "minLength": 1 },
-        "prompt": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "check": { "type": "string", "minLength": 1 }
       }
     }

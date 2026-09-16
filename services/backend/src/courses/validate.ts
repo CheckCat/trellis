@@ -99,7 +99,26 @@ interface RawManifest {
  */
 export function validateManifest(manifestSource: unknown, packageDir: string): ValidationResult {
   if (!validateStructure(manifestSource)) {
-    return { ok: false, errors: (validateStructure.errors ?? []).map(describeAjvError) };
+    // The semantic pass below assumes the manifest already matches
+    // manifest.schema.json's shape (e.g. that `modules[i].lessons` is an
+    // array, not `undefined`) — running it against a structurally invalid
+    // manifest would throw a TypeError instead of a useful ValidationError,
+    // so it's skipped entirely here (fix round 1: made explicit in the
+    // payload itself, not just this comment, so a course author fixing a
+    // typo doesn't assume the schema errors were the *only* problems and
+    // then hit a second wave of semantic errors after fixing them).
+    return {
+      ok: false,
+      errors: [
+        ...(validateStructure.errors ?? []).map(describeAjvError),
+        {
+          path: "",
+          message:
+            "Structural errors must be fixed first — semantic checks (id uniqueness, exactly-one-correct " +
+            "quiz option, sandbox references, path safety, ...) were not run against this manifest.",
+        },
+      ],
+    };
   }
 
   // `validateStructure` is `ValidateFunction<RawManifest>` — the `if` above

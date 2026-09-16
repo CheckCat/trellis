@@ -46,19 +46,36 @@ export function loadCoursePackage(packageDir: string): LoadResult {
   const { manifest } = result;
   // Reading lesson Markdown is deliberately this module's job, not
   // validate.ts's (task-006 brief, requirement 2 vs 3) — validate.ts already
-  // confirmed every `contentPath` exists and stays inside packageDir, so
-  // this read can't escape the package.
-  const modules: CourseModule[] = manifest.modules.map((module) => ({
+  // confirmed every `contentPath` existed and stayed inside packageDir *at
+  // validation time*, but existence-then isn't readability-now: permissions
+  // can change, and there's an inherent TOCTOU window between the check and
+  // this read. So this read is wrapped too (fix round 1 — a lesson file that
+  // turns unreadable between validation and this read must reject the
+  // package with a clear reason, not throw an uncaught EACCES that takes
+  // down the whole scan/registry/app startup).
+  const contentReadErrors: ValidationError[] = [];
+  const modules: CourseModule[] = manifest.modules.map((module, moduleIndex) => ({
     id: module.id,
     title: module.title,
-    lessons: module.lessons.map((lesson): CourseLesson => {
-      const content =
-        lesson.contentPath === undefined
-          ? undefined
-          : fs.readFileSync(path.resolve(packageDir, lesson.contentPath), "utf8");
+    lessons: module.lessons.map((lesson, lessonIndex): CourseLesson => {
+      let content: string | undefined;
+      if (lesson.contentPath !== undefined) {
+        try {
+          content = fs.readFileSync(path.resolve(packageDir, lesson.contentPath), "utf8");
+        } catch (err) {
+          contentReadErrors.push({
+            path: `modules[${moduleIndex}].lessons[${lessonIndex}].content`,
+            message: `Cannot read "${lesson.contentPath}": ${describeError(err)}`,
+          });
+        }
+      }
       return { id: lesson.id, title: lesson.title, content, quiz: lesson.quiz, practice: lesson.practice };
     }),
   }));
+
+  if (contentReadErrors.length > 0) {
+    return { ok: false, errors: contentReadErrors };
+  }
 
   const course: Course = {
     id: manifest.id,
