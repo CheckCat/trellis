@@ -8,10 +8,18 @@ import { runMigrations } from "./db/migrate.js";
 import { registerShutdown } from "./lifecycle.js";
 import { createCourseRegistry, type CourseRegistry } from "./courses/registry.js";
 import { createProgressRepository, type ProgressRepository } from "./progress/repository.js";
+import {
+  createPostgresSandboxDriver,
+  createUnconfiguredPostgresSandboxDriver,
+  type PostgresSandboxDriver,
+} from "./sandbox/postgres-sandbox.js";
+import { createSandboxProvisioner } from "./sandbox/provisioner.js";
+import type { SandboxProvisioner } from "./sandbox/types.js";
 import healthRoutes from "./routes/health.js";
 import coursesRoutes from "./routes/courses.js";
 import progressRoutes from "./routes/progress.js";
 import quizRoutes from "./routes/quiz.js";
+import sandboxRoutes from "./routes/sandbox.js";
 
 export interface BuildServerOptions {
   /**
@@ -58,6 +66,30 @@ export interface BuildServerOptions {
    * ended up with.
    */
   readonly progress?: ProgressRepository;
+  /**
+   * Injects a practice-sandbox provisioner (task 008) — same test pattern
+   * as `pool`/`registry`/`progress`: route tests build the real provisioner
+   * over the real Postgres driver on top of a recording fake pool (see
+   * sandbox/testSupport.ts) and never touch a database. An injected
+   * provisioner is the caller's own: `buildServer` does not close it.
+   */
+  readonly sandbox?: SandboxProvisioner<PostgresSandboxDriver>;
+  /**
+   * Builds the sandbox's own pool from this connection string — always
+   * `AppConfig.sandboxDatabaseUrl` (SANDBOX_DATABASE_URL), never
+   * `databaseUrl`: everything the sandbox runs must run under the sandbox
+   * role (project invariant). `buildServer` owns that pool and closes it on
+   * `app.close()`.
+   *
+   * Unlike `databaseUrl`, this is optional — and unlike `coursesDir` there
+   * is no safe default for it, so when it is absent the sandbox is wired to
+   * an "unconfigured" driver whose every operation fails with a stated
+   * reason (503), instead of `fastify.sandbox` being missing entirely. That
+   * keeps the many tests that build a server for unrelated reasons free of
+   * sandbox setup while still failing loudly if something actually tries to
+   * use a sandbox that was never configured.
+   */
+  readonly sandboxDatabaseUrl?: string;
   /**
    * Passed straight through to Fastify's own `logger` option — reuses
    * Fastify's own type rather than re-declaring it, so this stays correct
@@ -146,10 +178,39 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   // own way into core.lesson_progress.
   app.decorate("progress", options.progress ?? createProgressRepository(pool));
 
+  // The sandbox gets its own pool under its own role — it is never given
+  // `pool` above, not even as a fallback. Mixing the two is the one thing
+  // the sandbox design exists to prevent (project invariant: seed, check and
+  // user SQL run as `trellis_sandbox`, never as the application role).
+  const ownsSandbox = options.sandbox === undefined;
+  if (!ownsSandbox && options.sandboxDatabaseUrl !== undefined) {
+    app.log.warn(
+      "buildServer: both `sandbox` and `sandboxDatabaseUrl` were given — `sandbox` wins, `sandboxDatabaseUrl` is ignored.",
+    );
+  }
+  const sandbox =
+    options.sandbox ??
+    createSandboxProvisioner({
+      courses: registry,
+      driver:
+        options.sandboxDatabaseUrl === undefined
+          ? createUnconfiguredPostgresSandboxDriver()
+          : createPostgresSandboxDriver(options.sandboxDatabaseUrl, {
+              onError: (err) => app.log.error({ err }, "practice sandbox pool error"),
+            }),
+    });
+  app.decorate("sandbox", sandbox);
+  if (ownsSandbox) {
+    app.addHook("onClose", async () => {
+      await sandbox.close();
+    });
+  }
+
   app.register(healthRoutes);
   app.register(coursesRoutes);
   app.register(progressRoutes);
   app.register(quizRoutes);
+  app.register(sandboxRoutes);
   return app;
 }
 
@@ -162,7 +223,11 @@ const isMainModule =
 
 if (isMainModule) {
   const config = parseConfig();
-  const app = buildServer({ databaseUrl: config.databaseUrl, coursesDir: config.coursesDir });
+  const app = buildServer({
+    databaseUrl: config.databaseUrl,
+    sandboxDatabaseUrl: config.sandboxDatabaseUrl,
+    coursesDir: config.coursesDir,
+  });
   const shutdownController = registerShutdown(app);
 
   runMigrations(app.db, {
