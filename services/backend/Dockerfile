@@ -36,6 +36,11 @@ COPY --from=builder /app/services/backend/dist services/backend/dist
 # dist or migrations at startup fail with ENOENT (see task-005 report).
 COPY --from=builder /app/services/backend/migrations services/backend/migrations
 
+# node:22-alpine ships a non-root `node` user (uid 1000) precisely for this —
+# running the app as root in the runtime image is an unnecessary privilege
+# escalation with no upside (see final-review fixes report, minor items).
+USER node
+
 WORKDIR /app/services/backend
 EXPOSE 3001
 CMD ["node", "dist/server.js"]

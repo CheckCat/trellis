@@ -9,9 +9,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "sh -c 'if [ -d services ] && [ -n \"$(ls -A services 2>/dev/null)\" ]; then npm run lint --workspaces --if-present; fi'",
-    "build": "sh -c 'if [ -d services ] && [ -n \"$(ls -A services 2>/dev/null)\" ]; then npm run build --workspaces --if-present; fi'",
-    "test": "sh -c 'if [ -d services ] && [ -n \"$(ls -A services 2>/dev/null)\" ]; then npm run test --workspaces --if-present; fi'"
+    "lint": "npm run lint --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -29,6 +29,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -63,6 +68,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
@@ -72,16 +82,35 @@ services:
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
     depends_on:
+      # Deliberately service_started, not service_healthy: task 004 built a
+      # dedicated "core unreachable" screen for exactly the case where the
+      # backend is down, but that screen only ever renders if the frontend
+      # container itself is allowed to come up while backend is unhealthy.
+      # With service_healthy, a backend stuck unhealthy at cold start (e.g.
+      # wrong DB password, see Important 3) leaves frontend in `Created`
+      # forever and the user gets a browser connection-refused page instead
+      # of the app's own honest error state (see final-review fixes report).
       backend:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
-      # Предполагаем статический веб-сервер на базе alpine (nginx:alpine и
-      # подобные несут busybox wget) — контракт для задачи 004, см. отчёт.
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/"]
+      # /api/health (not just /) so "healthy" means "nginx is up AND the
+      # backend is reachable through it" — nginx being alive while the
+      # proxied backend is unreachable/stale (see the `resolver` fix in
+      # nginx.conf) used to read as healthy under a bare `/` check, which is
+      # exactly the silently-broken state the final-review Critical finding
+      # was about. Предполагаем статический веб-сервер на базе alpine
+      # (nginx:alpine и подобные несут busybox wget) — контракт для задачи
+      # 004, см. отчёт.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   trellis_pgdata:

@@ -9,12 +9,65 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    services:
+      # Ephemeral Postgres for this CI run only — disposable by construction,
+      # so there is no "real dev database" to accidentally point tests at
+      # (unlike a developer's own `trellis_pgdata` volume). See
+      # final-review-fixes-infra report (Important 1): before this, none of
+      # the 5 DB-backed tests (migration apply/idempotency/mismatch-guard,
+      # advisory-lock serialization, transaction commit/rollback) ever ran
+      # in CI — they only ever skipped.
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: trellis_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d trellis_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Both point at the same disposable `trellis_test` database. Locally,
+      # DATABASE_URL is a developer's real working DB (never `_test`-named)
+      # and TRELLIS_TEST_DATABASE_URL is a separate disposable one — see
+      # services/backend/src/db/pool.test.ts and migrate.test.ts. In CI
+      # there is no "real" database to protect, so reusing one is fine and
+      # keeps the setup step below to one role/schema pass instead of two.
+      # Password is a literal (not a secret): this Postgres instance exists
+      # only for the lifetime of this job and is never reachable from
+      # outside the runner.
+      DATABASE_URL: postgres://trellis_app:ci-app-role-password@localhost:5432/trellis_test
+      TRELLIS_TEST_DATABASE_URL: postgres://trellis_app:ci-app-role-password@localhost:5432/trellis_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Set up CI database roles and schemas (mirrors docker/postgres/init/00-init.sh)
+        # Reuses the exact same .sql files docker-compose's postgres service
+        # applies via 00-init.sh, so CI's role/schema setup never drifts
+        # from local/prod (single source of truth: docker/postgres/init/).
+        # 02-schemas.sql's sandbox GRANT targets a database literally named
+        # `trellis` (unparameterized, matches prod's POSTGRES_DB) — the
+        # throwaway `CREATE DATABASE trellis` below exists solely so that
+        # statement resolves; nothing else ever connects to it.
+        env:
+          PGPASSWORD: postgres
+          APP_DB_PASSWORD: ci-app-role-password
+          SANDBOX_DB_PASSWORD: ci-sandbox-role-password
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE trellis;"
+          psql -h localhost -U postgres -d trellis_test -v ON_ERROR_STOP=1 \
+            -v app_password="$APP_DB_PASSWORD" \
+            -v sandbox_password="$SANDBOX_DB_PASSWORD" \
+            -f docker/postgres/init/01-roles.sql
+          psql -h localhost -U postgres -d trellis_test -v ON_ERROR_STOP=1 \
+            -f docker/postgres/init/02-schemas.sql
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm run build --if-present

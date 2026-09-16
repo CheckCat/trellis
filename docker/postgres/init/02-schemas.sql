@@ -27,6 +27,21 @@ GRANT CREATE ON DATABASE trellis TO trellis_sandbox;
 ALTER ROLE trellis_app SET search_path = core;
 ALTER ROLE trellis_sandbox SET search_path = sandbox;
 
+-- trellis_sandbox is the role the user's own practice SQL runs under
+-- (never trellis_app) — an accidental `pg_sleep(1e9)` or a runaway
+-- cartesian join in the practice editor is the *expected* failure mode
+-- there, not an edge case, and would otherwise hold a pool connection
+-- forever. Bounds chosen as generous-but-finite for an interactive
+-- single-query editor, not tuned against any particular course's queries:
+-- 30s is well above what a legitimate exercise on course-sized seed data
+-- should ever take, and 60s idle-in-transaction reclaims a connection left
+-- mid-transaction (tab closed, browser crashed) without cutting off normal
+-- think-time inside an explicit transaction. trellis_app is deliberately
+-- NOT bounded here — schema migrations (task-005) are allowed to take as
+-- long as they need.
+ALTER ROLE trellis_sandbox SET statement_timeout = '30s';
+ALTER ROLE trellis_sandbox SET idle_in_transaction_session_timeout = '60s';
+
 -- CONNECT — ролям, не всем подряд.
 REVOKE ALL ON DATABASE trellis FROM PUBLIC;
 GRANT CONNECT ON DATABASE trellis TO trellis_app;

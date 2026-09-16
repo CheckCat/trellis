@@ -1,4 +1,16 @@
-node_modules
-dist
+# `**/` matters: a bare `node_modules`/`dist` only matches at the build
+# context root, not services/*/node_modules or services/*/dist — a host
+# checkout with those present (from local `npm ci`/`npm run build`) would
+# otherwise leak into `COPY services/<svc> services/<svc>` and get compiled
+# against/served as whatever happens to be on the developer's machine
+# instead of what `npm ci`/`tsc`/`vite build` produce inside the image
+# (see final-review fixes report, Important 2).
+**/node_modules
+**/dist
+**/dist-test
+**/*.tsbuildinfo
 .git
 .env
+.superpowers
+.mvp
+docs
