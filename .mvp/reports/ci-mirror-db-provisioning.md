@@ -262,6 +262,153 @@ EXIT: 0
   `docker/postgres/init/00-init.sh` (M), `docker/postgres/init/apply-all.sh`
   (новый) + этот report-файл.
 
+## Fix round 1
+
+Ревьюер подтвердил изоляцию (реальный стек и `core.lesson_progress` целы
+при параллельном прогоне, `apply-all.sh` реально общий — подсунутый
+`03-review-probe.sql` подхватился и в `ci-mirror.sh`, и при холодном
+`docker compose up`) и честный fallback без Docker, но нашёл два реальных
+дефекта: скрипт мог отрапортовать зелёное, не выполнив ни одного
+БД-теста, и SIGINT в конкретном окне (внутри цикла ожидания готовности)
+давал не `130`, а `1` с Docker-ошибкой вместо понятного «ты нажал Ctrl-C».
+
+### Critical — false green, когда БД-тесты не выполнились
+
+**Корень 1: проба готовности шла не тем путём, который реально
+используется.** Было: `docker exec "$CI_MIRROR_PG_CONTAINER" pg_isready
+-U postgres -d trellis_test` — проверяет unix-сокет ВНУТРИ контейнера.
+Официальный образ postgres при первом старте кратко поднимает временный
+сервер только для `initdb`-бухгалтерии, слушающий ТОЛЬКО unix-сокет,
+никогда TCP — значит `docker exec ... pg_isready` мог сказать «готов»
+раньше, чем реально стартовал финальный, снаружи достижимый сервер, на
+который и указывают `DATABASE_URL`/`TRELLIS_TEST_DATABASE_URL`. Проба
+готовности и строка подключения проверяли, по сути, два разных сервера.
+
+Фикс: `wait_for_external_pg()` — проверка идёт по тому же внешнему адресу
+`127.0.0.1:$CI_MIRROR_PG_PORT`, что уйдёт в `DATABASE_URL`
+(`pg_isready -h 127.0.0.1 -p "$port" ...`, с fallback на чистый bash
+`/dev/tcp/...` TCP-коннект, если `pg_isready` нет на хосте — без лишней
+жёсткой зависимости от `postgresql-client`).
+
+**Корень 2: даже если бы проба была верной, ничего не проверяло
+постфактум, что тесты реально исполнились, а не скипнулись по любой
+ДРУГОЙ причине** (не только по гонке готовности — неверный пароль, не то
+имя БД, что угодно). Фикс: после `npm run test --if-present` вывод
+разбирается на TAP-сводку (`# skipped N`), и если Docker был доступен
+(`CI_MIRROR_DB_STARTED=1`) и сумма `skipped` > 0 — скрипт падает с
+внятным сообщением, а не отчитывается зелёным. Реализовано без потери
+исходного кода выхода `npm test` при настоящем провале тестов (через
+`PIPESTATUS` вокруг `set +e`/`set -e`).
+
+**Проверка — саботаж №1 (порт `1`, контейнер жив и здоров):**
+```
+# tests 62
+# pass 57
+# fail 0
+# skipped 5
+ci-mirror.sh: 5 test(s) reported skipped even though a disposable Postgres
+was provisioned for this run — the DB-backed tests in
+services/backend/src/db/*.test.ts did not actually execute (see
+ci-mirror-db-provisioning report, Fix round 1). Treating this as a
+failure: a green ci-mirror.sh must mean those tests ran, not that they
+silently skipped.
+ci-mirror.sh: stopping disposable test Postgres (trellis-ci-mirror-postgres)...
+EXIT: 1
+```
+Контейнер после — чист. Проверено на временной копии в scratchpad, не в
+самом `ci-mirror.sh` (правил только точку экспорта `DATABASE_URL`, не
+логику детекта порта — саму логику не ломал, воспроизводил СЛЕДСТВИЕ
+поломки на реально живом контейнере).
+
+**Проверка — саботаж №2 (порт верный, скип по другой причине):**
+подменил экспорт `TRELLIS_TEST_DATABASE_URL` на заведомо несуществующую
+БД (`does_not_exist_test`, суффикс `_test` соблюдён — проходит охранник
+на подмену БД, — но самой базы нет). Реальный лог показывает точную
+причину скипа, взятую из самого теста:
+```
+ok 38 - runMigrations applies 001_progress from a clean core schema and is
+idempotent on repeat # SKIP Postgres is not reachable at
+TRELLIS_TEST_DATABASE_URL (database "does_not_exist_test" does not exist)
+...
+```
+(Оказалось, что параллельный backend-агент между раундами ревью
+консолидировал `pool.test.ts` на ту же `TRELLIS_TEST_DATABASE_URL` через
+общий `testSupport.ts` — поэтому сломались все 5, а не только 3 из
+`migrate.test.ts`; сам механизм проверки от этого не зависит.)
+```
+# skipped 5
+ci-mirror.sh: 5 test(s) reported skipped even though a disposable Postgres
+was provisioned for this run ...
+EXIT: 1
+```
+Контейнер после — чист.
+
+### Important — SIGINT в окне ожидания готовности
+
+Было: один `trap cleanup_ci_mirror_db EXIT INT TERM`, cleanup только
+останавливал контейнер и **возвращался** — bash продолжал скрипт с того
+места, где его прервали (следующая команда `docker exec` против уже
+остановленного контейнера → `No such container` → падение по `set -e` с
+кодом `1`), а сообщение «stopping...» печаталось дважды (once по INT,
+once по последующему EXIT).
+
+Фикс: `EXIT`-trap и `INT`/`TERM`-trap разведены. `on_ci_mirror_interrupt()`
+явно вызывает `cleanup_ci_mirror_db` и затем `exit 130`/`exit 143` —
+скрипт гарантированно останавливается на месте, не пытаясь продолжить.
+`cleanup_ci_mirror_db()` идемпотентна (флаг `CI_MIRROR_CLEANED_UP`),
+поэтому даже когда `exit` внутри INT-обработчика сам triggers ещё и
+EXIT-trap — сообщение печатается и `docker stop` вызывается ровно один
+раз.
+
+**Проверка — SIGINT в окне ожидания (до сообщения "ready"):** запущено
+через обёртку, которая явно сбрасывает диспозицию `SIGINT`/`SIGTERM` на
+`SIG_DFL` перед `exec` (см. обоснование техники в первом раунде отчёта —
+фоновые задания non-interactive shell'а иначе наследуют `SIG_IGN`).
+Сигнал отправлен сразу после появления контейнера в `docker ps` (до
+всякого "ready"-сообщения):
+```
+ci-mirror.sh: starting disposable test Postgres (trellis-ci-mirror-postgres)...
+ci-mirror.sh: waiting for it to accept connections on 127.0.0.1:60935 (the same address DATABASE_URL will use)...
+ci-mirror.sh: stopping disposable test Postgres (trellis-ci-mirror-postgres)...
+wait exit code: 130
+```
+Ровно одна строка «stopping...», никаких `docker exec`/`No such
+container`, код `130`. Контейнер после — чист.
+
+**Проверка — SIGINT после готовности:**
+```
+ci-mirror.sh: disposable test Postgres ready on 127.0.0.1:60960 (db trellis_test).
+ci-mirror.sh: stopping disposable test Postgres (trellis-ci-mirror-postgres)...
+wait exit code: 130
+```
+По-прежнему чисто, контейнер удалён.
+
+### Minor — порядок глоба в `apply-all.sh` зависел от локали
+
+`for f in "$sql_dir"/*.sql` — POSIX определяет сортировку результатов
+glob-раскрытия «according to the collating sequence in effect», то есть
+зависимо от `LC_COLLATE`. Зафиксировал явно: `LC_ALL=C` в начале скрипта
+(до цикла), с комментарием прямо в файле, не только в отчёте.
+
+### Обязательные проверки — сводка реального вывода
+
+- **Нормальный прогон:** `EXIT: 0`, `# tests 62 / pass 62 / fail 0 /
+  skipped 0`.
+- **Без Docker:** `EXIT: 0`, сообщение про отсутствие Docker,
+  `# pass 57 / skipped 5` (легитимные скипы, не спутаны с
+  Critical-проверкой).
+- **Саботаж №1 (порт):** `EXIT: 1`, внятное сообщение, контейнер удалён.
+- **Саботаж №2 (не та БД):** `EXIT: 1`, внятное сообщение, контейнер
+  удалён.
+- **SIGINT до готовности:** код `130`, одно сообщение об остановке, без
+  `No such container`.
+- **SIGINT после готовности:** код `130`, чисто.
+- **Уборка по всем сценариям:** `docker ps -a | grep trellis-ci-mirror`
+  пусто после каждого прогона; финально —
+  `docker images/ps -a/volume ls | grep trellis` пусто, `.env` не создан,
+  `git status --short` — только `.mvp/ci-mirror.sh` и
+  `docker/postgres/init/apply-all.sh` (плюс report-файл).
+
 ## Deferred decisions
 
 - Пароли одноразового контейнера (`ci-mirror-postgres-password`,

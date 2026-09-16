@@ -1,7 +1,17 @@
 #!/bin/sh
 # Applies every docker/postgres/init/*.sql file, in lexicographic order
-# (hence the zero-padded NN- prefixes — 010 would otherwise sort before 2),
-# via psql against whatever connection the ambient PG* environment
+# (hence the zero-padded NN- prefixes — 010 would otherwise sort before 2).
+# That ordering comes from shell glob expansion, which POSIX defines as
+# sorted "according to the collating sequence in effect" — i.e. LC_COLLATE-
+# dependent, not guaranteed byte-order by default. `LC_ALL=C` below pins it
+# to plain ASCII sort so the applied order can never silently depend on
+# whichever locale happens to be active in whatever shell invokes this
+# script (a developer's login shell, a CI runner, a container's default
+# locale — all different, none of them this script's business to assume).
+LC_ALL=C
+export LC_ALL
+
+# Applies each file via psql against whatever connection the ambient PG*
 # variables (PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE) describe — psql
 # reads those itself, so this script never hardcodes a connection method.
 # That's what lets the exact same script serve three different callers with
