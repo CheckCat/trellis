@@ -44,12 +44,16 @@
   `503 {"status":"degraded","db":"down"}`. Схемы ответа на оба кода.
 - `services/backend/src/server.ts` (расширён) — `buildServer(options?:
   { pool?, databaseUrl? })`: пул берётся из `options.pool` (тесты) либо
-  создаётся из `options.databaseUrl ?? parseConfig().databaseUrl`;
-  декорируется как `app.db`; `onClose`-хук закрывает пул. Main-module блок:
+  создаётся из `options.databaseUrl`; декорируется как `app.db`. **С fix
+  round 1**: требуется ровно один из `pool`/`databaseUrl` (без обоих —
+  явная ошибка, никакого неявного `parseConfig()`), и `onClose`-хук
+  закрывает пул только если его создал сам `buildServer` (владение, не
+  просто идемпотентность — см. Fix round 1). Main-module блок:
   `parseConfig()` → `buildServer({ databaseUrl })` →
-  `registerShutdown(app)` → `runMigrations(app.db)` → `app.listen(...)`;
-  ошибка на любом шаге ловится и уходит в `shutdownController.shutdown(1)`
-  (тот же идемпотентный путь, что и у сигналов).
+  `registerShutdown(app)` → `runMigrations(app.db, { logger })` →
+  `app.listen(...)`; ошибка на любом шаге ловится и уходит в
+  `shutdownController.shutdown(1)` (тот же идемпотентный путь, что и у
+  сигналов).
 - Тесты (`node:test`, co-located, по паттерну task-003):
   `src/db/pool.test.ts`, `src/db/migrate.test.ts`, `src/lifecycle.test.ts`,
   переписанный `src/routes/health.test.ts` (фейковый `AppPool` через
@@ -151,11 +155,18 @@ Indexes: "schema_migrations_pkey" PRIMARY KEY, btree (version)
   другой `databaseUrl`, если понадобится тот же интерфейс).
 - **`buildServer(options?: { pool?: AppPool; databaseUrl?: string })`** —
   сигнатура изменилась относительно task-003 (там был `buildServer()` без
-  аргументов). В тестах передавайте `{ pool: fakePool }` — реальная БД и
-  `DATABASE_URL` не нужны, паттерн см. `routes/health.test.ts`. В проде
-  (main-module блок `server.ts`) достаточно `buildServer()`
-  (без аргументов тоже сработает — внутри упадёт на `parseConfig()`, если
-  `DATABASE_URL` не задан).
+  аргументов). **Поправка (fix round 1): нужно передать ровно один из
+  `pool`/`databaseUrl` — `buildServer()` без аргументов теперь бросает
+  ошибку** (`"buildServer requires either options.pool ... or
+  options.databaseUrl ... it does not fall back to parseConfig() itself"`),
+  он больше НЕ падает внутрь `parseConfig()`. В тестах передавайте
+  `{ pool: fakePool }` — реальная БД не нужна, паттерн см.
+  `routes/health.test.ts`. В проде (main-module блок `server.ts`)
+  используется `buildServer({ databaseUrl: config.databaseUrl })`.
+  **Владение пулом**: пул, переданный через `options.pool`, `buildServer`
+  НЕ закрывает на `app.close()` — это ответственность того, кто его создал
+  (см. `AppPool#end`'s JSDoc и fix round 1 ниже); пул, созданный самим
+  `buildServer` из `databaseUrl`, закрывается им же автоматически.
 
 ## Проверки — реальный вывод
 
@@ -255,19 +266,14 @@ frontend) → build (backend `tsc`, frontend `tsc -b && vite build`) → test
   реальной БД. Задокументировано в интерфейсном дайджесте выше как
   контракт для 006/007/008/010 (действует паттерн `buildApp(overrides)` из
   роли backend-implementer).
-- **Concern: `services/backend/Dockerfile` не копирует `migrations/` в
-  runtime-образ** (копирует только `dist/`, см. `COPY --from=builder
-  /app/services/backend/dist ...`). В реальном контейнере
-  `runMigrations()` упадёт с ENOENT на несуществующей директории. Не
-  чиню сам: `Dockerfile` — зона `devops-engineer` (роль backend-implementer
-  явно исключает Dockerfile/CI/compose), и `BOUNDARY` этой задачи явно не
-  включает право его трогать. Не блокирует текущие критерии готовности
-  (все проверки выше — через `docker compose up -d postgres` + локальный
-  `node dist/server.js`, не через полный образ backend). Нужно поднять
-  отдельно: строка `COPY services/backend/migrations
-  services/backend/migrations` в runtime-стадии `Dockerfile` (или
-  скопировать раньше, в builder-стадию, без разницы — миграции не
-  компилируются).
+- **Concern (снято, RESOLVED в fix round 1): `services/backend/Dockerfile`
+  не копировал `migrations/` в runtime-образ** — на момент первой сдачи
+  копировал только `dist/`. С тех пор `devops-engineer` поправил
+  `Dockerfile` отдельным коммитом (`fix(docker): образы обоих сервисов не
+  собирались вовсе`) — теперь копирует и `tsconfig.base.json` (без него
+  `tsc` падал с TS5083 в обоих образах), и
+  `services/backend/migrations`, образ реально собирается и стек
+  поднимается целиком. Не мой файл — не трогал.
 - **`core._test_rollback_scratch`/`core._test_commit_scratch` —
   скретч-таблицы тестов создаются/дропаются прямо в `core`** (единственная
   доступная роли `trellis_app` схема) вместо выделенной тестовой схемы —
@@ -275,8 +281,187 @@ frontend) → build (backend `tsc`, frontend `tsc -b && vite build`) → test
   `core`/`sandbox` по своим правам (см. отчёт задачи 002); поэтому это
   единственный вариант без выхода за права роли. Таблицы дропаются в
   `finally` каждого теста — не остаются в БД между прогонами.
-- **Тест миграций напрямую `DROP TABLE core.lesson_progress /
-  core.schema_migrations`** перед проверкой применения "с нуля" — приемлемо
-  только потому что это единственная задача, владеющая этими двумя
-  таблицами (007 их только читает/пишет строки, не меняет DDL); тест не
-  трогает ничего, чем не владеет.
+- **(Пересмотрено в fix round 1, см. ниже) Тест миграций напрямую `DROP
+  TABLE core.lesson_progress / core.schema_migrations`** — исходное
+  обоснование («единственная задача, владеющая этими таблицами») отвечало
+  про владение схемой, но не про сохранность данных: `DATABASE_URL`
+  разработчика указывает на рабочий инстанс в именованном volume, и
+  `DROP TABLE` там при `npm test` стирает реальный прогресс пользователя.
+  Исправлено: см. `## Fix round 1` — теперь `TRELLIS_TEST_DATABASE_URL`.
+
+## Fix round 1
+
+Ревью подтвердило архитектуру (lifecycle/ресурсы, advisory-lock, «миграции
+до listen»), но нашло 3 находки класса Important + 4 мелочи. Все 7 закрыты
+(аргументов не менять код не нашлось — по факту все находки корректны).
+
+### Important 1 — `AppPool.end()` не идемпотентен + `buildServer({pool})` закрывал чужой пул
+
+`pool.ts`: убран неверный JSDoc «Idempotent per pg's own contract»
+(`pg-pool` на второй `end()` реально реджектит с `Called end on pool more
+than once` — это проверено). `createPool` теперь хранит флаг `ended` в
+замыкании — второй `pool.end()` на одном и том же `AppPool` — no-op.
+
+`server.ts`: главное — владение, не только идемпотентность.
+`buildServer({ pool })` больше НЕ вешает `onClose`-хук на закрытие
+инъектированного пула (`ownsPool = options.pool === undefined`); закрывается
+только пул, который `buildServer` создал сам из `databaseUrl`. Проверено
+скриптом `node` на реальном пуле (`postgres://trellis_app:...@127.0.0.1:5433/trellis`):
+
+```
+app1 /health before any close: 200 {"status":"ok","db":"ok"}
+app1 closed
+app2 /health after app1.close(): 200 {"status":"ok","db":"ok"}
+app2 closed
+pool.end() #1 ok
+pool.end() #2 (idempotent) ok
+```
+
+`app2` (второй `buildServer({ pool })` на том же общем пуле) продолжает
+отвечать 200 ПОСЛЕ того, как `app1.close()` отработал — пул пережил закрытие
+чужого владельца. `pool.end()` вызван дважды подряд без реджекта.
+
+### Important 2 — тесты миграций дропали таблицы по `DATABASE_URL`
+
+`migrate.test.ts` переписан: разрушительные тесты (`DROP TABLE
+core.lesson_progress/core.schema_migrations`, мутации
+`core.schema_migrations`) читают ТОЛЬКО `TRELLIS_TEST_DATABASE_URL`, не
+`DATABASE_URL`. Без неё — `t.skip` с причиной. Добавлена защита от дурака:
+если имя БД в `TRELLIS_TEST_DATABASE_URL` не оканчивается на `_test` —
+`throw` (не skip — молчаливый skip замаскировал бы опасную настройку;
+throw останавливает прогон громко ДО того, как что-либо тронуто в БД).
+`pool.test.ts` НЕ трогал: его тесты создают/дропают только собственные
+скретч-таблицы (`core._test_rollback_scratch`/`_commit_scratch`), никогда
+`core.lesson_progress`/`core.schema_migrations` — это не подпадает под
+находку (никакого риска потери прогресса), поэтому там `DATABASE_URL`
+оставлен как и было. Если ревьюер хочет унификации — не возражаю, но счёл
+это over-engineering для файла, который и так ничего не разрушает.
+
+Проверено вживую (пароли реальные, стек поднят):
+1. `TRELLIS_TEST_DATABASE_URL` не задан → все 3 деструктивных теста `# SKIP`
+   с причиной, остальные 17 проходят как обычно (см. вывод ниже).
+2. `TRELLIS_TEST_DATABASE_URL` указывает на `trellis` (не оканчивается на
+   `_test`) → все 3 деструктивных теста падают (`not ok`) с сообщением
+   `Refusing to run destructive migration tests against database "trellis"`
+   — тест-ран красный, а не тихо зелёный, БД не тронута.
+3. `TRELLIS_TEST_DATABASE_URL` указывает на отдельную `trellis_test`
+   (создана вручную для проверки: `CREATE DATABASE trellis_test OWNER
+   trellis_app`, `CREATE SCHEMA core AUTHORIZATION trellis_app` — только
+   для верификации, удалена после) → 20/20 зелёных, ничего в рабочей
+   `trellis` не тронуто.
+
+### Important 3 — вторичная ошибка (ROLLBACK/unlock) подменяет настоящую причину
+
+`pool.ts` (`withTransaction`) и `migrate.ts` (`applyPendingMigrations`,
+`runMigrations`): `ROLLBACK` и `pg_advisory_unlock` теперь в собственном
+`try/catch`. Если cleanup сам падает (например, соединение уже оборвано),
+эта вторичная ошибка НЕ подменяет исходную — исходная (`err`/причина сбоя
+миграции) всегда пробрасывается дальше; в `migrate.ts` вторичная ошибка
+дополнительно логируется через `logger.warn` (не теряется молча).
+
+### Мелочи
+
+1. **`server.ts:36` fallback на `parseConfig()` убран.** `buildServer()` без
+   `pool`/`databaseUrl` теперь бросает явную ошибку («requires either
+   options.pool ... or options.databaseUrl ... it does not fall back to
+   parseConfig() itself»), не тянет `SANDBOX_DATABASE_URL` транзитивно.
+2. **Отчёт (этот файл) поправлен** — секция «Интерфейсный дайджест»,
+   параграф про `buildServer` (см. правку выше по тексту: убрано «без
+   аргументов тоже сработает», добавлено про обязательность одного из
+   `pool`/`databaseUrl` и про владение пулом).
+3. **`migrate.ts` больше не безмолвен.** Добавлен `MigrationLogger`
+   (`info`/`warn`, no-op по умолчанию; `server.ts` подключает `app.log`).
+   Логирует `Applying migration "NNN"...` на каждую применяемую миграцию,
+   `Applied N migration(s).` в конце, `Database schema is up to date — no
+   pending migrations.` когда нечего применять. Ограничение ожидания лока:
+   `pg_advisory_lock` заменён на поллинг `pg_try_advisory_lock` (интервал
+   200мс, дедлайн 30с) — при занятом локе логирует `Waiting for the
+   migrations lock...` один раз, при истечении дедлайна — явная ошибка с
+   таймаутом, вместо бесконечного молчаливого зависания.
+4. **`pool.ts` `connectionTimeoutMillis` — `5000` → `2000`**, чтобы наш
+   503 успевал доехать раньше, чем backend-healthcheck'а `timeout: 5s` в
+   `docker-compose.yml` (иначе при «молчащем» Postgres Docker увидел бы
+   свой generic timeout-фейл раньше нашего осмысленного ответа).
+
+### Проверки — реальный вывод
+
+**`npm test -w @trellis/backend` без БД (`DATABASE_URL`/`TRELLIS_TEST_DATABASE_URL` не заданы):**
+```
+# tests 20
+# pass 15
+# fail 0
+# skipped 5
+```
+Пропуски — с причинами (`DATABASE_URL is not set...` для `pool.test.ts`,
+`TRELLIS_TEST_DATABASE_URL is not set...` для `migrate.test.ts`).
+
+**С поднятой БД, `TRELLIS_TEST_DATABASE_URL` НЕ задан** (защита работает):
+3 деструктивных теста — `# SKIP`, остальные 17 — `ok`, 0 `fail`.
+
+**С поднятой БД, `TRELLIS_TEST_DATABASE_URL` указывает на БД БЕЗ суффикса `_test`:**
+```
+not ok 7 - runMigrations applies 001_progress from a clean core schema and is idempotent on repeat
+not ok 8 - runMigrations refuses to continue when an applied version's file is missing (error path)
+not ok 9 - concurrent runMigrations calls on the same DB serialize via the advisory lock (edge case)
+```
+(Остальные 17 — `ok`.) Ошибка: `Refusing to run destructive migration tests
+against database "trellis": TRELLIS_TEST_DATABASE_URL must point at a
+database whose name ends with "_test"`. `trellis.core.lesson_progress` не
+тронута (проверено — тест падает до первого `DROP TABLE`).
+
+**С поднятой БД, `TRELLIS_TEST_DATABASE_URL` = отдельная `trellis_test`:**
+```
+# tests 20
+# pass 20
+# fail 0
+# skipped 0
+```
+
+**Продовый прогон миграций с реальным логгером (`node dist/server.js`, БД очищена вручную перед стартом):**
+```
+{"level":30,...,"msg":"Applying migration \"001_progress\"..."}
+{"level":30,...,"msg":"Applied 1 migration(s)."}
+{"level":30,...,"msg":"Server listening at http://127.0.0.1:3098"}
+```
+Второй старт той же БД (уже применено):
+```
+{"level":30,...,"msg":"Database schema is up to date — no pending migrations."}
+{"level":30,...,"msg":"Server listening at http://127.0.0.1:3098"}
+```
+`/health` → `200 {"status":"ok","db":"ok"}` в обоих случаях, `SIGTERM` →
+`EXIT_CODE=0`, `core.schema_migrations` — 1 строка после обоих стартов.
+
+**`npm run build -w @trellis/backend`**: `tsc -p tsconfig.json`, код `0`.
+
+**`bash .mvp/ci-mirror.sh`** (с чистого дерева, `rm -rf node_modules
+services/backend/dist services/backend/dist-test`): код `0` — `npm ci` →
+lint (backend + frontend) → build (backend `tsc`, frontend `tsc -b && vite
+build`) → test (backend 20/20 с 5 SKIP без БД/`TRELLIS_TEST_DATABASE_URL`,
+frontend 4/4 vitest).
+
+**`eslint .`** (прямой вызов, см. примечание в исходном отчёте про
+rtk-прокси): код `0`, без замечаний.
+
+**Уборка**: `DROP DATABASE trellis_test` (тестовая БД, созданная только для
+верификации Important 2), `docker compose down -v`, `.env` удалён,
+`docker ps -a --filter name=trellis` — пусто.
+
+### Deferred decisions (fix round 1)
+
+- **`pool.test.ts` НЕ переведён на `TRELLIS_TEST_DATABASE_URL`** — его
+  тесты трогают только собственные одноразовые скретч-таблицы
+  (`core._test_rollback_scratch`/`_commit_scratch`), никогда
+  `core.lesson_progress`/`core.schema_migrations`; риска потери прогресса
+  нет, поэтому оставлен на `DATABASE_URL` как более простой путь для
+  тестов, которым реальный «деструктив» не нужен. Открыт к пересмотру, если
+  ревьюер хочет единообразия по всем файлам данных.
+- **Отказ (не skip) при `TRELLIS_TEST_DATABASE_URL` без суффикса `_test`** —
+  сознательно throw, а не `t.skip`: неверно настроенная переменная — это
+  ошибка конфигурации разработчика, которая должна остановить прогон
+  красным, а не потеряться в списке пропущенных тестов, которые «и так не
+  проблема».
+- **`LOCK_ACQUIRE_TIMEOUT_MS = 30_000`, `LOCK_POLL_INTERVAL_MS = 200`** —
+  константы, не конфигурируемые через env (YAGNI на этом этапе — реальный
+  прогон миграций занимает миллисекунды, конкуренция за лок — редкий
+  краевой случай зависшего инстанса, не что-то, что нужно тюнить в проде
+  сейчас).

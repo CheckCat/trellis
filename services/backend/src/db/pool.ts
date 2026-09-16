@@ -14,7 +14,12 @@ const { Pool } = pg;
 // local Postgres — no need for these to be configurable yet (YAGNI; revisit
 // if a real need shows up).
 const MAX_CONNECTIONS = 10;
-const CONNECTION_TIMEOUT_MS = 5_000;
+// Kept below the backend healthcheck's `timeout: 5s` (docker-compose.yml) on
+// purpose: if Postgres is unreachable, /health must have already produced
+// its own 503 before Docker's own probe would time out on the same wait —
+// otherwise the healthcheck's generic timeout failure is what shows up in
+// `docker inspect`, not our descriptive "db": "down" response.
+const CONNECTION_TIMEOUT_MS = 2_000;
 const IDLE_TIMEOUT_MS = 30_000;
 
 export interface AppPool {
@@ -38,7 +43,21 @@ export interface AppPool {
    * to Postgres.
    */
   withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T>;
-  /** Closes every connection in the pool. Idempotent per `pg`'s own contract. */
+  /**
+   * Closes every connection in the pool. Calling this more than once on the
+   * *same* `AppPool` is safe (a flag inside `createPool` makes the second
+   * call a no-op) — but note `pg`'s own `Pool#end()` is NOT idempotent (a
+   * second call rejects with "Called end on pool more than once"), which is
+   * exactly the guard this wrapper adds.
+   *
+   * Ownership matters more than idempotency here: whoever *created* the
+   * pool (via `createPool`) is responsible for ending it. A pool injected
+   * into `buildServer({ pool })` from outside is NOT closed by
+   * `buildServer`'s `onClose` hook — the injector still owns it and must
+   * end it itself. Closing someone else's pool out from under them (e.g.
+   * two servers sharing one pool in a test) would break the other holder's
+   * next `query()`/`connect()` call.
+   */
   end(): Promise<void>;
 }
 
@@ -108,6 +127,8 @@ export function createPool(databaseUrl: string, options: CreatePoolOptions = {})
     }
   }
 
+  let ended = false;
+
   return {
     query: (text, params) => pool.query(text, params as unknown[]),
     connect,
@@ -119,13 +140,26 @@ export function createPool(databaseUrl: string, options: CreatePoolOptions = {})
         await client.query("COMMIT");
         return result;
       } catch (err) {
-        await client.query("ROLLBACK");
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          // `err` below (from BEGIN/COMMIT/fn) is the real cause the caller
+          // needs to see — a ROLLBACK that also fails (e.g. the connection
+          // already dropped) must not replace it. Nothing to log to: this
+          // generic pool wrapper has no logger dependency by design.
+        }
         throw err;
       } finally {
         client.release();
       }
     },
-    end: () => pool.end(),
+    async end(): Promise<void> {
+      if (ended) {
+        return;
+      }
+      ended = true;
+      await pool.end();
+    },
   };
 }
 

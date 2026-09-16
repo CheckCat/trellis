@@ -5,22 +5,57 @@ import type { TestContext } from "node:test";
 import { runMigrations } from "./migrate.js";
 import { createPool, type AppPool } from "./pool.js";
 
+const REQUIRED_TEST_DB_SUFFIX = "_test";
+
 /**
- * See pool.test.ts for why this self-diagnoses instead of failing when
- * Postgres isn't available — same reasoning applies here.
+ * Every test in this file is destructive: it drops/recreates
+ * `core.lesson_progress`/`core.schema_migrations` (or mutates
+ * `core.schema_migrations` directly) to exercise `runMigrations` from a
+ * known state. `DATABASE_URL` is deliberately NOT read here — a developer's
+ * `DATABASE_URL` points at their working instance in the named
+ * `trellis_pgdata` volume, and `npm test` silently wiping real lesson
+ * progress there would violate the "progress data is never lost" invariant
+ * (see task-005 fix round 1). These tests only ever run against
+ * `TRELLIS_TEST_DATABASE_URL`, a connection string the developer points at
+ * a disposable database, and additionally refuse to run if that database's
+ * name doesn't end in `_test` — a guard against pointing this at the real
+ * dev database by mistake (mistake → loud failure, not a silent skip that
+ * would let the drop happen unnoticed... except it never gets that far:
+ * the check runs *before* any query touches the database).
  */
-async function connectOrSkip(t: TestContext): Promise<AppPool | undefined> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    t.skip("DATABASE_URL is not set — skipping test that requires a live Postgres");
+async function connectToDisposableTestDbOrSkip(t: TestContext): Promise<AppPool | undefined> {
+  const testDatabaseUrl = process.env.TRELLIS_TEST_DATABASE_URL;
+  if (!testDatabaseUrl) {
+    t.skip(
+      "TRELLIS_TEST_DATABASE_URL is not set — skipping destructive migration test " +
+        "(this suite drops/recreates core.lesson_progress and core.schema_migrations; " +
+        "DATABASE_URL alone is deliberately not enough, see task-005 fix round 1)",
+    );
     return undefined;
   }
-  const pool = createPool(databaseUrl);
+
+  let databaseName: string;
+  try {
+    databaseName = new URL(testDatabaseUrl).pathname.replace(/^\//, "");
+  } catch {
+    throw new Error(`TRELLIS_TEST_DATABASE_URL is not a valid connection string: "${testDatabaseUrl}"`);
+  }
+  if (!databaseName.endsWith(REQUIRED_TEST_DB_SUFFIX)) {
+    // Not a skip: this is a misconfiguration that must fail loudly, not
+    // quietly pass by "skipping" — the point is to stop a developer from
+    // pointing this at their real database, not to let the run go green.
+    throw new Error(
+      `Refusing to run destructive migration tests against database "${databaseName}": ` +
+        `TRELLIS_TEST_DATABASE_URL must point at a database whose name ends with "${REQUIRED_TEST_DB_SUFFIX}".`,
+    );
+  }
+
+  const pool = createPool(testDatabaseUrl);
   try {
     await pool.query("select 1");
   } catch (err) {
     t.skip(
-      `Postgres is not reachable at DATABASE_URL (${err instanceof Error ? err.message : String(err)}) — skipping test that requires a live Postgres`,
+      `Postgres is not reachable at TRELLIS_TEST_DATABASE_URL (${err instanceof Error ? err.message : String(err)}) — skipping destructive migration test`,
     );
     await pool.end();
     return undefined;
@@ -29,12 +64,9 @@ async function connectOrSkip(t: TestContext): Promise<AppPool | undefined> {
 }
 
 void test("runMigrations applies 001_progress from a clean core schema and is idempotent on repeat", async (t) => {
-  const pool = await connectOrSkip(t);
+  const pool = await connectToDisposableTestDbOrSkip(t);
   if (!pool) return;
   try {
-    // This task owns core.lesson_progress/core.schema_migrations
-    // exclusively (see task-005 brief) — dropping them here to assert a
-    // from-scratch apply does not risk any other task's data.
     await pool.query("drop table if exists core.lesson_progress");
     await pool.query("drop table if exists core.schema_migrations");
 
@@ -68,7 +100,7 @@ void test("runMigrations applies 001_progress from a clean core schema and is id
 });
 
 void test("runMigrations refuses to continue when an applied version's file is missing (error path)", async (t) => {
-  const pool = await connectOrSkip(t);
+  const pool = await connectToDisposableTestDbOrSkip(t);
   if (!pool) return;
   try {
     // Make sure core.schema_migrations exists (with exactly "001_progress",
@@ -90,13 +122,13 @@ void test("runMigrations refuses to continue when an applied version's file is m
 });
 
 void test("concurrent runMigrations calls on the same DB serialize via the advisory lock (edge case)", async (t) => {
-  const pool = await connectOrSkip(t);
+  const pool = await connectToDisposableTestDbOrSkip(t);
   if (!pool) return;
   try {
     await pool.query("drop table if exists core.lesson_progress");
     await pool.query("drop table if exists core.schema_migrations");
 
-    // Without the pg_advisory_lock in runMigrations, two concurrent callers
+    // Without the advisory lock in runMigrations, two concurrent callers
     // would both see version "001_progress" as unapplied and race to INSERT
     // it into schema_migrations, one of them failing on the primary key.
     await Promise.all([runMigrations(pool), runMigrations(pool)]);

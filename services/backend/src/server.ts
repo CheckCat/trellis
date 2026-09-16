@@ -12,10 +12,18 @@ export interface BuildServerOptions {
   /**
    * Injects a db pool directly — the pattern tests use to substitute a fake
    * `AppPool` (see routes/health.test.ts) instead of requiring a real
-   * Postgres and a `DATABASE_URL`. When omitted, one is built from
-   * `databaseUrl` (or, failing that, `parseConfig()`).
+   * Postgres. An injected pool is the caller's own — `buildServer` decorates
+   * `app.db` with it but never calls `pool.end()` on it (see `AppPool#end`'s
+   * doc comment on why: closing a pool you don't own would break whatever
+   * else is still using it, e.g. another `buildServer({ pool })` call
+   * sharing the same pool in a test).
    */
   readonly pool?: AppPool;
+  /**
+   * Builds a fresh pool from this connection string; `buildServer` owns
+   * that pool and closes it itself on `app.close()`. Ignored if `pool` is
+   * also given.
+   */
   readonly databaseUrl?: string;
 }
 
@@ -27,22 +35,45 @@ export interface BuildServerOptions {
  * plugins on this same instance (course registry, progress API) the same
  * way: `app.register(yourPlugin)` inside `buildServer()`, before `return
  * app;`.
+ *
+ * Requires exactly one of `options.pool`/`options.databaseUrl` — it never
+ * falls back to `parseConfig()` itself. An implicit fallback would make
+ * even a zero-arg `buildServer()` call transitively require
+ * `SANDBOX_DATABASE_URL` (parseConfig() validates both URLs together),
+ * which this data layer explicitly never reads (see pool.ts).
  */
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: true });
 
-  const pool =
-    options.pool ??
-    createPool(options.databaseUrl ?? parseConfig().databaseUrl, {
+  const ownsPool = options.pool === undefined;
+  if (!ownsPool && options.databaseUrl !== undefined) {
+    app.log.warn("buildServer: both `pool` and `databaseUrl` were given — `pool` wins, `databaseUrl` is ignored.");
+  }
+  let pool: AppPool;
+  if (options.pool !== undefined) {
+    pool = options.pool;
+  } else if (options.databaseUrl !== undefined) {
+    pool = createPool(options.databaseUrl, {
       onError: (err) => app.log.error({ err }, "postgres pool error"),
     });
+  } else {
+    throw new Error(
+      "buildServer requires either options.pool (tests: inject a fake or real AppPool) or " +
+        "options.databaseUrl (production: pass config.databaseUrl) — it does not fall back to parseConfig() itself.",
+    );
+  }
+
   app.decorate("db", pool);
-  // The single place the pool gets closed — every shutdown path (signals,
-  // beforeExit, startup errors) goes through `app.close()` (see
-  // lifecycle.ts), never a separate hardcoded `pool.end()` call.
-  app.addHook("onClose", async () => {
-    await pool.end();
-  });
+  // The single place a self-created pool gets closed — every shutdown path
+  // (signals, beforeExit, startup errors) goes through `app.close()` (see
+  // lifecycle.ts), never a separate hardcoded `pool.end()` call. A pool
+  // injected via `options.pool` is not ours to close (see BuildServerOptions
+  // above).
+  if (ownsPool) {
+    app.addHook("onClose", async () => {
+      await pool.end();
+    });
+  }
 
   app.register(healthRoutes);
   return app;
@@ -60,7 +91,12 @@ if (isMainModule) {
   const app = buildServer({ databaseUrl: config.databaseUrl });
   const shutdownController = registerShutdown(app);
 
-  runMigrations(app.db)
+  runMigrations(app.db, {
+    logger: {
+      info: (message) => app.log.info(message),
+      warn: (message) => app.log.warn(message),
+    },
+  })
     .then(() => app.listen({ host: config.host, port: config.port }))
     .catch((err: unknown) => {
       app.log.fatal({ err }, "startup failed");
