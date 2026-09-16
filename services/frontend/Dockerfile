@@ -14,6 +14,10 @@ COPY package.json package-lock.json ./
 COPY services/frontend/package.json services/frontend/package.json
 RUN npm ci
 
+# services/frontend/tsconfig.json extends the repo-root base config — without
+# it here, `tsc -b` fails with TS5083 (cannot read tsconfig.base.json), same
+# defect as services/backend/Dockerfile (see task-005 report).
+COPY tsconfig.base.json ./
 COPY services/frontend services/frontend
 RUN npm run build -w @trellis/frontend
 
