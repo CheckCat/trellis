@@ -23,5 +23,10 @@
   // test-only helpers (shared by several *.test.ts files — task-006 and the
   // final-review backend fixes round, respectively), not production code,
   // and must not ship in the runtime image either.
-  "exclude": ["src/**/*.test.ts", "src/courses/testSupport.ts", "src/db/testSupport.ts"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/courses/testSupport.ts",
+    "src/db/testSupport.ts",
+    "src/progress/testSupport.ts"
+  ]
 }

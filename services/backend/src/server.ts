@@ -7,8 +7,11 @@ import { createPool, type AppPool } from "./db/pool.js";
 import { runMigrations } from "./db/migrate.js";
 import { registerShutdown } from "./lifecycle.js";
 import { createCourseRegistry, type CourseRegistry } from "./courses/registry.js";
+import { createProgressRepository, type ProgressRepository } from "./progress/repository.js";
 import healthRoutes from "./routes/health.js";
 import coursesRoutes from "./routes/courses.js";
+import progressRoutes from "./routes/progress.js";
+import quizRoutes from "./routes/quiz.js";
 
 export interface BuildServerOptions {
   /**
@@ -46,6 +49,15 @@ export interface BuildServerOptions {
    * pass anything.
    */
   readonly coursesDir?: string;
+  /**
+   * Injects a progress repository (task 007) — same test pattern as `pool`
+   * and `registry` above: route tests substitute an in-memory fake (see
+   * progress/testSupport.ts) and never touch Postgres, while the repository
+   * itself is tested directly against a disposable database. Defaults to a
+   * real `createProgressRepository(pool)` over whichever pool this server
+   * ended up with.
+   */
+  readonly progress?: ProgressRepository;
   /**
    * Passed straight through to Fastify's own `logger` option — reuses
    * Fastify's own type rather than re-declaring it, so this stays correct
@@ -128,8 +140,16 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     });
   app.decorate("courses", registry);
 
+  // Progress is a thin repository over the same app-role pool — decorated
+  // (rather than constructed inside the routes) so tasks 009/010 reach the
+  // same instance through `fastify.progress` instead of each building their
+  // own way into core.lesson_progress.
+  app.decorate("progress", options.progress ?? createProgressRepository(pool));
+
   app.register(healthRoutes);
   app.register(coursesRoutes);
+  app.register(progressRoutes);
+  app.register(quizRoutes);
   return app;
 }
 

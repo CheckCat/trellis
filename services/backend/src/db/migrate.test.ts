@@ -9,7 +9,12 @@ const DESTRUCTIVE_MIGRATION_TEST_REASON =
   "core.schema_migrations; DATABASE_URL alone is deliberately not enough, see task-005 fix round 1)";
 
 void test("runMigrations applies 001_progress from a clean core schema and is idempotent on repeat", async (t) => {
-  const pool = await connectToDisposableTestDbOrSkip(t, DESTRUCTIVE_MIGRATION_TEST_REASON);
+  const pool = await connectToDisposableTestDbOrSkip(t, DESTRUCTIVE_MIGRATION_TEST_REASON, {
+    // Serialized against every other test that needs core.lesson_progress/
+    // core.schema_migrations to exist (progress/repository.test.ts): test
+    // FILES run concurrently, and these tests drop those tables.
+    exclusive: true,
+  });
   if (!pool) return;
   try {
     await pool.query("drop table if exists core.lesson_progress");
@@ -45,7 +50,10 @@ void test("runMigrations applies 001_progress from a clean core schema and is id
 });
 
 void test("runMigrations refuses to continue when an applied version's file is missing (error path)", async (t) => {
-  const pool = await connectToDisposableTestDbOrSkip(t, DESTRUCTIVE_MIGRATION_TEST_REASON);
+  const pool = await connectToDisposableTestDbOrSkip(t, DESTRUCTIVE_MIGRATION_TEST_REASON, {
+    // Same exclusive access as the first test in this file.
+    exclusive: true,
+  });
   if (!pool) return;
   try {
     // Make sure core.schema_migrations exists (with exactly "001_progress",
@@ -67,7 +75,10 @@ void test("runMigrations refuses to continue when an applied version's file is m
 });
 
 void test("concurrent runMigrations calls on the same DB serialize via the advisory lock (edge case)", async (t) => {
-  const pool = await connectToDisposableTestDbOrSkip(t, DESTRUCTIVE_MIGRATION_TEST_REASON);
+  const pool = await connectToDisposableTestDbOrSkip(t, DESTRUCTIVE_MIGRATION_TEST_REASON, {
+    // Same exclusive access as the first test in this file.
+    exclusive: true,
+  });
   if (!pool) return;
   try {
     await pool.query("drop table if exists core.lesson_progress");

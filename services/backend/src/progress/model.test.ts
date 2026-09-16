@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import type { CourseLesson, CourseQuiz } from "../courses/types.js";
+import { findLesson, gradeQuizAnswer, lessonCompletionMode } from "./model.js";
+import { courseFixture } from "./testSupport.js";
+
+const quiz: CourseQuiz = {
+  question: "Which one?",
+  options: [
+    { id: "right", text: "The right one", correct: true },
+    { id: "wrong", text: "The wrong one", correct: false, explanation: "Because of a specific mistake." },
+  ],
+};
+
+void test("lessonCompletionMode: a content-only lesson is completed by hand", () => {
+  const lesson: CourseLesson = { id: "l", title: "L", content: "# L" };
+  assert.equal(lessonCompletionMode(lesson), "manual");
+});
+
+void test("lessonCompletionMode: a lesson with a quiz is completed by the quiz, not by hand", () => {
+  const lesson: CourseLesson = { id: "l", title: "L", content: "# L", quiz };
+  assert.equal(lessonCompletionMode(lesson), "quiz");
+});
+
+void test("lessonCompletionMode: practice WITH a check is completed by the check, WITHOUT one it is self-marked", () => {
+  const checked: CourseLesson = {
+    id: "l",
+    title: "L",
+    practice: { sandbox: "main", prompt: "Do it.", check: "select true" },
+  };
+  const unchecked: CourseLesson = { id: "l", title: "L", practice: { sandbox: "main", prompt: "Do it." } };
+  assert.equal(lessonCompletionMode(checked), "practice");
+  // Project invariant: "задание без check — самоотметка".
+  assert.equal(lessonCompletionMode(unchecked), "manual");
+});
+
+void test("lessonCompletionMode: a quiz wins over a checked practice on the same lesson (edge case)", () => {
+  const lesson: CourseLesson = {
+    id: "l",
+    title: "L",
+    quiz,
+    practice: { sandbox: "main", prompt: "Do it.", check: "select true" },
+  };
+  assert.equal(lessonCompletionMode(lesson), "quiz");
+});
+
+void test("gradeQuizAnswer returns the chosen option's verdict and only its own explanation", () => {
+  const correct = gradeQuizAnswer(quiz, "right");
+  assert.deepEqual(correct, { correct: true, explanation: undefined });
+
+  const incorrect = gradeQuizAnswer(quiz, "wrong");
+  assert.deepEqual(incorrect, { correct: false, explanation: "Because of a specific mistake." });
+
+  // The verdict must never carry anything identifying the correct option.
+  assert.equal(JSON.stringify(incorrect).includes("right"), false);
+});
+
+void test("gradeQuizAnswer returns undefined for an id that is not one of the options (error path)", () => {
+  assert.equal(gradeQuizAnswer(quiz, "not-an-option"), undefined);
+  assert.equal(gradeQuizAnswer(quiz, ""), undefined);
+});
+
+void test("findLesson finds a lesson in any module by id, and nothing for an unknown id", () => {
+  const course = courseFixture();
+  const found = findLesson(course, "b1");
+  assert.equal(found?.lesson.id, "b1");
+  assert.equal(found?.module.id, "m2");
+  assert.equal(findLesson(course, "no-such-lesson"), undefined);
+});
