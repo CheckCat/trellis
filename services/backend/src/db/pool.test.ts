@@ -1,38 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { TestContext } from "node:test";
 
-import { createPool, redactPassword, type AppPool } from "./pool.js";
+import { createPool, redactPassword } from "./pool.js";
+import { connectToDisposableTestDbOrSkip } from "./testSupport.js";
 
-/**
- * Tests below that need a real Postgres self-diagnose: no CI environment
- * runs Postgres for this project (see task-005 brief), so a missing/
- * unreachable `DATABASE_URL` skips with a stated reason rather than
- * failing — `npm test` must stay green without Postgres. Run locally via
- * `cp .env.example .env` + `docker compose up -d postgres` (task-002
- * report) to actually exercise these.
- */
-async function connectOrSkip(t: TestContext): Promise<AppPool | undefined> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    t.skip("DATABASE_URL is not set — skipping test that requires a live Postgres");
-    return undefined;
-  }
-  const pool = createPool(databaseUrl);
-  try {
-    await pool.query("select 1");
-  } catch (err) {
-    t.skip(
-      `Postgres is not reachable at DATABASE_URL (${err instanceof Error ? err.message : String(err)}) — skipping test that requires a live Postgres`,
-    );
-    await pool.end();
-    return undefined;
-  }
-  return pool;
-}
+// Final review, backend fixes round: this file used to read `DATABASE_URL`
+// directly (a weaker guard than migrate.test.ts's `TRELLIS_TEST_DATABASE_URL`
+// + `_test`-suffix check) on the reasoning that these two tests only
+// create/drop their own scratch tables (`core._test_rollback_scratch`/
+// `_commit_scratch`), never `core.lesson_progress`. That reasoning doesn't
+// hold as a project-wide precedent: once task 007 puts real lesson progress
+// behind `DATABASE_URL`, any test file copying this file's old pattern for a
+// *new*, actually-destructive check inherits the weaker guard by example.
+// Aligned to the same `connectToDisposableTestDbOrSkip` helper
+// migrate.test.ts uses, not duplicated — see db/testSupport.ts.
 
 void test("withTransaction rolls back on error and returns the client to the pool", async (t) => {
-  const pool = await connectOrSkip(t);
+  const pool = await connectToDisposableTestDbOrSkip(t, "scratch-table pool test");
   if (!pool) return;
   try {
     await pool.query("create table if not exists core._test_rollback_scratch (id int primary key)");
@@ -65,7 +49,7 @@ void test("withTransaction rolls back on error and returns the client to the poo
 });
 
 void test("withTransaction commits when fn succeeds", async (t) => {
-  const pool = await connectOrSkip(t);
+  const pool = await connectToDisposableTestDbOrSkip(t, "scratch-table pool test");
   if (!pool) return;
   try {
     await pool.query("create table if not exists core._test_commit_scratch (id int primary key)");

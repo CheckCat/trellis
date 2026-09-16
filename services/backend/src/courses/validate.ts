@@ -96,6 +96,10 @@ interface RawManifest {
  * `packageDir` is the absolute path to the course package directory, used
  * only to resolve/check `content` and `sandboxes[].seed[]` paths — this
  * function does not read the referenced files' contents (that's loader.ts).
+ * On success, `manifest.modules[].lessons[].contentPath` and
+ * `manifest.sandboxes[].seed[]` are the absolute, realpath'd, ALREADY
+ * VALIDATED paths (see `resolveSafePath`), not the raw relative strings
+ * from the manifest — callers read/execute them directly.
  */
 export function validateManifest(manifestSource: unknown, packageDir: string): ValidationResult {
   if (!validateStructure(manifestSource)) {
@@ -168,7 +172,12 @@ function validateSandboxes(
     (sandbox.seed ?? []).forEach((seedPath, seedIndex) => {
       const resolved = resolveSafePath(packageDir, seedPath);
       if (resolved.ok) {
-        seed.push(seedPath);
+        // Store the validated ABSOLUTE (realpath'd) path, not the raw
+        // manifest string — task 009 reads/executes these directly and must
+        // not need to re-derive or re-escape a relative path itself (final
+        // review, backend fixes round: the domain must carry checked paths,
+        // not raw ones with the checking logic locked away in this file).
+        seed.push(resolved.absolutePath);
       } else {
         errors.push({ path: `${sandboxPath}.seed[${seedIndex}]`, message: resolved.reason });
       }
@@ -237,7 +246,9 @@ function validateLesson(
   if (lesson.content !== undefined) {
     const resolved = resolveSafePath(packageDir, lesson.content);
     if (resolved.ok) {
-      contentPath = lesson.content;
+      // Same reasoning as sandbox seed paths above: absolute, validated
+      // path, not the raw manifest string — loader.ts reads this directly.
+      contentPath = resolved.absolutePath;
     } else {
       errors.push({ path: `${lessonPath}.content`, message: resolved.reason });
     }
@@ -297,7 +308,9 @@ function validateQuiz(quiz: RawQuiz, quizPath: string, errors: ValidationError[]
   return { question: quiz.question, options };
 }
 
-type SafePathResult = { readonly ok: true; readonly absolutePath: string } | { readonly ok: false; readonly reason: string };
+export type SafePathResult =
+  | { readonly ok: true; readonly absolutePath: string }
+  | { readonly ok: false; readonly reason: string };
 
 /**
  * Resolves a manifest-declared relative path (lesson `content`, sandbox
@@ -308,8 +321,18 @@ type SafePathResult = { readonly ok: true; readonly absolutePath: string } | { r
  * requires the target to actually exist and be a regular file — per the
  * brief, both "path safety" and "file must exist" are the same check here,
  * not two separate passes.
+ *
+ * Exported (final review, backend fixes round) so task 009 can re-run this
+ * exact same check on a sandbox's `seed[]` entries immediately before
+ * executing them — `Course.sandboxes[].seed` already carries the absolute,
+ * validated path from *this* scan (see below), but a scan can be
+ * arbitrarily old by the time 009 acts on it (no filesystem watcher —
+ * `POST /courses/rescan` is explicit), and the file underneath could have
+ * changed or been swapped since. Re-validating right before executing SQL
+ * from disk costs nothing and closes that window as far as this function
+ * can.
  */
-function resolveSafePath(packageDir: string, relativePath: string): SafePathResult {
+export function resolveSafePath(packageDir: string, relativePath: string): SafePathResult {
   if (path.isAbsolute(relativePath)) {
     return { ok: false, reason: `Path "${relativePath}" must be relative to the package directory, not absolute.` };
   }

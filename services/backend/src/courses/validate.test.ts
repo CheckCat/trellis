@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
 import { parse as parseYaml } from "yaml";
 
-import { validateManifest } from "./validate.js";
+import { resolveSafePath, validateManifest } from "./validate.js";
 import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeFixtureFiles } from "./testSupport.js";
 
 /** Runs `run` against a fresh temp package directory, always cleaning it up
@@ -30,11 +31,38 @@ void test("validateManifest accepts a well-formed manifest (happy path)", () => 
     assert.equal(result.manifest.modules.length, 1);
     assert.equal(result.manifest.sandboxes[0]?.id, "main");
     const lesson = result.manifest.modules[0]?.lessons[0];
-    assert.equal(lesson?.contentPath, "lessons/first-lesson.md");
+
+    // Final review, backend fixes round (Important 1): contentPath/seed[]
+    // must be absolute, already-validated (realpath'd) paths — not the raw
+    // relative strings from the manifest — so a consumer (loader.ts, task
+    // 009) can read/execute them directly. Comparing against
+    // fs.realpathSync's own output (not a hand-built path.join) avoids a
+    // false failure from platform path normalization (e.g. macOS's
+    // /tmp -> /private/tmp symlink).
+    assert.equal(lesson?.contentPath, fs.realpathSync(path.join(dir, "lessons/first-lesson.md")));
+    assert.ok(lesson?.contentPath !== undefined && path.isAbsolute(lesson.contentPath));
+    assert.equal(
+      result.manifest.sandboxes[0]?.seed[0],
+      fs.realpathSync(path.join(dir, "sandbox/01-schema.sql")),
+    );
+
     assert.equal(lesson?.quiz?.options.length, 2);
     assert.equal(lesson?.quiz?.options[0]?.correct, true);
     assert.equal(lesson?.quiz?.options[1]?.correct, false);
     assert.equal(lesson?.practice?.sandbox, "main");
+  });
+});
+
+void test("resolveSafePath is exported so a caller (task 009) can re-validate a seed path immediately before executing it", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, [{ path: "sandbox/seed.sql", content: "select 1;" }]);
+    const result = resolveSafePath(dir, "sandbox/seed.sql");
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.absolutePath, fs.realpathSync(path.join(dir, "sandbox/seed.sql")));
+
+    const escaping = resolveSafePath(dir, "../../etc/passwd");
+    assert.equal(escaping.ok, false);
   });
 });
 

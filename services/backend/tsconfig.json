@@ -18,9 +18,10 @@
   // Production build only: test files are compiled separately (see
   // tsconfig.test.json) into dist-test/, never into dist/ — dist/ is what
   // the Dockerfile copies into the runtime image (fix round 1, task-003
-  // report). courses/testSupport.ts gets the same treatment even though its
-  // name doesn't match *.test.ts: it's a test-only fixture helper (shared by
-  // several courses/*.test.ts and routes/courses.test.ts files, task-006),
-  // not production code, and must not ship in the runtime image either.
-  "exclude": ["src/**/*.test.ts", "src/courses/testSupport.ts"]
+  // report). courses/testSupport.ts and db/testSupport.ts get the same
+  // treatment even though their names don't match *.test.ts: both are
+  // test-only helpers (shared by several *.test.ts files — task-006 and the
+  // final-review backend fixes round, respectively), not production code,
+  // and must not ship in the runtime image either.
+  "exclude": ["src/**/*.test.ts", "src/courses/testSupport.ts", "src/db/testSupport.ts"]
 }

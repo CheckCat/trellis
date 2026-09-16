@@ -104,8 +104,8 @@ void test(
       // running as root (common in some container/CI setups) bypasses file
       // permissions entirely, which would make this test assert nothing.
       // Skip rather than false-green in that case, same spirit as this
-      // codebase's DATABASE_URL-gated skips (task-005, db/pool.test.ts's
-      // connectOrSkip).
+      // codebase's TRELLIS_TEST_DATABASE_URL-gated skips
+      // (db/testSupport.ts's connectToDisposableTestDbOrSkip).
       fs.chmodSync(contentPath, 0o000);
       let permissionsAreEnforced = true;
       try {
@@ -139,3 +139,42 @@ void test(
     }
   },
 );
+
+void test("scanCoursesDir treats a symlinked directory as a course candidate, not a silent no-op (final review, backend fixes round)", () => {
+  const coursesDir = makeTempDir();
+  // The actual package content lives outside coursesDir entirely (a
+  // separate temp dir) — this is the realistic case the finding calls out:
+  // a course kept elsewhere on disk (a git checkout, another drive, synced
+  // content) and symlinked into COURSES_DIR, not a symlink between two
+  // sibling entries of the same directory.
+  const realCourseDir = makeTempDir();
+  try {
+    writeFixtureFiles(realCourseDir, [
+      { path: "manifest.yaml", content: validManifestYaml("symlinked-course") },
+      ...validCourseFixtureFiles(),
+    ]);
+    fs.symlinkSync(realCourseDir, path.join(coursesDir, "course-via-symlink"), "dir");
+
+    const result = scanCoursesDir(coursesDir);
+
+    // Before this fix: `fs.Dirent#isDirectory()` on the symlink entry is
+    // `false` (it reports the link's own type, not the target's), so the
+    // symlinked directory was filtered out before ever being attempted —
+    // not listed as a course, not in `rejected`, nothing logged. This
+    // assertion is the actual regression check: the course must be loaded.
+    assert.equal(result.rejected.length, 0);
+    assert.equal(result.courses.length, 1);
+    assert.equal(result.courses[0]?.id, "symlinked-course");
+  } finally {
+    fs.rmSync(coursesDir, { recursive: true, force: true });
+    fs.rmSync(realCourseDir, { recursive: true, force: true });
+  }
+});
+
+void test("scanCoursesDir ignores a broken symlink under coursesDir without crashing (edge case)", () => {
+  withTempDir((coursesDir) => {
+    fs.symlinkSync(path.join(coursesDir, "does-not-exist"), path.join(coursesDir, "dangling-link"), "dir");
+    const result = scanCoursesDir(coursesDir);
+    assert.deepEqual(result, { courses: [], rejected: [] });
+  });
+});

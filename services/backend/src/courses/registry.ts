@@ -1,6 +1,7 @@
 import path from "node:path";
 
 import { scanCoursesDir, type RejectedCourse } from "./loader.js";
+import { describeError, isErrnoException } from "./fsErrors.js";
 import type { Course, ValidationError } from "./types.js";
 
 export interface CourseSummary {
@@ -185,10 +186,6 @@ function fromLoaderRejection(rejection: RejectedCourse): RegistryRejectedCourse 
   return { dir: rejection.dir, errors: rejection.errors };
 }
 
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
-}
-
 /**
  * Turns a `scanCoursesDir` failure into an installer-style sentence: no
  * errno, no stack trace, just what's wrong with the folder and what to do
@@ -206,10 +203,6 @@ function describeScanFailure(coursesDir: string, err: unknown): string {
     }
   }
   return `The courses folder ("${coursesDir}") could not be scanned: ${describeError(err)}.`;
-}
-
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return err instanceof Error && "code" in err;
 }
 
 // Makes `fastify.courses` (decorated in server.ts) known to the type system

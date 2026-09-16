@@ -24,7 +24,7 @@ function fakePool(query: () => Promise<unknown>): AppPool {
 }
 
 void test("GET /health responds 200 with { status: 'ok', db: 'ok' } when the db is reachable", async () => {
-  const app = buildServer({ pool: fakePool(async () => ({ rows: [{ "?column?": 1 }] })) });
+  const app = buildServer({ pool: fakePool(async () => ({ rows: [{ "?column?": 1 }] })), logger: false });
   try {
     const response = await app.inject({ method: "GET", url: "/health" });
     assert.equal(response.statusCode, 200);
@@ -39,6 +39,11 @@ void test("GET /health responds 503 with { status: 'degraded', db: 'down' } when
     pool: fakePool(async () => {
       throw new Error("simulated db outage");
     }),
+    // Silenced: this test intentionally simulates a db outage, whose full
+    // stack trace would otherwise get logged by /health's own error
+    // handler and read like a real failure in `npm test` output (final
+    // review, backend fixes round).
+    logger: false,
   });
   try {
     const response = await app.inject({ method: "GET", url: "/health" });
@@ -50,7 +55,7 @@ void test("GET /health responds 503 with { status: 'degraded', db: 'down' } when
 });
 
 void test("GET /health rejects a non-GET method (edge case)", async () => {
-  const app = buildServer({ pool: fakePool(async () => ({ rows: [] })) });
+  const app = buildServer({ pool: fakePool(async () => ({ rows: [] })), logger: false });
   try {
     const response = await app.inject({ method: "POST", url: "/health" });
     assert.equal(response.statusCode, 404);
@@ -60,7 +65,7 @@ void test("GET /health rejects a non-GET method (edge case)", async () => {
 });
 
 void test("GET /unknown-route responds 404 (error path)", async () => {
-  const app = buildServer({ pool: fakePool(async () => ({ rows: [] })) });
+  const app = buildServer({ pool: fakePool(async () => ({ rows: [] })), logger: false });
   try {
     const response = await app.inject({ method: "GET", url: "/unknown-route" });
     assert.equal(response.statusCode, 404);

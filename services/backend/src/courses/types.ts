@@ -36,17 +36,25 @@ export interface CoursePractice {
 export interface CourseSandbox {
   readonly id: string;
   readonly type: "postgres";
-  /** Relative paths from the package directory, already validated to exist
-   * and stay inside the package (see validate.ts's resolveSafePath) — not
-   * read here; task 009 reads/executes their content against the sandbox
-   * role. */
+  /** Absolute, realpath'd filesystem paths — the output of validate.ts's
+   * exported `resolveSafePath`, already confirmed to exist and to stay
+   * inside the package directory (symlink escapes included). NOT the raw
+   * relative strings written in the manifest, and NOT read here — task 009
+   * reads/executes this content directly against the sandbox role. Because
+   * a scan can be arbitrarily old by the time 009 acts on it (no
+   * filesystem watcher — rescanning is explicit), 009 is expected to call
+   * `resolveSafePath` again immediately before executing a seed file, as a
+   * defense against the file having changed since this path was resolved
+   * (final review, backend fixes round). */
   readonly seed: readonly string[];
 }
 
-/** validate.ts's success output: structurally + semantically valid, but
- * lesson content is still a path (`contentPath`), not yet read — reading
- * Markdown off disk is loader.ts's job, not validate.ts's (see task-006
- * brief, requirement 2 vs 3). */
+/** validate.ts's success output: structurally + semantically valid.
+ * `contentPath`, when present, is the absolute, realpath'd, ALREADY
+ * VALIDATED path to the lesson's Markdown file (same guarantee as
+ * `CourseSandbox.seed` above) — not yet read, though: reading Markdown off
+ * disk is loader.ts's job, not validate.ts's (see task-006 brief,
+ * requirement 2 vs 3). */
 export interface ValidatedLesson {
   readonly id: string;
   readonly title: string;
@@ -96,8 +104,12 @@ export interface Course {
   readonly version: string;
   readonly title: string;
   readonly description?: string;
-  /** Absolute path to the package directory on disk (e.g. so task 009 can
-   * resolve `sandboxes[].seed[]` paths). */
+  /** Absolute path to the package directory on disk, as written under
+   * `coursesDir` (not realpath'd — this is "which directory did this come
+   * from", used e.g. for duplicate-id messages in registry.ts). Not needed
+   * to resolve `sandboxes[].seed[]`/lesson content anymore — those are
+   * already absolute, validated paths in their own right (see
+   * `CourseSandbox.seed`/`ValidatedLesson.contentPath`'s doc comments). */
   readonly dir: string;
   readonly sandboxes: readonly CourseSandbox[];
   readonly modules: readonly CourseModule[];

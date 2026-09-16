@@ -4,6 +4,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { validateManifest } from "./validate.js";
+import { describeError, isErrnoException } from "./fsErrors.js";
 import type { Course, CourseLesson, CourseModule, LoadResult, ValidationError } from "./types.js";
 
 const MANIFEST_FILENAME = "manifest.yaml";
@@ -53,6 +54,14 @@ export function loadCoursePackage(packageDir: string): LoadResult {
   // turns unreadable between validation and this read must reject the
   // package with a clear reason, not throw an uncaught EACCES that takes
   // down the whole scan/registry/app startup).
+  //
+  // `lesson.contentPath` is already the absolute, realpath'd path
+  // validate.ts resolved it to (final review, backend fixes round) — no
+  // `path.resolve(packageDir, ...)` here anymore. That's not just less
+  // code: re-deriving the path from the raw manifest string and packageDir
+  // would re-open exactly the symlink-swap window resolveSafePath's
+  // realpath check exists to close (validate a real target, then go read a
+  // *different* lexical path that could have been repointed since).
   const contentReadErrors: ValidationError[] = [];
   const modules: CourseModule[] = manifest.modules.map((module, moduleIndex) => ({
     id: module.id,
@@ -61,7 +70,7 @@ export function loadCoursePackage(packageDir: string): LoadResult {
       let content: string | undefined;
       if (lesson.contentPath !== undefined) {
         try {
-          content = fs.readFileSync(path.resolve(packageDir, lesson.contentPath), "utf8");
+          content = fs.readFileSync(lesson.contentPath, "utf8");
         } catch (err) {
           contentReadErrors.push({
             path: `modules[${moduleIndex}].lessons[${lessonIndex}].content`,
@@ -131,7 +140,7 @@ export function scanCoursesDir(coursesDir: string): ScannedCourses {
   // wins on a duplicate id" rule needs a stable ordering to be meaningful
   // and reproducible across restarts/rescans.
   const dirNames = entries
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => isCourseCandidateDirectory(coursesDir, entry))
     .map((entry) => entry.name)
     .sort();
 
@@ -149,10 +158,33 @@ export function scanCoursesDir(coursesDir: string): ScannedCourses {
   return { courses, rejected };
 }
 
-function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
-  return err instanceof Error && "code" in err;
-}
-
-function describeError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+/**
+ * `fs.Dirent#isDirectory()` reports the directory ENTRY's own type — for a
+ * symlink it's always `false`, regardless of what the link points at (it
+ * does not follow the link). Filtering on that alone silently drops a
+ * symlinked course directory: not listed, not rejected, nothing logged —
+ * just gone, with no trace anywhere a user (or this codebase's own tests)
+ * would think to look (final review, backend fixes round). A symlink to a
+ * course directory is a normal way to keep course content elsewhere on disk
+ * (synced from a git checkout, another drive, ...) on a local, single-user
+ * product where the person hitting this IS the one confused by content
+ * silently vanishing — so it's supported here, not rejected: `fs.statSync`
+ * (which does follow the link) decides whether it resolves to a directory.
+ * A broken symlink or one pointing at a non-directory falls through to
+ * `false` — same treatment as any other stray non-directory entry directly
+ * under `coursesDir` (a stray README.md, say): not a course candidate, not
+ * a special case worth its own rejection reason.
+ */
+function isCourseCandidateDirectory(coursesDir: string, entry: fs.Dirent): boolean {
+  if (entry.isDirectory()) {
+    return true;
+  }
+  if (entry.isSymbolicLink()) {
+    try {
+      return fs.statSync(path.join(coursesDir, entry.name)).isDirectory();
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }

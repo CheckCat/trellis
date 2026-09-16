@@ -39,7 +39,7 @@ async function withApp(run: (app: FastifyInstance, coursesDir: string) => Promis
     ].join("\n");
     writeCoursePackage(coursesDir, "broken-course", brokenYaml);
 
-    const app = buildServer({ pool: fakePool(), registry: createCourseRegistry(coursesDir) });
+    const app = buildServer({ pool: fakePool(), registry: createCourseRegistry(coursesDir), logger: false });
     try {
       await run(app, coursesDir);
     } finally {
@@ -181,7 +181,7 @@ void test(
     const coursesDir = makeTempDir();
     try {
       writeCoursePackage(coursesDir, "good-course", validManifestYaml("good-course"), validCourseFixtureFiles());
-      const app = buildServer({ pool: fakePool(), registry: createCourseRegistry(coursesDir) });
+      const app = buildServer({ pool: fakePool(), registry: createCourseRegistry(coursesDir), logger: false });
       try {
         const before = await app.inject({ method: "GET", url: "/courses" });
         assert.equal(before.json().courses.length, 1);

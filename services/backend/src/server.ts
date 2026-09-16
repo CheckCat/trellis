@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 
 import { parseConfig, DEFAULT_COURSES_DIR } from "./config.js";
 import { createPool, type AppPool } from "./db/pool.js";
@@ -46,6 +46,23 @@ export interface BuildServerOptions {
    * pass anything.
    */
   readonly coursesDir?: string;
+  /**
+   * Passed straight through to Fastify's own `logger` option — reuses
+   * Fastify's own type rather than re-declaring it, so this stays correct
+   * across whatever shapes Fastify itself accepts (`boolean`, pino options,
+   * ...). Defaults to `true` (current/production behavior — full request
+   * logging), same as before this option existed.
+   *
+   * Final review, backend fixes round: every test in this codebase that
+   * calls `buildServer()` should pass `logger: false` — a passing `npm
+   * test` run used to interleave a JSON log line per HTTP request *and* the
+   * full stack trace of every intentionally-simulated failure (e.g.
+   * routes/health.test.ts's "simulated db outage") into the TAP output,
+   * which reads like real breakage and will only get harder to scan as
+   * tasks 007+ add more integration tests. Production (the main-module
+   * block below) doesn't pass this, so it keeps the default `true`.
+   */
+  readonly logger?: FastifyServerOptions["logger"];
 }
 
 /**
@@ -67,7 +84,7 @@ export interface BuildServerOptions {
  * BuildServerOptions above).
  */
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: options.logger ?? true });
 
   const ownsPool = options.pool === undefined;
   if (!ownsPool && options.databaseUrl !== undefined) {
