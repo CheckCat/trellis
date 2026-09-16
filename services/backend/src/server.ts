@@ -2,11 +2,13 @@ import { pathToFileURL } from "node:url";
 
 import Fastify, { type FastifyInstance } from "fastify";
 
-import { parseConfig } from "./config.js";
+import { parseConfig, DEFAULT_COURSES_DIR } from "./config.js";
 import { createPool, type AppPool } from "./db/pool.js";
 import { runMigrations } from "./db/migrate.js";
 import { registerShutdown } from "./lifecycle.js";
+import { createCourseRegistry, type CourseRegistry } from "./courses/registry.js";
 import healthRoutes from "./routes/health.js";
+import coursesRoutes from "./routes/courses.js";
 
 export interface BuildServerOptions {
   /**
@@ -25,22 +27,44 @@ export interface BuildServerOptions {
    * also given.
    */
   readonly databaseUrl?: string;
+  /**
+   * Injects a course registry directly — the same test pattern as `pool`
+   * above (see courses/registry.test.ts and routes/courses.test.ts): builds
+   * a registry against a fixture directory instead of relying on
+   * `COURSES_DIR`. Wins over `coursesDir` if both are given.
+   */
+  readonly registry?: CourseRegistry;
+  /**
+   * Builds a fresh registry (task 006) rooted at this directory; scanned
+   * synchronously before `buildServer` returns (see
+   * courses/registry.ts's createCourseRegistry doc comment), so `GET
+   * /courses` is accurate from the very first request. Ignored if
+   * `registry` is also given. Defaults to `DEFAULT_COURSES_DIR` — unlike
+   * the db pool, a missing/unset courses directory is not an error (see
+   * courses/loader.ts), so there is a safe default here, and tests that
+   * don't care about courses (e.g. routes/health.test.ts) don't need to
+   * pass anything.
+   */
+  readonly coursesDir?: string;
 }
 
 /**
  * Builds a configured Fastify instance with all core plugins registered,
  * but never starts listening. Tests use this directly with `app.inject()`
- * (no real socket opened); pass `{ pool: fakePool }` to avoid touching a
- * real database or environment at all. Tasks 006+ register their own
- * plugins on this same instance (course registry, progress API) the same
- * way: `app.register(yourPlugin)` inside `buildServer()`, before `return
- * app;`.
+ * (no real socket opened); pass `{ pool: fakePool }` and/or
+ * `{ registry: fakeRegistry }` to avoid touching a real database or a real
+ * `COURSES_DIR` at all. Tasks 007+ register their own plugins on this same
+ * instance (progress API, practice sandbox) the same way: `app.register(
+ * yourPlugin)` inside `buildServer()`, before `return app;`.
  *
  * Requires exactly one of `options.pool`/`options.databaseUrl` — it never
  * falls back to `parseConfig()` itself. An implicit fallback would make
  * even a zero-arg `buildServer()` call transitively require
  * `SANDBOX_DATABASE_URL` (parseConfig() validates both URLs together),
- * which this data layer explicitly never reads (see pool.ts).
+ * which this data layer explicitly never reads (see pool.ts). The course
+ * registry has no such requirement — `registry`/`coursesDir` are both
+ * optional, defaulting to a registry over `DEFAULT_COURSES_DIR` (see
+ * BuildServerOptions above).
  */
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: true });
@@ -75,7 +99,20 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     });
   }
 
+  if (options.registry !== undefined && options.coursesDir !== undefined) {
+    app.log.warn(
+      "buildServer: both `registry` and `coursesDir` were given — `registry` wins, `coursesDir` is ignored.",
+    );
+  }
+  const registry =
+    options.registry ??
+    createCourseRegistry(options.coursesDir ?? DEFAULT_COURSES_DIR, {
+      warn: (message) => app.log.warn(message),
+    });
+  app.decorate("courses", registry);
+
   app.register(healthRoutes);
+  app.register(coursesRoutes);
   return app;
 }
 
@@ -88,7 +125,7 @@ const isMainModule =
 
 if (isMainModule) {
   const config = parseConfig();
-  const app = buildServer({ databaseUrl: config.databaseUrl });
+  const app = buildServer({ databaseUrl: config.databaseUrl, coursesDir: config.coursesDir });
   const shutdownController = registerShutdown(app);
 
   runMigrations(app.db, {

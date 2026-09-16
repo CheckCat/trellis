@@ -21,7 +21,12 @@ export interface AppConfig {
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3001;
-const DEFAULT_COURSES_DIR = "/courses";
+// Exported (not just a local const) so server.ts's buildServer() can fall
+// back to the same default when no explicit coursesDir/registry override is
+// given — one source of truth for "where courses live if COURSES_DIR isn't
+// set", instead of the default being duplicated/drifting between the two
+// files (see task-006 report, courses registry wiring in buildServer).
+export const DEFAULT_COURSES_DIR = "/courses";
 
 function requireNonEmpty(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
