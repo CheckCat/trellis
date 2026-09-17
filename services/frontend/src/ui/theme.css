@@ -1,0 +1,19 @@
+/*
+ * Design tokens only — soft green, minimalist palette (product invariant:
+ * "базовая палитра — мягкие зелёные тона", docs/product/business-logic.md).
+ * Carried over unchanged from the task-004 skeleton (src/index.css) so every
+ * later screen (013–016) keeps reusing the same tokens instead of picking
+ * new green shades "by eye" — see task-004 report's interface digest.
+ */
+:root {
+  --color-bg: #f3f8f4;
+  --color-surface: #ffffff;
+  --color-border: #d9e8dd;
+  --color-text: #1e2b22;
+  --color-text-muted: #5c6f61;
+  --color-accent: #3f8858;
+  --color-accent-soft: #e4f2e8;
+  --color-status-ok: #2f7a4f;
+  --color-status-error: #b3543f;
+  --color-status-pending: #a9bcae;
+}

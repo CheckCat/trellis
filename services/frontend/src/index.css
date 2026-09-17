@@ -1,21 +1,12 @@
-/*
- * Minimal palette for the skeleton screen. Full layout arrives in task 011 —
- * this file only fixes the design tokens (soft green, minimalist) so later
- * tasks inherit a consistent starting point instead of inventing their own.
- */
-:root {
-  --color-bg: #f3f8f4;
-  --color-surface: #ffffff;
-  --color-border: #d9e8dd;
-  --color-text: #1e2b22;
-  --color-text-muted: #5c6f61;
-  --color-accent: #3f8858;
-  --color-accent-soft: #e4f2e8;
-  --color-status-ok: #2f7a4f;
-  --color-status-error: #b3543f;
-  --color-status-pending: #a9bcae;
-}
+@import "./ui/theme.css";
 
+/*
+ * Global resets + the app shell's structural classes (header/content) and
+ * the small building blocks (status indicator, course/module/lesson lists)
+ * shared across pages. Page-specific one-offs belong in the page's own
+ * component, not here — this file is for the layout skeleton, not for every
+ * future screen's styling.
+ */
 * {
   box-sizing: border-box;
 }
@@ -38,40 +29,51 @@ body {
     sans-serif;
 }
 
+a {
+  color: var(--color-accent);
+}
+
 .app-shell {
   min-height: 100%;
   display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-}
-
-.status-card {
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  padding: 2rem 2.5rem;
-  text-align: center;
-  min-width: 20rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.status-card h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
+.app-title {
+  margin: 0;
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--color-accent);
+  text-decoration: none;
+}
+
+.app-content {
+  flex: 1;
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 1.5rem;
 }
 
 .status-row {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 0.5rem;
-  margin-top: 0.75rem;
 }
 
 .status-label {
   margin: 0;
+  font-size: 0.875rem;
   color: var(--color-text-muted);
 }
 
@@ -89,4 +91,49 @@ body {
 
 .status-dot--disconnected {
   background-color: var(--color-status-error);
+}
+
+.card-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-list-item {
+  display: block;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.card-list-item:hover {
+  border-color: var(--color-accent);
+}
+
+.card-list-item h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  color: var(--color-accent);
+}
+
+.card-list-item p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.page-heading {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.muted-note {
+  color: var(--color-text-muted);
 }

@@ -1,68 +1,112 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { App } from "./App";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider, createMemoryHistory } from "@tanstack/react-router";
+import { createAppRouter } from "./routes";
 
-// `@testing-library/jest-dom` is not in the brief's fixed dependency list
-// for this task, so assertions read `.textContent` directly instead of
-// matchers like `toHaveTextContent`. vitest.config's `test` block also does
-// not set `globals: true` (deliberately, see report) — test hooks are
-// imported explicitly, and RTL's automatic cleanup (which only wires up
-// when it detects global test hooks) is done by hand here.
+// Task 004's App.test.tsx exercised a single health-check component; App is
+// now just Router + Query providers, so its meaningful behavior is routing
+// end to end (home -> course detail, unknown routes, error states) rather
+// than App.tsx's own (trivial) body. `createAppRouter` takes a memory
+// history precisely so this test controls the URL instead of touching the
+// real browser location.
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
 
-function statusText(): string {
-  return screen.getByRole("status").textContent ?? "";
+function renderApp(initialPath: string) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [initialPath] }));
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
 }
 
-describe("App", () => {
-  it("shows a loading state before the health check settles", () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(() => new Promise(() => {})), // never resolves during this assertion
-    );
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status });
+}
 
-    render(<App />);
+function mockApi(handlers: Record<string, () => Response>) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      const handler = handlers[url];
+      if (handler === undefined) {
+        throw new Error(`unexpected fetch to ${url}`);
+      }
+      return handler();
+    }),
+  );
+}
 
-    expect(statusText()).toContain("Проверяем связь с ядром");
-  });
+const healthOk = () => jsonResponse({ status: "ok", db: "ok" });
 
-  it("shows connected once GET /api/health succeeds", async () => {
-    const fetchMock = vi.fn(async (input: string | URL | Request) => {
-      expect(String(input)).toBe("/api/health");
-      return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
+describe("App routing", () => {
+  it("lists courses on the home route and navigates to the course detail route on click", async () => {
+    mockApi({
+      "/api/health": healthOk,
+      "/api/courses": () =>
+        jsonResponse({
+          courses: [{ id: "c1", version: "1.0.0", title: "Course One", description: "Desc" }],
+        }),
+      "/api/courses/c1": () =>
+        jsonResponse({
+          id: "c1",
+          version: "1.0.0",
+          title: "Course One",
+          modules: [
+            {
+              id: "m1",
+              title: "Module One",
+              lessons: [{ id: "l1", title: "Lesson", hasContent: true, hasQuiz: false, hasPractice: false }],
+            },
+          ],
+        }),
     });
-    vi.stubGlobal("fetch", fetchMock);
 
-    render(<App />);
+    renderApp("/");
 
-    await waitFor(() => expect(statusText()).toContain("Связь с ядром есть"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText("Course One")).toBeTruthy());
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("link", { name: /Course One/ }));
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Course One" })).toBeTruthy());
+    expect(screen.getByText("Module One")).toBeTruthy();
   });
 
-  it("shows disconnected when the health check request fails (error path)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        throw new Error("network down");
-      }),
-    );
+  it("shows a not-found page for an unknown route (edge case)", async () => {
+    mockApi({ "/api/health": healthOk });
 
-    render(<App />);
+    renderApp("/does-not-exist");
 
-    await waitFor(() => expect(statusText()).toContain("Связи с ядром нет"));
+    await waitFor(() => expect(screen.getByText("Страница не найдена")).toBeTruthy());
   });
 
-  it("shows disconnected when the backend responds with a non-ok HTTP status (edge case)", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("", { status: 500 })),
-    );
+  it("shows an error message when the course list request fails (error path)", async () => {
+    mockApi({
+      "/api/health": healthOk,
+      "/api/courses": () => jsonResponse({ error: "internal_error", message: "boom" }, 500),
+    });
 
-    render(<App />);
+    renderApp("/");
 
-    await waitFor(() => expect(statusText()).toContain("Связи с ядром нет"));
+    await waitFor(() => expect(screen.getByText("Не удалось загрузить список курсов.")).toBeTruthy());
+  });
+
+  it("shows a not-found message when the requested course id doesn't exist", async () => {
+    mockApi({
+      "/api/health": healthOk,
+      "/api/courses/missing": () => jsonResponse({ error: "course_not_found", message: "not found" }, 404),
+    });
+
+    renderApp("/courses/missing");
+
+    await waitFor(() => expect(screen.getByText(/не найден/)).toBeTruthy());
   });
 });
