@@ -260,8 +260,9 @@
         "010"
       ],
       "estimate_tokens": 20000,
-      "status": "pending",
-      "complexity_class": "follow-pattern"
+      "status": "done",
+      "complexity_class": "follow-pattern",
+      "actual_tokens": 55517
     },
     {
       "id": "013",

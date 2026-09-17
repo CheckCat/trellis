@@ -225,3 +225,16 @@ void test("reconcile sorts recorded versions by semver precedence, not lexicogra
   ]);
   assert.deepEqual(tree.recordedVersions, ["0.2.0", "0.9.0", "0.10.0"]);
 });
+
+void test("reconcile sorts a pre-release version before its release, and falls back to a string compare between two pre-releases (regression, task 012)", () => {
+  const course = courseFixture(undefined, "2.0.0");
+  const tree = reconcileCourseProgress(course, [
+    // Same major.minor.patch core as each other and as the installed
+    // version — precedence is decided entirely by the pre-release tag,
+    // never reachable through the core-number compare covered above.
+    record(course.id, "a1", { courseVersion: "1.0.0-beta" }),
+    record(course.id, "a2", { courseVersion: "1.0.0-alpha" }),
+    record(course.id, "b1", { courseVersion: "1.0.0" }),
+  ]);
+  assert.deepEqual(tree.recordedVersions, ["1.0.0-alpha", "1.0.0-beta", "1.0.0"]);
+});

@@ -392,3 +392,159 @@ void test("validateManifest rejects a title that is only whitespace (fix round 1
     assert.equal(result.ok, false);
   });
 });
+
+void test("validateManifest rejects a duplicate sandbox id (edge case, task 012)", () => {
+  withPackageDir((dir) => {
+    const yamlText = [
+      "id: fixture-course",
+      "version: 1.0.0",
+      "title: Fixture course",
+      "sandboxes:",
+      "  - id: main",
+      "    type: postgres",
+      "  - id: main",
+      "    type: postgres",
+      "modules:",
+      "  - id: intro",
+      "    title: Intro",
+      "    lessons:",
+      "      - id: only-lesson",
+      "        title: Only lesson",
+      "        quiz:",
+      "          question: Q?",
+      "          options:",
+      "            - id: a",
+      "              text: 'Yes'",
+      "              correct: true",
+      "            - id: b",
+      "              text: 'No'",
+      "              explanation: Nope.",
+      "",
+    ].join("\n");
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.errors.some((err) => err.path === "sandboxes[1].id" && /duplicate sandbox id/i.test(err.message)));
+  });
+});
+
+void test("validateManifest rejects a duplicate module id (edge case, task 012)", () => {
+  withPackageDir((dir) => {
+    const yamlText = [
+      "id: fixture-course",
+      "version: 1.0.0",
+      "title: Fixture course",
+      "modules:",
+      "  - id: intro",
+      "    title: Intro A",
+      "    lessons:",
+      "      - id: lesson-a",
+      "        title: Lesson A",
+      "        quiz:",
+      "          question: Q?",
+      "          options:",
+      "            - id: a",
+      "              text: 'Yes'",
+      "              correct: true",
+      "            - id: b",
+      "              text: 'No'",
+      "              explanation: Nope.",
+      "  - id: intro",
+      "    title: Intro B",
+      "    lessons:",
+      "      - id: lesson-b",
+      "        title: Lesson B",
+      "        quiz:",
+      "          question: Q?",
+      "          options:",
+      "            - id: a",
+      "              text: 'Yes'",
+      "              correct: true",
+      "            - id: b",
+      "              text: 'No'",
+      "              explanation: Nope.",
+      "",
+    ].join("\n");
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.errors.some((err) => err.path === "modules[1].id" && /duplicate module id/i.test(err.message)));
+  });
+});
+
+void test("validateManifest rejects a duplicate quiz option id within the same quiz (edge case, task 012)", () => {
+  withPackageDir((dir) => {
+    const yamlText = [
+      "id: fixture-course",
+      "version: 1.0.0",
+      "title: Fixture course",
+      "modules:",
+      "  - id: intro",
+      "    title: Intro",
+      "    lessons:",
+      "      - id: only-lesson",
+      "        title: Only lesson",
+      "        quiz:",
+      "          question: Q?",
+      "          options:",
+      "            - id: a",
+      "              text: 'Yes'",
+      "              correct: true",
+      "            - id: a",
+      "              text: 'No'",
+      "              explanation: Nope.",
+      "",
+    ].join("\n");
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(
+      result.errors.some(
+        (err) => err.path === "modules[0].lessons[0].quiz.options[1].id" && /duplicate quiz option id/i.test(err.message),
+      ),
+    );
+  });
+});
+
+void test("validateManifest rejects a content path that escapes the package directory via a symlink (path safety, task 012)", () => {
+  withPackageDir((dir) => {
+    const outsideDir = makeTempDir("trellis-courses-outside-");
+    try {
+      writeFixtureFiles(outsideDir, [{ path: "secret.md", content: "not part of this package" }]);
+      fs.mkdirSync(path.join(dir, "lessons"), { recursive: true });
+      // A symlink whose *target* exists (unlike the plain "../.. " lexical
+      // check above) but resolves, via realpath, outside packageDir — the
+      // one escape resolveSafePath's doc comment says a lexical ".." check
+      // alone cannot catch.
+      fs.symlinkSync(path.join(outsideDir, "secret.md"), path.join(dir, "lessons/escape.md"));
+
+      const yamlText = [
+        "id: fixture-course",
+        "version: 1.0.0",
+        "title: Fixture course",
+        "modules:",
+        "  - id: intro",
+        "    title: Intro",
+        "    lessons:",
+        "      - id: only-lesson",
+        "        title: Only lesson",
+        "        content: lessons/escape.md",
+        "",
+      ].join("\n");
+      const result = validateManifest(parseYaml(yamlText), dir);
+
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.ok(
+        result.errors.some(
+          (err) => err.path === "modules[0].lessons[0].content" && /outside the package directory/i.test(err.message),
+        ),
+      );
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+});

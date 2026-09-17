@@ -13,3 +13,5 @@ Task 020: complete (e3617d6cbfa23be8f8a03e809635ca104561db4e)
   concern (task 021): agentType "devops-engineer" did not dispatch — this task ran on general-purpose, WITHOUT the _common.md contract (boundary rules, report format, blocker protocol) that mvp:bootstrap assembled for it. Agents register at session start, so a bootstrap run in this same session yields files that are not dispatchable until the next one. Restart the session and re-run this task if the role's rules mattered.
 Task 021: complete (ef5b165088ce97781679ac01da85f9b2fb44a5c5)
   Ruling (task 021): не переигрываю задачу — изменение сводилось к сужению glob-области гейта и правке комментариев, диффы проверены и закоммичены (ef5b165); контракт _common.md добавил бы форму отчёта, но не изменил бы результат. Цена ошибки: низкая — граница задачи в один скрипт, регресс виден первым же прогоном pretest. Роли зарегистрированы в текущей сессии, дальнейшие задачи диспатчатся штатно.
+  concern (task 011): review split: 2 finding(s) came from a minority of 3 polls — the others approved
+Task 011: complete (8f784135283022cccfc9ed2d19b8151bd36fd1e0)

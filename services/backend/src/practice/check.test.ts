@@ -74,6 +74,16 @@ void test("runPracticeCheck rejects a non-boolean verdict and never echoes the v
   assertViolation(number.error, 'a value of type "number"');
 });
 
+void test("runPracticeCheck describes a timestamp verdict as \"a timestamp\", not typeof's generic \"object\" (edge case, task 012)", async () => {
+  const timestamp = await check(() => resultSet({ columns: ["passed"], rows: [[new Date("2026-01-01T00:00:00.000Z")]] }));
+  assertViolation(timestamp.error, "a timestamp");
+});
+
+void test("runPracticeCheck describes an array-typed verdict as \"an array\", not typeof's generic \"object\" (edge case, task 012)", async () => {
+  const arrayValue = await check(() => resultSet({ columns: ["passed"], rows: [[[1, 2, 3]]] }));
+  assertViolation(arrayValue.error, "an array");
+});
+
 void test("runPracticeCheck rejects a multi-statement check", async () => {
   const multi = await check(() => [checkResult(true), checkResult(true)]);
   assertViolation(multi.error, "is 2 statements");
