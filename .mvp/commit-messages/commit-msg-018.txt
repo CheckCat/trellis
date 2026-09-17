@@ -1,0 +1,1 @@
+feat: task 018: Написать отказоустойчивый скрипт запуска для Windows (.ps1/.bat): проверка и ожидание Docker Desktop, docker compose up, ожидание healthcheck Postgres/backend/frontend, вывод готового адреса без открытия браузера.

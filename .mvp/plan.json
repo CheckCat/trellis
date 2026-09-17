@@ -383,8 +383,9 @@
         "002"
       ],
       "estimate_tokens": 14000,
-      "status": "pending",
-      "complexity_class": "novel-design"
+      "status": "done",
+      "complexity_class": "novel-design",
+      "actual_tokens": 167388
     },
     {
       "id": "019",

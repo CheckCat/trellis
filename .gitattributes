@@ -1,0 +1,9 @@
+# Windows launcher scripts must arrive on the user's machine with CRLF line
+# endings regardless of the developer's platform or core.autocrlf setting:
+# cmd.exe is documented to require CRLF in .bat files (LF-only batch files
+# misbehave around multi-line blocks in particular), and a .ps1 checked out
+# with LF looks broken in Notepad, which is what a non-developer user opens
+# it with. Repository storage stays LF (the `text` attribute normalizes on
+# commit) — only the checkout is CRLF.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
