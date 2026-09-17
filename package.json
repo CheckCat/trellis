@@ -9,13 +9,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present && eslint tests",
+    "build": "npm run build --workspaces --if-present && tsc -p tests/e2e/tsconfig.json",
     "pretest": "node scripts/check-text-sources.mjs",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "pretest:e2e": "tsc -p tests/e2e/tsconfig.json",
+    "test:e2e": "node --test 'tests/e2e/dist/**/*.test.js'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.2",
     "eslint": "^10.10.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0"

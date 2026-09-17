@@ -1,0 +1,49 @@
+# Override для сквозного smoke-теста (tests/e2e/stack.test.ts).
+#
+# Применяется ТОЛЬКО вместе с корневым docker-compose.yml и только под
+# отдельным именем проекта (`docker compose -p trellis-e2e -f
+# docker-compose.yml -f tests/e2e/docker-compose.e2e.yml ...`, см.
+# helpers/compose.ts). Задача файла — одна: сделать тестовый стек полностью
+# изолированным от стека, который пользователь мог поднять для работы, не
+# трогая при этом сам docker-compose.yml. Образы, healthcheck'и, переменные
+# окружения и порядок зависимостей остаются ровно теми же, что и в проде —
+# иначе smoke-тест проверял бы не ту конфигурацию, которую запускает
+# пользователь.
+#
+# Требуется Docker Compose >= 2.24 — из-за тега `!override` (см. ниже).
+
+services:
+  postgres:
+    # `!override`, а не просто список: последовательности `ports` compose
+    # по умолчанию СКЛАДЫВАЕТ (проверено `docker compose config`), и без
+    # этого тега тестовый стек унаследовал бы фиксированные 5433/3001/3000
+    # из базового файла и падал бы с "port is already allocated" ровно
+    # тогда, когда у разработчика уже поднят рабочий стек. Пустой host-порт
+    # (`127.0.0.1::5432`) отдаёт выбор Docker'у; фактический порт тест
+    # узнаёт через `docker compose port` — фиксированных портов тут нет
+    # вообще. Привязка к 127.0.0.1 сохранена (инвариант: наружу ничего).
+    ports: !override
+      - "127.0.0.1::5432"
+    # Здесь `!override` НЕ нужен и был бы вреден: `volumes` compose сливает
+    # по target-пути, поэтому эта запись заменяет ровно монтирование
+    # /var/lib/postgresql/data (боевой том trellis_pgdata → одноразовый
+    # trellis-e2e-pgdata), а bind-монтирования init-скриптов из базового
+    # файла остаются на месте. Прогресс пользователя в trellis_pgdata этот
+    # стек не открывает вовсе — не «не пишет», а физически не видит.
+    volumes:
+      - trellis_e2e_pgdata:/var/lib/postgresql/data
+
+  backend:
+    ports: !override
+      - "127.0.0.1::3001"
+
+  frontend:
+    ports: !override
+      - "127.0.0.1::80"
+
+volumes:
+  trellis_e2e_pgdata:
+    # Явное имя (не `trellis-e2e_trellis_e2e_pgdata`), чтобы teardown мог
+    # удалить том адресно, по имени, вместо `docker compose down -v` —
+    # см. helpers/compose.ts.
+    name: trellis-e2e-pgdata

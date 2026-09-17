@@ -1,0 +1,16 @@
+{
+  // Тот же базовый конфиг, что у сервисов (strict, NodeNext, ES2023) — этот
+  // каталог компилируется корневым `npm run build`, чтобы сквозной тест
+  // проверялся типами в CI, хотя запускается отдельной командой
+  // (`npm run test:e2e`, см. stack.test.ts).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    // `fetch`/`RequestInit` приходят из @types/node (глобалы undici) —
+    // отдельный lib "DOM" тесту не нужен и притащил бы браузерные типы.
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["dist"]
+}
