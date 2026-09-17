@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ApiError, api } from "../../api/client";
 import type { LessonCompletionMode } from "../../api/types";
+import { QuizView } from "../quiz/QuizView";
 import { Markdown } from "./Markdown";
 
 const NON_MANUAL_NOTE: Record<Exclude<LessonCompletionMode, "manual">, string> = {
@@ -82,6 +83,14 @@ export function LessonView({ courseId, lessonId }: { courseId: string; lessonId:
       </p>
       <h1 className="page-heading">{contentQuery.data.title}</h1>
       {contentQuery.data.content !== undefined && <Markdown source={contentQuery.data.content} />}
+      {lessonProgress.completionMode === "quiz" && contentQuery.data.quiz !== undefined && (
+        // `LessonDetailResponse.quiz` and the tree's `completionMode` come
+        // from two separate queries (see the module doc comment above) —
+        // guarding on both, rather than trusting `completionMode` alone, is
+        // what keeps this from ever rendering `QuizView` with `quiz` typed
+        // as possibly-undefined.
+        <QuizView courseId={courseId} lessonId={lessonId} quiz={contentQuery.data.quiz} />
+      )}
       <CompletionControl
         mode={lessonProgress.completionMode}
         isCompleted={isCompleted}

@@ -156,3 +156,18 @@ export interface LessonCompletionResponse {
     completed: boolean;
   };
 }
+
+/** POST /courses/:courseId/lessons/:lessonId/quiz/answer — routes/quiz.ts's
+ * `quizAnswerResponseSchema`. Deliberately carries no way to learn which
+ * option is correct beyond `correct`/`explanation` for the option the
+ * caller itself submitted (the endpoint's own docstring: "the client learns
+ * exactly one bit... plus that option's own explanation") — never widen
+ * this type with a per-option verdict map or the correct option's id. */
+export interface QuizAnswerResponse {
+  correct: boolean;
+  /** Present only when the submitted option itself has an explanation
+   * (`CourseQuizOption.explanation` is optional server-side). */
+  explanation?: string;
+  lesson: LessonProgress;
+  course: LessonCompletionResponse["course"];
+}

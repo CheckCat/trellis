@@ -154,6 +154,62 @@ describe("LessonView", () => {
     expect(screen.queryByRole("button", { name: "Отметить пройденным" })).toBeNull();
   });
 
+  it("renders the quiz UI for a quiz-graded lesson whose content carries a quiz (task 014 wiring)", async () => {
+    mockApi({
+      "/api/health": healthOk,
+      "/api/courses/c1/lessons/l1": () =>
+        jsonResponse({
+          id: "l1",
+          title: "Quiz Lesson",
+          content: "Body.",
+          quiz: {
+            question: "2 + 2?",
+            options: [
+              { id: "a", text: "4" },
+              { id: "b", text: "5" },
+            ],
+          },
+        }),
+      "/api/courses/c1/progress": () =>
+        jsonResponse({
+          courseId: "c1",
+          courseVersion: "1.0.0",
+          title: "Course One",
+          totalLessons: 1,
+          completedLessons: 0,
+          completed: false,
+          orphanedLessons: [],
+          recordedVersions: [],
+          modules: [
+            {
+              id: "m1",
+              title: "Module One",
+              totalLessons: 1,
+              completedLessons: 0,
+              completed: false,
+              lessons: [
+                {
+                  id: "l1",
+                  title: "Quiz Lesson",
+                  status: "not_started",
+                  completionMode: "quiz",
+                  hasContent: true,
+                  hasQuiz: true,
+                  hasPractice: false,
+                },
+              ],
+            },
+          ],
+        }),
+    });
+
+    renderAt("/courses/c1/lessons/l1");
+
+    await waitFor(() => expect(screen.getByText("2 + 2?")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "4" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "5" })).toBeTruthy();
+  });
+
   it("shows a not-found message for an unknown lesson (error path)", async () => {
     mockApi({
       "/api/health": healthOk,

@@ -6,6 +6,7 @@ import type {
   HealthResponse,
   LessonCompletionResponse,
   LessonDetailResponse,
+  QuizAnswerResponse,
 } from "./types";
 
 /**
@@ -80,5 +81,15 @@ export const api = {
     apiFetch<LessonCompletionResponse>(
       `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/complete`,
       { method: "POST" },
+    ),
+
+  answerQuiz: (courseId: string, lessonId: string, optionId: string): Promise<QuizAnswerResponse> =>
+    apiFetch<QuizAnswerResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/quiz/answer`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionId }),
+      },
     ),
 };
