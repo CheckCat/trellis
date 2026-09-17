@@ -1,4 +1,12 @@
-import type { ApiErrorResponse, CourseDetailResponse, CoursesListResponse, HealthResponse } from "./types";
+import type {
+  ApiErrorResponse,
+  CourseDetailResponse,
+  CourseProgressResponse,
+  CoursesListResponse,
+  HealthResponse,
+  LessonCompletionResponse,
+  LessonDetailResponse,
+} from "./types";
 
 /**
  * Thrown for any non-2xx response. Carries the parsed JSON body (when the
@@ -59,4 +67,18 @@ export const api = {
 
   getCourse: (courseId: string): Promise<CourseDetailResponse> =>
     apiFetch<CourseDetailResponse>(`/courses/${encodeURIComponent(courseId)}`),
+
+  getCourseProgress: (courseId: string): Promise<CourseProgressResponse> =>
+    apiFetch<CourseProgressResponse>(`/courses/${encodeURIComponent(courseId)}/progress`),
+
+  getLesson: (courseId: string, lessonId: string): Promise<LessonDetailResponse> =>
+    apiFetch<LessonDetailResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}`,
+    ),
+
+  completeLesson: (courseId: string, lessonId: string): Promise<LessonCompletionResponse> =>
+    apiFetch<LessonCompletionResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/complete`,
+      { method: "POST" },
+    ),
 };

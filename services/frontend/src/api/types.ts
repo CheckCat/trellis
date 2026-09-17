@@ -56,3 +56,103 @@ export interface ApiErrorResponse {
   error: string;
   message: string;
 }
+
+/** A quiz option as the API exposes it — `correct`/`explanation`-per-wrong-
+ * option are stripped server-side (routes/courses.ts's `toLessonResponse`),
+ * so this type must never gain those fields. */
+export interface PublicQuizOption {
+  id: string;
+  text: string;
+}
+
+export interface PublicQuiz {
+  question: string;
+  options: PublicQuizOption[];
+}
+
+export interface PublicPractice {
+  sandbox: string;
+  prompt: string;
+}
+
+/** GET /courses/:courseId/lessons/:lessonId — routes/courses.ts,
+ * `lessonResponseSchema`. `content` is the lesson's Markdown body (may be
+ * absent for a quiz/practice-only lesson — mirrors `hasContent` on the
+ * summary shapes above). */
+export interface LessonDetailResponse {
+  id: string;
+  title: string;
+  content?: string;
+  quiz?: PublicQuiz;
+  practice?: PublicPractice;
+}
+
+/** How a lesson is allowed to become `completed` — routes/progress.ts /
+ * progress/model.ts's `LessonCompletionMode`. `manual` is the only mode the
+ * "mark as done" button is allowed to act on; `quiz`/`practice` are earned
+ * elsewhere and the backend 409s a manual-complete attempt against them. */
+export type LessonCompletionMode = "manual" | "quiz" | "practice";
+
+export type LessonStatus = "completed" | "not_started";
+
+/** One lesson inside `GET /courses/:courseId/progress` — routes/progress.ts,
+ * `lessonProgressSchema`. */
+export interface LessonProgress {
+  id: string;
+  title: string;
+  status: LessonStatus;
+  /** Present only when `status === "completed"`. */
+  completedAt?: string;
+  completionMode: LessonCompletionMode;
+  hasContent: boolean;
+  hasQuiz: boolean;
+  hasPractice: boolean;
+}
+
+export interface ModuleProgress {
+  id: string;
+  title: string;
+  totalLessons: number;
+  completedLessons: number;
+  completed: boolean;
+  lessons: LessonProgress[];
+}
+
+/** A stored completion whose lesson no longer exists in the course as
+ * installed right now (`orphanedProgressSchema`) — diagnostic only. */
+export interface OrphanedProgress {
+  lessonId: string;
+  completedAt: string;
+  courseVersion?: string;
+}
+
+/** GET /courses/:courseId/progress — routes/progress.ts,
+ * `courseProgressResponseSchema`. The course tree joined with per-lesson
+ * completion status; this is what course/lesson navigation renders from,
+ * not `CourseDetailResponse` (which has no status). */
+export interface CourseProgressResponse {
+  courseId: string;
+  courseVersion: string;
+  title: string;
+  totalLessons: number;
+  completedLessons: number;
+  completed: boolean;
+  modules: ModuleProgress[];
+  orphanedLessons: OrphanedProgress[];
+  recordedVersions: string[];
+}
+
+/** Response shape shared by both progress-mutating routes
+ * (`lessonCompletionResponseSchema`) — the affected lesson's fresh status
+ * plus the course's counters, so the caller never needs a second request to
+ * redraw "N of M done" after marking something. */
+export interface LessonCompletionResponse {
+  lesson: LessonProgress;
+  course: {
+    courseId: string;
+    courseVersion: string;
+    totalLessons: number;
+    completedLessons: number;
+    completed: boolean;
+  };
+}

@@ -54,16 +54,34 @@ describe("App routing", () => {
         jsonResponse({
           courses: [{ id: "c1", version: "1.0.0", title: "Course One", description: "Desc" }],
         }),
-      "/api/courses/c1": () =>
+      "/api/courses/c1/progress": () =>
         jsonResponse({
-          id: "c1",
-          version: "1.0.0",
+          courseId: "c1",
+          courseVersion: "1.0.0",
           title: "Course One",
+          totalLessons: 1,
+          completedLessons: 0,
+          completed: false,
+          orphanedLessons: [],
+          recordedVersions: [],
           modules: [
             {
               id: "m1",
               title: "Module One",
-              lessons: [{ id: "l1", title: "Lesson", hasContent: true, hasQuiz: false, hasPractice: false }],
+              totalLessons: 1,
+              completedLessons: 0,
+              completed: false,
+              lessons: [
+                {
+                  id: "l1",
+                  title: "Lesson",
+                  status: "not_started",
+                  completionMode: "manual",
+                  hasContent: true,
+                  hasQuiz: false,
+                  hasPractice: false,
+                },
+              ],
             },
           ],
         }),
@@ -102,7 +120,7 @@ describe("App routing", () => {
   it("shows a not-found message when the requested course id doesn't exist", async () => {
     mockApi({
       "/api/health": healthOk,
-      "/api/courses/missing": () => jsonResponse({ error: "course_not_found", message: "not found" }, 404),
+      "/api/courses/missing/progress": () => jsonResponse({ error: "course_not_found", message: "not found" }, 404),
     });
 
     renderApp("/courses/missing");

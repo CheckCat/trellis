@@ -1,18 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import type { RouterHistory } from "@tanstack/react-router";
-import { ApiError, api } from "./api/client";
+import { api } from "./api/client";
+import { CoursePage } from "./features/course/CoursePage";
+import { LessonView } from "./features/lesson/LessonView";
 import { Layout } from "./ui/Layout";
 
 /**
  * Route tree, built with TanStack Router's code-based API (no file-based
  * routing plugin — nothing in this package generates route files, so
- * there's nothing extra to wire into vite.config.ts). Pages here are
- * intentionally thin: full course navigation (module/lesson tree, status,
- * Markdown rendering, mark-as-done) is task 013's job, not this one's — this
- * file only proves the routing + typed client + layout all wire together
- * end to end, the same way task 004's App.tsx proved the dev-proxy worked
- * by doing the smallest possible real fetch instead of a stub.
+ * there's nothing extra to wire into vite.config.ts). `CoursePage` and
+ * `LessonView` (task 013) do the real course-navigation work; this file
+ * only wires their routes into the tree, the same way task 004's App.tsx
+ * proved the dev-proxy worked by doing the smallest possible real fetch
+ * before this grew.
  */
 
 // `Layout` renders the shared header + `<Outlet />`; every route's own
@@ -30,7 +31,22 @@ const indexRoute = createRoute({
 const courseRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/courses/$courseId",
-  component: CourseDetailPage,
+  component: () => <CoursePage courseId={courseRoute.useParams().courseId} />,
+});
+
+// Deliberately a top-level route (parent: rootRoute), not a child of
+// courseRoute — task-011's report left the choice open ("сама выберет
+// форму"). Nesting it under courseRoute would force CoursePage to render an
+// `<Outlet />` and keep the module list mounted behind the lesson, i.e. a
+// master-detail layout nobody asked for; a lesson is its own full page here,
+// same shape as courseRoute itself.
+const lessonRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/courses/$courseId/lessons/$lessonId",
+  component: () => {
+    const { courseId, lessonId } = lessonRoute.useParams();
+    return <LessonView courseId={courseId} lessonId={lessonId} />;
+  },
 });
 
 function CoursesIndexPage() {
@@ -68,45 +84,6 @@ function CoursesIndexPage() {
   );
 }
 
-function CourseDetailPage() {
-  const { courseId } = courseRoute.useParams();
-  const { data, isPending, isError, error } = useQuery({
-    queryKey: ["course", courseId],
-    queryFn: () => api.getCourse(courseId),
-  });
-
-  if (isPending) {
-    return <p className="muted-note">Загружаем курс…</p>;
-  }
-
-  if (isError) {
-    // Only an actual 404 from the backend means "no such course" — any
-    // other failure (network error, 500, etc.) gets the same generic
-    // message CoursesIndexPage uses for the same failure class above.
-    if (error instanceof ApiError && error.status === 404) {
-      return <p className="muted-note">Курс «{courseId}» не найден.</p>;
-    }
-    return <p className="muted-note">Не удалось загрузить курс.</p>;
-  }
-
-  return (
-    <>
-      <h1 className="page-heading">{data.title}</h1>
-      {data.description !== undefined && <p className="muted-note">{data.description}</p>}
-      {/* Interactive module/lesson navigation (statuses, content, mark-as-done)
-          is task 013 — this only proves the course was fetched by id. */}
-      <ul className="card-list">
-        {data.modules.map((module) => (
-          <li key={module.id} className="card-list-item">
-            <h3>{module.title}</h3>
-            <p>{module.lessons.length} урок(ов)</p>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-
 function NotFoundPage() {
   return (
     <>
@@ -118,7 +95,7 @@ function NotFoundPage() {
   );
 }
 
-const routeTree = rootRoute.addChildren([indexRoute, courseRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, courseRoute, lessonRoute]);
 
 /**
  * Factory instead of a single module-level singleton so tests can build a
