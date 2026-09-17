@@ -25,3 +25,5 @@ Task 014: complete (31e2e2876d579e40265a4417e62170f356968294)
   concern (task 015): review split: 4 finding(s) came from a minority of 3 polls — the others approved
   concern (task 015): review finding refuted, not fixed: {"severity":"bug","file":"services/frontend/src/features/practice/PracticeView.tsx","line":862,"quote":"<SqlEditor value={sql} onChange={setSql} onRun={() => run(sql)} busy={isRunning} />","summary":"Run/reset race on the mutation observer.","verdict":"REFUTED"}
 Task 015: complete (0af55cb5ba75a1fc44c9eacae7292769a1e08fd7)
+  concern (task 016): review split: 1 finding(s) came from a minority of 3 polls — the others approved
+Task 016: complete (ca809067e2c36408022cb50bb5bec9d401483943)

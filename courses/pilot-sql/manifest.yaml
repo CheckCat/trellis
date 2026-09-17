@@ -1,0 +1,72 @@
+id: pilot-sql
+version: 1.0.0
+title: "Основы SQL: работа с таблицей книг"
+description: "Пилотный курс для обкатки платформы: SELECT, WHERE и изменение данных на примере небольшой таблицы книг."
+sandboxes:
+  - id: main
+    type: postgres
+    seed:
+      - sandbox/seed.sql
+modules:
+  - id: intro
+    title: "Введение в SQL"
+    lessons:
+      - id: what-is-sql
+        title: "Что такое SQL"
+        content: lessons/what-is-sql.md
+      - id: select-basics
+        title: "SELECT: выбираем данные"
+        content: lessons/select-basics.md
+        quiz:
+          question: "Какая команда SQL используется, чтобы получить (выбрать) данные из таблицы?"
+          options:
+            - id: select
+              text: "SELECT"
+              correct: true
+            - id: insert
+              text: "INSERT"
+              explanation: "INSERT используется, чтобы добавить новые строки в таблицу, а не прочитать существующие."
+            - id: delete
+              text: "DELETE"
+              explanation: "DELETE используется, чтобы удалить строки из таблицы, а не прочитать их."
+      - id: practice-instock
+        title: "Практика: книги в наличии"
+        content: lessons/practice-instock.md
+        practice:
+          sandbox: main
+          prompt: "Напишите запрос, который выбирает название (title) и автора (author) всех книг, которые сейчас есть в наличии (in_stock = true)."
+  - id: filtering
+    title: "Фильтрация и изменение данных"
+    lessons:
+      - id: where-clause
+        title: "WHERE: фильтруем строки"
+        content: lessons/where-clause.md
+        quiz:
+          question: "Что делает условие в запросе SELECT * FROM books WHERE in_stock = true;?"
+          options:
+            - id: filter
+              text: "Оставляет в результате только строки, где in_stock равно true"
+              correct: true
+            - id: sort
+              text: "Сортирует результат по полю in_stock"
+              explanation: "За сортировку отвечает ORDER BY, а не WHERE — WHERE не меняет порядок строк, а отбирает их."
+            - id: no-effect
+              text: "Ничего не меняет — WHERE работает только в INSERT и UPDATE"
+              explanation: "WHERE точно так же работает и в SELECT: он ограничивает набор возвращаемых строк по условию."
+      - id: practice-add-book
+        title: "Практика: добавить книгу"
+        content: lessons/practice-add-book.md
+        practice:
+          sandbox: main
+          prompt: "Добавьте в таблицу books новую книгу: title = 'Мастер и Маргарита', author = 'Михаил Булгаков', published_year = 1967, in_stock = true."
+          check: "select count(*) = 1 as ok from books where title = 'Мастер и Маргарита' and author = 'Михаил Булгаков' and published_year = 1967 and in_stock = true"
+      - id: practice-update-stock
+        title: "Практика: обновить статус книги"
+        content: lessons/practice-update-stock.md
+        practice:
+          sandbox: main
+          prompt: "Отметьте книгу с id = 1 («Война и мир») как отсутствующую в продаже: обновите in_stock на false."
+          check: "select count(*) = 1 as ok from books where id = 1 and in_stock = false"
+      - id: wrap-up
+        title: "Что дальше"
+        content: lessons/wrap-up.md
