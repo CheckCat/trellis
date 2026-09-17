@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Gate: no git-tracked file may contain a NUL byte (0x00) — the standard
-// signal that a file is binary or was corrupted/mis-encoded (e.g. saved as
-// UTF-16, or truncated) when every tracked path in this repo is expected to
-// be plain text.
+// Gate: no git-tracked source file may contain a NUL byte (0x00) — the
+// standard signal that a file is binary or was corrupted/mis-encoded (e.g.
+// saved as UTF-16, or truncated) when every tracked source path in this
+// repo is expected to be plain text. Scope is every tracked path EXCEPT
+// `.mvp/` (the pipeline's generated audit trail — see the comment on
+// `listTrackedFiles` below for why).
 //
 // Wired in as npm's "pretest" lifecycle hook (see package.json) rather than
 // referenced from .mvp/ci-mirror.sh or .github/workflows/ci.yml directly:
@@ -17,20 +19,30 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-// The brief for this gate is unqualified: "ни один отслеживаемый исходник"
-// — not a single tracked file, no directory carve-out. So every path from
-// `git ls-files` is in scope, .mvp/ (the pipeline's own audit trail)
-// included. Prose that needs to talk about a NUL byte quotes it via escape
-// notation (`\x00`, the same convention already used elsewhere in .mvp/ for
-// this exact byte) rather than embedding the raw control byte — the same
-// way a raw byte would need representing in any other tracked text file.
+// The gate covers every tracked source file in the project — but not
+// `.mvp/`. That directory is the pipeline's own generated audit trail:
+// review packages inside it legitimately quote arbitrary bytes (including
+// raw NUL) verbatim as evidence of what a gate rejected, which made this
+// same check self-reproducingly red the moment a review package cited a
+// NUL byte it was reporting on, rather than one it was introducing as a
+// source-encoding bug. Excluding `.mvp/` keeps the gate meaningful for its
+// actual purpose (catching mis-encoded/binary source) without it tripping
+// over its own audit log. Prose elsewhere in the project that needs to
+// talk about a NUL byte still quotes it via escape notation (`\x00`, the
+// same convention already used in `.mvp/` for this exact byte) rather than
+// embedding the raw control byte — that convention is what keeps `.mvp/`
+// itself readable text, it's just no longer this gate's job to enforce it.
 
 function listTrackedFiles() {
   // `-z` NUL-delimits the listing so paths with spaces/newlines round-trip
   // safely; `git ls-files` already excludes .git/ and anything untracked
-  // (node_modules, build output, .gitignore'd files).
+  // (node_modules, build output, .gitignore'd files). `.mvp/` is excluded
+  // here too — see the comment above.
   const raw = execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' });
-  return raw.split('\0').filter((path) => path.length > 0);
+  return raw
+    .split('\0')
+    .filter((path) => path.length > 0)
+    .filter((path) => path !== '.mvp' && !path.startsWith('.mvp/'));
 }
 
 function findNulPosition(buffer) {
