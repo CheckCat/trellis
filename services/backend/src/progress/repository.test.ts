@@ -114,6 +114,118 @@ void test("markLessonCompleted accepts a completion with no known course version
   });
 });
 
+void test("importProgress stores completions with the time they happened elsewhere, not now (task 010)", async (t) => {
+  await withRepository(t, async (repository, courseId) => {
+    const stored = await repository.importProgress([
+      { courseId, lessonId: "b-lesson", completedAt: "2024-03-03T10:00:00.000Z", courseVersion: "0.9.0" },
+      { courseId, lessonId: "a-lesson", completedAt: "2024-01-01T10:00:00.000Z" },
+    ]);
+
+    // Returned in the order given (the statement carries the caller's order
+    // through explicitly — RETURNING alone has none).
+    assert.deepEqual(
+      stored.map((row) => row.lessonId),
+      ["b-lesson", "a-lesson"],
+    );
+    assert.equal(stored[0]?.completedAt, "2024-03-03T10:00:00.000Z");
+    assert.equal(stored[0]?.courseVersion, "0.9.0");
+    assert.equal(stored[0]?.status, "completed");
+    // No version in the file -> no version invented for the row.
+    assert.equal(stored[1]?.courseVersion, undefined);
+    // An import is progress like any other — the ordinary read path sees it.
+    assert.equal((await repository.listCourseProgress(courseId)).length, 2);
+  });
+});
+
+void test("importProgress merges: the earlier completion wins, with the version that belongs to it", async (t) => {
+  await withRepository(t, async (repository, courseId) => {
+    const local = await repository.markLessonCompleted({ courseId, lessonId: "lesson-1", courseVersion: "2.0.0" });
+
+    // A file from the other machine that passed this lesson EARLIER: the
+    // stored completion moves back, and takes that file's recorded version
+    // with it (the two travel together — they describe the same event).
+    const earlier = await repository.importProgress([
+      { courseId, lessonId: "lesson-1", completedAt: "2020-01-01T00:00:00.000Z", courseVersion: "1.0.0" },
+    ]);
+    assert.equal(earlier[0]?.completedAt, "2020-01-01T00:00:00.000Z");
+    assert.equal(earlier[0]?.courseVersion, "1.0.0");
+    assert.ok(Date.parse(earlier[0]?.updatedAt ?? "") >= Date.parse(local.completedAt));
+
+    // A file that passed it LATER cannot push the completion forward, and
+    // cannot overwrite the version recorded with the earlier completion.
+    const later = await repository.importProgress([
+      { courseId, lessonId: "lesson-1", completedAt: "2030-01-01T00:00:00.000Z", courseVersion: "9.9.9" },
+    ]);
+    assert.equal(later[0]?.completedAt, "2020-01-01T00:00:00.000Z");
+    assert.equal(later[0]?.courseVersion, "1.0.0");
+
+    // Still one row: the key is (course_id, lesson_id), and an import never
+    // adds a second completion for the same lesson.
+    assert.equal((await repository.listCourseProgress(courseId)).length, 1);
+  });
+});
+
+void test(
+  "importProgress: a losing import cannot donate its courseVersion to a locally-null one, and does not " +
+    "touch updatedAt (regression, fix round 2 finding 2)",
+  async (t) => {
+    await withRepository(t, async (repository, courseId) => {
+      // Local completion with NO recorded version — the exact edge case that
+      // let a losing import's version leak in through the SQL's `coalesce`.
+      const local = await repository.importProgress([
+        { courseId, lessonId: "lesson-1", completedAt: "2025-01-01T00:00:00.000Z" },
+      ]);
+      assert.equal(local[0]?.courseVersion, undefined);
+
+      // An import that does NOT win (same time or later) must leave the row
+      // byte-for-byte as it was: no version filled in, no updatedAt bump.
+      const sameTime = await repository.importProgress([
+        { courseId, lessonId: "lesson-1", completedAt: "2025-01-01T00:00:00.000Z", courseVersion: "5.0.0" },
+      ]);
+      assert.equal(sameTime[0]?.courseVersion, undefined);
+      assert.equal(sameTime[0]?.updatedAt, local[0]?.updatedAt);
+
+      const later = await repository.importProgress([
+        { courseId, lessonId: "lesson-1", completedAt: "2030-01-01T00:00:00.000Z", courseVersion: "9.9.9" },
+      ]);
+      assert.equal(later[0]?.courseVersion, undefined);
+      assert.equal(later[0]?.updatedAt, local[0]?.updatedAt);
+    });
+  },
+);
+
+void test("importProgress writes progress for a course that isn't installed, and nothing at all for an empty file", async (t) => {
+  await withRepository(t, async (repository, courseId) => {
+    // There is no "courses" table to point at — progress for content that
+    // isn't here must be storable (clarify Q-009, migrations/001_progress.sql).
+    const stored = await repository.importProgress([
+      { courseId, lessonId: "lesson-of-an-absent-course", completedAt: "2024-01-01T10:00:00.000Z" },
+    ]);
+    assert.equal(stored.length, 1);
+
+    assert.deepEqual(await repository.importProgress([]), []);
+    assert.equal((await repository.listCourseProgress(courseId)).length, 1);
+  });
+});
+
+void test("importProgress refuses two completions for the same lesson instead of letting Postgres abort", async (t) => {
+  await withRepository(t, async (repository, courseId) => {
+    // `insert ... on conflict do update` cannot affect one row twice —
+    // Postgres aborts the whole statement. parseProgressExport already refuses
+    // such a file, but this is a public method: it must answer with a sentence
+    // naming the key, not with a database error surfacing as a 500.
+    await assert.rejects(
+      repository.importProgress([
+        { courseId, lessonId: "lesson-1", completedAt: "2024-01-01T10:00:00.000Z" },
+        { courseId, lessonId: "lesson-1", completedAt: "2023-01-01T10:00:00.000Z" },
+      ]),
+      (error: Error) => /lesson-1.*more than once/s.test(error.message),
+    );
+    // Rejected before anything was written.
+    assert.equal((await repository.listCourseProgress(courseId)).length, 0);
+  });
+});
+
 void test("listCourseProgress is scoped to one course; listAllProgress spans them in a stable order", async (t) => {
   await withRepository(t, async (repository, courseId) => {
     const otherCourseId = `test-course-${randomUUID()}`;

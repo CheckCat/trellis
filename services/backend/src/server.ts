@@ -21,6 +21,7 @@ import progressRoutes from "./routes/progress.js";
 import quizRoutes from "./routes/quiz.js";
 import sandboxRoutes from "./routes/sandbox.js";
 import practiceRoutes from "./routes/practice.js";
+import transferRoutes from "./routes/transfer.js";
 
 export interface BuildServerOptions {
   /**
@@ -213,6 +214,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   app.register(quizRoutes);
   app.register(sandboxRoutes);
   app.register(practiceRoutes);
+  app.register(transferRoutes);
   return app;
 }
 

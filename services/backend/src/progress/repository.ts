@@ -16,6 +16,7 @@
 //     nothing at all.
 
 import type { AppPool } from "../db/pool.js";
+import { progressKey } from "./model.js";
 import type { ProgressRecord } from "./model.js";
 
 /** Row shape as Postgres hands it back — the only place these column names
@@ -40,6 +41,21 @@ export interface MarkLessonCompletedInput {
   readonly courseVersion?: string;
 }
 
+/**
+ * One completion coming in from an imported progress file (task 010). Unlike
+ * `MarkLessonCompletedInput` it carries its own `completedAt`: an import
+ * restores WHEN something was passed on another machine, it does not pass it
+ * again now.
+ */
+export interface ImportProgressRecord {
+  readonly courseId: string;
+  readonly lessonId: string;
+  /** ISO 8601 timestamp of the completion being imported. */
+  readonly completedAt: string;
+  /** Provenance recorded alongside the completion, when the file had it. */
+  readonly courseVersion?: string;
+}
+
 export interface ProgressRepository {
   /** Every stored completion for one course, oldest first. Returns `[]` for
    * a course with no progress — including a course that isn't installed. */
@@ -54,6 +70,35 @@ export interface ProgressRepository {
    * original `completedAt` and leaves the lesson completed.
    */
   markLessonCompleted(input: MarkLessonCompletedInput): Promise<ProgressRecord>;
+  /**
+   * Merges completions from an imported progress file and returns the rows
+   * as they are stored afterwards (in the order given). The write path task
+   * 010 needs, living here rather than in transfer/ so `core.lesson_progress`
+   * still has exactly one module that writes to it.
+   *
+   * Merge semantics — additive, never destructive:
+   *   - a lesson not stored here yet is inserted with the file's
+   *     `completedAt` (not `now()`: the completion happened then, elsewhere);
+   *   - a lesson already stored keeps the EARLIER of the two completion
+   *     times, together with the `courseVersion` that belongs to it — a
+   *     completion is a historical fact, and the earliest known one is the
+   *     true "first passed at". When the incoming record does NOT win (it is
+   *     not earlier), the stored row is left byte-for-byte as it was —
+   *     including `courseVersion` (even if the incoming record has one and
+   *     the stored row's is unset) and `updatedAt`. A record that loses is a
+   *     true no-op, not "loses the timestamp but still donates its version";
+   *   - nothing is ever deleted or un-completed, and rows absent from the
+   *     file are left alone. An import is a merge, not a restore.
+   *
+   * Courses that are not installed locally are written like any other (the
+   * table has no foreign key to course content, on purpose — see
+   * migrations/001_progress.sql): their progress waits for the course to
+   * appear (clarify Q-009).
+   *
+   * Atomic: all rows in one statement, so a failure imports nothing. An
+   * empty input touches the database not at all.
+   */
+  importProgress(records: readonly ImportProgressRecord[]): Promise<ProgressRecord[]>;
 }
 
 export function createProgressRepository(pool: AppPool): ProgressRepository {
@@ -105,6 +150,87 @@ export function createProgressRepository(pool: AppPool): ProgressRepository {
         );
       }
       return toProgressRecord(row);
+    },
+
+    async importProgress(records) {
+      if (records.length === 0) {
+        // Not just an optimization: "importing a file that changes nothing
+        // writes nothing" is an observable property (no `updated_at` churn,
+        // no rows touched), and it starts here.
+        return [];
+      }
+
+      // A single `insert ... on conflict do update` cannot touch the same row
+      // twice: Postgres aborts the whole statement with "ON CONFLICT DO UPDATE
+      // command cannot affect row a second time". `parseProgressExport` already
+      // refuses a file with duplicate ids, but this is a public repository
+      // method — a caller that isn't the import route must fail with a sentence
+      // that names the offending key, not with an opaque database error that
+      // would surface as a 500.
+      const seen = new Set<string>();
+      for (const record of records) {
+        const key = progressKey(record.courseId, record.lessonId);
+        if (seen.has(key)) {
+          throw new Error(
+            `Cannot import two completions for the same lesson: course "${record.courseId}", lesson ` +
+              `"${record.lessonId}" appears more than once. Merge them before calling importProgress.`,
+          );
+        }
+        seen.add(key);
+      }
+
+      // One statement for the whole file — atomic without an explicit
+      // transaction, and immune to the array growing. `unnest(...) with
+      // ordinality` carries the caller's order through so the returned rows
+      // line up with `records` (RETURNING on its own has no defined order).
+      //
+      // `least(...)`/the `case`s below encode the merge rule in SQL rather
+      // than in the caller: even if two imports ran concurrently, neither
+      // can replace an earlier completion with a later one. Both `case`s
+      // branch on the exact same condition, and the "local wins" (`else`)
+      // side is a byte-for-byte no-op — `course_version`/`updated_at` are set
+      // back to their own current value, not coalesced with `excluded`'s.
+      // A losing import must not be able to fill in a locally-null
+      // `course_version` (that would make an "unchanged" row observably
+      // change under a caller that doesn't pre-filter unchanged records the
+      // way `transfer/import.ts`'s `planProgressImport` does — see fix
+      // round 2, finding 2) or bump `updated_at` for a row nothing happened
+      // to.
+      const result = await pool.query<LessonProgressRow>(
+        `with incoming as (
+           select *
+             from unnest($1::text[], $2::text[], $3::text[], $4::timestamptz[])
+                  with ordinality as t(course_id, lesson_id, course_version, completed_at, ord)
+         ), upserted as (
+           insert into core.lesson_progress (course_id, lesson_id, status, course_version, completed_at)
+           select course_id, lesson_id, 'completed', course_version, completed_at from incoming
+           on conflict (course_id, lesson_id) do update
+             set completed_at = least(core.lesson_progress.completed_at, excluded.completed_at),
+                 course_version = case
+                   when excluded.completed_at < core.lesson_progress.completed_at
+                     then coalesce(excluded.course_version, core.lesson_progress.course_version)
+                   else core.lesson_progress.course_version
+                 end,
+                 updated_at = case
+                   when excluded.completed_at < core.lesson_progress.completed_at
+                     then now()
+                   else core.lesson_progress.updated_at
+                 end
+           returning ${RETURNED_COLUMNS}
+         )
+         select upserted.*
+           from upserted
+           join incoming on incoming.course_id = upserted.course_id
+                        and incoming.lesson_id = upserted.lesson_id
+          order by incoming.ord`,
+        [
+          records.map((record) => record.courseId),
+          records.map((record) => record.lessonId),
+          records.map((record) => record.courseVersion ?? null),
+          records.map((record) => record.completedAt),
+        ],
+      );
+      return result.rows.map(toProgressRecord);
     },
   };
 }

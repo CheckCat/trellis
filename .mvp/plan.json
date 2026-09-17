@@ -214,8 +214,9 @@
         "007"
       ],
       "estimate_tokens": 18000,
-      "status": "pending",
-      "complexity_class": "novel-design"
+      "status": "done",
+      "complexity_class": "novel-design",
+      "actual_tokens": 152935
     },
     {
       "id": "011",
@@ -399,6 +400,23 @@
       "estimate_tokens": 16000,
       "status": "pending",
       "complexity_class": "novel-design"
+    },
+    {
+      "title": "Добавить в общую npm-последовательность проверку, что ни один отслеживаемый исходник не содержит не-текстовых байт (NUL): гейт должен срабатывать одинаково в .mvp/ci-mirror.sh и .github/workflows/ci.yml, падать с указанием файла и позиции.",
+      "level": 1,
+      "service": "root",
+      "service_path": ".",
+      "role": "devops-engineer",
+      "files": [
+        "package.json",
+        "scripts/check-text-sources.mjs"
+      ],
+      "depends_on": [],
+      "estimate_tokens": 8000,
+      "status": "pending",
+      "complexity_class": "follow-pattern",
+      "id": "020",
+      "epoch": 1
     }
   ]
 }

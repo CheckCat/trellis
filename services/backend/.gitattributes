@@ -1,0 +1,25 @@
+# Source in this service is always text, and must always diff as text.
+#
+# Why this exists: git decides "binary" by heuristic — a single NUL byte in
+# the first 8000 of a file is enough — and for a binary file it prints
+# "Binary files a/... and b/... differ" instead of a diff. That is a silent
+# review outage: a reviewer (human or automated) gets a package with no
+# visible change for that file and can only approve what they cannot read.
+# It happened here: `src/progress/testSupport.ts` carried a raw 0x00 where a
+# space belonged (committed in task 007, removed in task 010), and every
+# diff of that file since was unreadable.
+#
+# `diff` marks these paths as textual for diffing purposes regardless of
+# their contents, so a stray control byte can never again hide a change from
+# review — it shows up IN the diff instead of erasing it.
+#
+# This is the display half of the defence only. Keeping such bytes out of
+# the sources in the first place is a separate, repo-wide lint gate (task
+# 020), which lives outside this service.
+*.ts     diff
+*.tsx    diff
+*.js     diff
+*.mjs    diff
+*.json   diff
+*.sql    diff
+*.md     diff

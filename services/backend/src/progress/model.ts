@@ -150,6 +150,19 @@ export function findLesson(course: Course, lessonId: string): LessonLocation | u
   return undefined;
 }
 
+/**
+ * Map key for a `(courseId, lessonId)` pair — the stable identity progress
+ * is keyed on everywhere a `Map`/`Set` needs one (the repository's import
+ * dedup, `transfer/import.ts`'s local lookup, the in-memory test
+ * repository). JSON, not a joined string: ids coming out of an imported file
+ * are only checked for being non-empty (`transfer/format.ts` — the manifest
+ * id pattern doesn't apply to them), so a separator that can itself occur
+ * inside an id would make `("a b", "c")` collide with `("a", "b c")`.
+ */
+export function progressKey(courseId: string, lessonId: string): string {
+  return JSON.stringify([courseId, lessonId]);
+}
+
 export function lessonCompletionMode(lesson: CourseLesson): LessonCompletionMode {
   if (lesson.quiz !== undefined) {
     return "quiz";
