@@ -1285,7 +1285,7 @@ export function createInMemoryProgressRepository(seed: readonly ProgressRecord[]
 }
 
 function key(courseId: string, lessonId: string): string {
-  return `${courseId} ${lessonId}`;
+  return `${courseId}\x00${lessonId}`;
 }
 
 export const FIXTURE_COURSE_ID = "progress-fixture";

@@ -413,10 +413,11 @@
       ],
       "depends_on": [],
       "estimate_tokens": 8000,
-      "status": "pending",
+      "status": "done",
       "complexity_class": "follow-pattern",
       "id": "020",
-      "epoch": 1
+      "epoch": 1,
+      "actual_tokens": 88965
     }
   ]
 }
