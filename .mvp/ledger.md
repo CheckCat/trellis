@@ -21,3 +21,7 @@ Task 012: complete (0f47e8d6574564e44f4f977b8da54d863cc2e94c)
 Task 013: complete (9f395227edf81aa302c254d4dc072eee257e8065)
   concern (task 014): review split: 2 finding(s) came from a minority of 3 polls — the others approved
 Task 014: complete (31e2e2876d579e40265a4417e62170f356968294)
+  concern (task 015): reviewer-015-1 could not verify part of this task (2 of 3 polls could), read its prose for a defect its FINDINGS may have missed: none — the package's diff section only covered tracked-file changes, but its trailing "Untracked files (new, not yet added)" section supplied full content for all four brief-named files (PracticeView.tsx, SqlEditor.tsx, ResultTable.tsx, usePractice.ts) plus their tests and testSetup.ts, letting every brief requirement (CodeMirror editor, run, result table, verbatim Postgres error, check verdict, s
+  concern (task 015): review split: 4 finding(s) came from a minority of 3 polls — the others approved
+  concern (task 015): review finding refuted, not fixed: {"severity":"bug","file":"services/frontend/src/features/practice/PracticeView.tsx","line":862,"quote":"<SqlEditor value={sql} onChange={setSql} onRun={() => run(sql)} busy={isRunning} />","summary":"Run/reset race on the mutation observer.","verdict":"REFUTED"}
+Task 015: complete (0af55cb5ba75a1fc44c9eacae7292769a1e08fd7)

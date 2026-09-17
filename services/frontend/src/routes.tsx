@@ -4,6 +4,7 @@ import type { RouterHistory } from "@tanstack/react-router";
 import { api } from "./api/client";
 import { CoursePage } from "./features/course/CoursePage";
 import { LessonView } from "./features/lesson/LessonView";
+import { TransferPage } from "./features/transfer/TransferPage";
 import { Layout } from "./ui/Layout";
 
 /**
@@ -47,6 +48,12 @@ const lessonRoute = createRoute({
     const { courseId, lessonId } = lessonRoute.useParams();
     return <LessonView courseId={courseId} lessonId={lessonId} />;
   },
+});
+
+const transferRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/transfer",
+  component: TransferPage,
 });
 
 function CoursesIndexPage() {
@@ -95,7 +102,7 @@ function NotFoundPage() {
   );
 }
 
-const routeTree = rootRoute.addChildren([indexRoute, courseRoute, lessonRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, courseRoute, lessonRoute, transferRoute]);
 
 /**
  * Factory instead of a single module-level singleton so tests can build a

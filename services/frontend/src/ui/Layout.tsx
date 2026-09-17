@@ -51,6 +51,9 @@ export function Layout() {
         <Link to="/" className="app-title">
           Trellis
         </Link>
+        <nav className="app-nav">
+          <Link to="/transfer">Перенос прогресса</Link>
+        </nav>
         <HealthIndicator />
       </header>
       <main className="app-content">

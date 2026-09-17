@@ -260,3 +260,102 @@ export interface SandboxStatus {
   seedFiles?: string[];
   readyAt?: string;
 }
+
+/** One lesson entry inside a progress export/import file
+ * (`transfer/format.ts`'s `ExportedLessonProgress`). `status` is always
+ * `"completed"` — a progress file never carries "not started" rows, that's
+ * the absence of an entry. */
+export interface ExportedLessonProgress {
+  lessonId: string;
+  status: "completed";
+  completedAt: string;
+  /** Provenance only — never used to match rows on import. */
+  courseVersion?: string;
+}
+
+/** One course's worth of progress inside the file
+ * (`transfer/format.ts`'s `ExportedCourseProgress`). `installedVersion` is
+ * absent when the exporting machine didn't have this course installed. */
+export interface ExportedCourseProgress {
+  courseId: string;
+  installedVersion?: string;
+  lessons: ExportedLessonProgress[];
+}
+
+/** GET /progress/export's response body, and POST /progress/import's
+ * request body verbatim (`transfer/format.ts`'s `ProgressExportFile`). Carries
+ * progress only — no lesson titles, no module structure, no quiz/practice
+ * content (project invariant: course content and progress are separate
+ * entities). This is the file this app's UI saves to/reads from disk. */
+export interface ProgressExportFile {
+  format: string;
+  formatVersion: number;
+  /** ISO 8601 UTC — when this file was produced. Compared against the
+   * importing machine's own progress to decide whether the file is stale. */
+  exportedAt: string;
+  courses: ExportedCourseProgress[];
+}
+
+/** Per-course counters inside an import result (`routes/transfer.ts`'s
+ * `importCourseSchema`). `fileVersion` is the file's own
+ * `installedVersion` for this course, absent if the file never installed
+ * it either. */
+export interface ImportCourseSummary {
+  courseId: string;
+  /** Whether this course is installed on THIS (importing) machine right
+   * now — not whether it was installed where the file was made. */
+  installed: boolean;
+  fileVersion?: string;
+  lessons: number;
+  created: number;
+  earlierCompletions: number;
+  unchanged: number;
+}
+
+/** Aggregate counters across every course in the file
+ * (`routes/transfer.ts`'s `importResultSchema.summary`). */
+export interface ImportTotals {
+  courses: number;
+  lessons: number;
+  created: number;
+  earlierCompletions: number;
+  unchanged: number;
+}
+
+/** Shared body shape of both `POST /progress/import` outcomes
+ * (`routes/transfer.ts`'s `toImportPayload`) — a 200 with `applied: true`,
+ * or a 409 with `applied: false` (see `ImportStaleWarning` below for the
+ * 409's extra `error`/`message` fields). `records` is deliberately not
+ * part of this — the server never echoes the file's contents back. */
+export interface ImportResult {
+  applied: boolean;
+  /** `true` when the file's `exportedAt` is older than this machine's
+   * newest local progress change. Reported even when `applied` is `true`
+   * (a confirmed stale import) — it is information either way. */
+  stale: boolean;
+  fileExportedAt: string;
+  /** Absent only when this machine has no progress at all yet. */
+  localLatestProgressAt?: string;
+  summary: ImportTotals;
+  courses: ImportCourseSummary[];
+  coursesNotInstalled: string[];
+}
+
+/** `POST /progress/import`'s 409 body — `ImportResult` (`applied: false`)
+ * plus the warning to show the user before they decide whether to repeat
+ * the request with `?confirm=true`. Surfaces as `ApiError.body` when
+ * `ApiError.status === 409`. */
+export interface ImportStaleWarning extends ImportResult {
+  error: "import_older_than_local";
+  message: string;
+}
+
+/** `POST /progress/import`'s 400 body — the picked file is not a readable
+ * Trellis progress export (`routes/transfer.ts`'s `importRejectionSchema`).
+ * Surfaces as `ApiError.body` when `ApiError.status === 400`. `problems` is
+ * always non-empty, one human-readable sentence per issue found. */
+export interface ImportRejection {
+  error: string;
+  message: string;
+  problems: string[];
+}

@@ -65,6 +65,13 @@ a {
   padding: 1.5rem;
 }
 
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+
 .status-row {
   display: flex;
   align-items: center;
@@ -190,7 +197,8 @@ a {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.mark-done-button {
+.mark-done-button,
+.import-confirm-button {
   background-color: var(--color-accent);
   color: var(--color-bg);
   border: none;
@@ -201,7 +209,8 @@ a {
   cursor: pointer;
 }
 
-.mark-done-button:disabled {
+.mark-done-button:disabled,
+.import-confirm-button:disabled {
   opacity: 0.6;
   cursor: default;
 }
@@ -384,7 +393,8 @@ a {
   border-top: 1px solid var(--color-border);
 }
 
-.reset-sandbox-button {
+.reset-sandbox-button,
+.import-cancel-button {
   background-color: transparent;
   color: var(--color-text);
   border: 1px solid var(--color-border);
@@ -394,7 +404,59 @@ a {
   cursor: pointer;
 }
 
-.reset-sandbox-button:disabled {
+.reset-sandbox-button:disabled,
+.import-cancel-button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.transfer-section {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+}
+
+.transfer-section h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.import-file-label {
+  display: block;
+  margin: 0.75rem 0;
+}
+
+.import-summary {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.import-warning {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-status-pending);
+  border-radius: 0.5rem;
+}
+
+.import-warning .import-confirm-button {
+  margin-right: 0.5rem;
+}
+
+.import-rejection {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-status-error);
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.import-rejection ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
 }

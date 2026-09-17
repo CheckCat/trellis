@@ -4,9 +4,11 @@ import type {
   CourseProgressResponse,
   CoursesListResponse,
   HealthResponse,
+  ImportResult,
   LessonCompletionResponse,
   LessonDetailResponse,
   PracticeRunResponse,
+  ProgressExportFile,
   QuizAnswerResponse,
   SandboxStatus,
 } from "./types";
@@ -110,5 +112,22 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sandboxId }),
+    }),
+
+  exportProgress: (): Promise<ProgressExportFile> => apiFetch<ProgressExportFile>("/progress/export"),
+
+  /**
+   * `POST /progress/import`. `confirm: true` answers the "this file is
+   * older than what's here" warning — omit it (or pass `false`) for the
+   * first attempt; a stale file that would actually change something comes
+   * back as a rejected promise (`ApiError`, `status === 409`) whose `body`
+   * is an `ImportStaleWarning` (see api/types.ts), not a success value —
+   * callers must retry with `{ confirm: true }` to apply it.
+   */
+  importProgress: (file: ProgressExportFile, options?: { confirm?: boolean }): Promise<ImportResult> =>
+    apiFetch<ImportResult>(`/progress/import${options?.confirm === true ? "?confirm=true" : ""}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(file),
     }),
 };
