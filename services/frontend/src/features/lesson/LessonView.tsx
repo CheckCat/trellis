@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ApiError, api } from "../../api/client";
 import type { LessonCompletionMode } from "../../api/types";
+import { PracticeView } from "../practice/PracticeView";
 import { QuizView } from "../quiz/QuizView";
 import { Markdown } from "./Markdown";
 
@@ -90,6 +91,12 @@ export function LessonView({ courseId, lessonId }: { courseId: string; lessonId:
         // what keeps this from ever rendering `QuizView` with `quiz` typed
         // as possibly-undefined.
         <QuizView courseId={courseId} lessonId={lessonId} quiz={contentQuery.data.quiz} />
+      )}
+      {contentQuery.data.practice !== undefined && (
+        // Rendered regardless of `completionMode` (unlike QuizView above) —
+        // see PracticeView's own doc comment: an unchecked practice still
+        // needs the editor, it just doesn't gate completion here.
+        <PracticeView courseId={courseId} lessonId={lessonId} practice={contentQuery.data.practice} />
       )}
       <CompletionControl
         mode={lessonProgress.completionMode}

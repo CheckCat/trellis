@@ -24,5 +24,8 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // See src/testSetup.ts's own comment: jsdom is missing two Range
+    // methods CodeMirror (task 015's SQL editor) relies on.
+    setupFiles: ["./src/testSetup.ts"],
   },
 });

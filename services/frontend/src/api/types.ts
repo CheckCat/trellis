@@ -171,3 +171,92 @@ export interface QuizAnswerResponse {
   lesson: LessonProgress;
   course: LessonCompletionResponse["course"];
 }
+
+/** One column of a practice SQL result (`practiceColumnSchema`,
+ * routes/practice.ts). `dataTypeId` is Postgres' own OID for the column's
+ * type — not rendered directly by this task's UI, kept for a future task
+ * that might want type-aware formatting. */
+export interface PracticeColumn {
+  name: string;
+  dataTypeId: number;
+}
+
+/** A successful practice run's result set (`practiceResultSchema`). Cells
+ * are always `string | null` — never numbers/objects — because the backend
+ * stringifies every value itself (bigints past 2^53, bytea, jsonb, arrays)
+ * to avoid JSON's own lossy number type; `null` means SQL NULL, never the
+ * string `"null"`. Rows are arrays positional to `columns`, not objects
+ * keyed by column name — `select 1 as a, 2 as a` is valid SQL with two
+ * columns named `a`, and an object would silently drop one. */
+export interface PracticeResultSet {
+  /** Absent for some commands (e.g. multi-statement runs where Postgres
+   * reports no command tag) — see practice/execute.ts. */
+  command?: string;
+  /** `null` when Postgres reports no row count for the command; never a
+   * placeholder `0`. */
+  rowCount: number | null;
+  columns: PracticeColumn[];
+  rows: (string | null)[][];
+  /** `true` when the result had more rows than the server's cap
+   * (`MAX_RESULT_ROWS`, 200) — `rows` holds only the first 200 in that case,
+   * while `rowCount` still reports the true total. */
+  truncated: boolean;
+  /** How many SQL statements were in the submitted text; multi-statement
+   * runs are allowed, `result`/`error` describe only the last one. */
+  statementCount: number;
+}
+
+/** Postgres' own error fields, passed through as-is
+ * (`practiceSqlErrorSchema`) — never rewritten or summarized, per the
+ * project invariant "ошибка Postgres показывается как есть". Every field
+ * but `message` may be absent (not every error carries a `hint`, etc.). */
+export interface PracticeSqlError {
+  message: string;
+  severity?: string;
+  code?: string;
+  detail?: string;
+  hint?: string;
+  /** 1-based character offset into the submitted SQL, as a string (matches
+   * `pg`'s own `position` field) — usable to place a caret in the editor. */
+  position?: string;
+  where?: string;
+}
+
+/** Whether the lesson's check query ran and, if so, what it said
+ * (`practiceCheckSchema`). `present: false` means the lesson has no check —
+ * self-marked via the existing "mark as done" control, not this. `passed`
+ * is only present when `present` is `true`. */
+export interface PracticeCheckResult {
+  present: boolean;
+  passed?: boolean;
+}
+
+/** POST /courses/:courseId/lessons/:lessonId/practice/run —
+ * routes/practice.ts's `practiceRunResponseSchema`. Always 200 for a bad
+ * SQL statement (`ok: false` + `error`, same class of decision as a wrong
+ * quiz answer) — 4xx/5xx from this endpoint mean the *request itself* was
+ * rejected (course/lesson/practice not found, a broken check query, or an
+ * unreachable sandbox), which surfaces as `ApiError`, not this shape. */
+export interface PracticeRunResponse {
+  ok: boolean;
+  /** Present iff `ok` is `true`. */
+  result?: PracticeResultSet;
+  /** Present iff `ok` is `false`. */
+  error?: PracticeSqlError;
+  durationMs: number;
+  check: PracticeCheckResult;
+  lesson: LessonProgress;
+  course: LessonCompletionResponse["course"];
+}
+
+/** GET /courses/:courseId/sandbox and POST /courses/:courseId/sandbox/reset
+ * — routes/sandbox.ts's `sandboxStatusResponseSchema`. Fields beyond
+ * `active` are only present when `active` is `true`. */
+export interface SandboxStatus {
+  active: boolean;
+  courseId?: string;
+  sandboxId?: string;
+  type?: string;
+  seedFiles?: string[];
+  readyAt?: string;
+}

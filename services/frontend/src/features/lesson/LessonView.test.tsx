@@ -210,6 +210,27 @@ describe("LessonView", () => {
     expect(screen.getByRole("button", { name: "5" })).toBeTruthy();
   });
 
+  it("renders the practice UI for a manual-mode lesson with an ungraded practice (task 015 wiring)", async () => {
+    mockApi({
+      "/api/health": healthOk,
+      "/api/courses/c1/lessons/l1": () =>
+        jsonResponse({
+          id: "l1",
+          title: "Practice Lesson",
+          content: "Body.",
+          practice: { sandbox: "main", prompt: "Select every row from widgets." },
+        }),
+      "/api/courses/c1/progress": () => manualProgress("not_started"),
+    });
+
+    renderAt("/courses/c1/lessons/l1");
+
+    await waitFor(() => expect(screen.getByText("Select every row from widgets.")).toBeTruthy());
+    // Ungraded practice (completionMode "manual") still gets the mark-done
+    // button — running SQL alone never completes this kind of lesson.
+    expect(screen.getByRole("button", { name: "Отметить пройденным" })).toBeTruthy();
+  });
+
   it("shows a not-found message for an unknown lesson (error path)", async () => {
     mockApi({
       "/api/health": healthOk,

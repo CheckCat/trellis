@@ -281,3 +281,120 @@ a {
   font-size: 0.85rem;
   color: var(--color-text-muted);
 }
+
+.practice-view {
+  margin: 1rem 0;
+  padding: 1rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+}
+
+.practice-prompt {
+  margin: 0 0 0.75rem;
+}
+
+.sql-editor {
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.sql-editor .cm-editor {
+  font-size: 0.9rem;
+}
+
+.run-button {
+  display: block;
+  width: 100%;
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+  border: none;
+  border-top: 1px solid var(--color-border);
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.run-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.practice-result {
+  margin-top: 1rem;
+}
+
+.result-table-wrapper {
+  overflow-x: auto;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.result-table th,
+.result-table td {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.result-table th {
+  background-color: var(--color-bg);
+}
+
+.result-null {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.practice-sql-error {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-status-error);
+  border-radius: 0.5rem;
+  color: var(--color-status-error);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.practice-verdict {
+  margin: 0.75rem 0 0;
+  font-weight: 600;
+}
+
+.practice-verdict--passed {
+  color: var(--color-status-ok);
+}
+
+.practice-verdict--failed {
+  color: var(--color-status-error);
+}
+
+.practice-sandbox-controls {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.reset-sandbox-button {
+  background-color: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.reset-sandbox-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

@@ -6,7 +6,9 @@ import type {
   HealthResponse,
   LessonCompletionResponse,
   LessonDetailResponse,
+  PracticeRunResponse,
   QuizAnswerResponse,
+  SandboxStatus,
 } from "./types";
 
 /**
@@ -92,4 +94,21 @@ export const api = {
         body: JSON.stringify({ optionId }),
       },
     ),
+
+  runPractice: (courseId: string, lessonId: string, sql: string): Promise<PracticeRunResponse> =>
+    apiFetch<PracticeRunResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/practice/run`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql }),
+      },
+    ),
+
+  resetSandbox: (courseId: string, sandboxId: string): Promise<SandboxStatus> =>
+    apiFetch<SandboxStatus>(`/courses/${encodeURIComponent(courseId)}/sandbox/reset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sandboxId }),
+    }),
 };
