@@ -38,6 +38,25 @@ export const DEFAULT_SANDBOX_SCHEMA = "sandbox";
 // then.
 const SAFE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
+/**
+ * Narrows a driver from the provisioner's registry to this one.
+ *
+ * The registry is typed on the general `SandboxDriver`, because that is
+ * what makes a second kind addable without touching anything above it. A
+ * caller that needs operations only this driver has — the `sql` practice
+ * strategy needs to execute SQL — asks for `"postgres"` and checks here,
+ * rather than the provisioner being generic in a driver type that every
+ * unrelated caller would then have to name.
+ *
+ * Structural, not `instanceof`: the driver is a plain object built by a
+ * factory (there is no class), and the unconfigured stand-in below is a
+ * legitimate `PostgresSandboxDriver` too — it just fails every call with a
+ * stated reason, which is exactly the behaviour a caller should get.
+ */
+export function isPostgresSandboxDriver(driver: SandboxDriver | undefined): driver is PostgresSandboxDriver {
+  return driver !== undefined && driver.type === "postgres" && typeof (driver as PostgresSandboxDriver).withClient === "function";
+}
+
 export interface PostgresSandboxDriver extends SandboxDriver {
   readonly type: "postgres";
   readonly schema: string;

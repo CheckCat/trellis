@@ -22,6 +22,7 @@
 // нового утверждения о продукте.
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { startStack } from "./helpers/compose.js";
@@ -35,22 +36,45 @@ import { startStack } from "./helpers/compose.js";
  */
 const PILOT = {
   courseId: "pilot-sql",
-  courseVersion: "1.0.0",
-  totalLessons: 7,
+  courseVersion: "1.2.0",
+  totalLessons: 9,
   /** Урок без квиза и практики — закрывается только самоотметкой. */
   manualLesson: "what-is-sql",
   quizLesson: "select-basics",
   quizCorrectOption: "select",
   quizWrongOption: "insert",
-  /** Практика без check — «самоотметка для заданий без check». */
-  selfCheckedPracticeLesson: "practice-instock",
-  selfCheckedPracticeSql: "select title, author from books where in_stock = true",
-  /** Практика с check — засчитывается самим движком. */
+  /** Практика, проверяемая сравнением результата с эталоном, порядок строк
+   * не важен (`expected` + `ordered: false`). */
+  comparedPracticeLesson: "practice-instock",
+  comparedPracticeSolution: "select title, author from books where in_stock = true",
+  /** То же задание без `where` — заведомо неверное решение. */
+  comparedPracticeWrongSolution: "select title, author from books",
+  /** Практика, где порядок строк — часть ответа (`ordered: true`). */
+  orderedPracticeLesson: "practice-by-year",
+  orderedPracticeSolution: "select title, published_year from books order by published_year",
+  /** То же задание без `order by`: набор строк верный, порядок — нет. */
+  orderedPracticeWrongSolution: "select title, published_year from books",
+  /** Практика с check — засчитывается по состоянию базы. */
   checkedPracticeLesson: "practice-add-book",
   checkedPracticeSolution:
     "insert into books (title, author, published_year, in_stock) " +
     "values ('Мастер и Маргарита', 'Михаил Булгаков', 1967, true)",
   checkedPracticeBookTitle: "Мастер и Маргарита",
+  /** Практика без песочницы: ученик вписывает посчитанные значения
+   * (`type: answer`). Эталоны — из `sandbox/seed.sql`. */
+  answerPracticeLesson: "self-check-books",
+  answerPracticeCorrect: {
+    "in-stock-count": "3",
+    "oldest-title": "евгений онегин",
+    // Внутри допуска 0.5 и с запятой как разделителем — обе поблажки
+    // движка сразу.
+    "average-year": "1854,2",
+  },
+  answerPracticeWrong: {
+    "in-stock-count": "5",
+    "oldest-title": "Война и мир",
+    "average-year": "1900",
+  },
   /** Урок, которого нет в прогрессе к моменту импорта, — им проверяется
    * round-trip: файл экспорта дочитывается обратно и меняет прогресс. */
   importedLesson: "wrap-up",
@@ -75,7 +99,14 @@ interface LessonDetail {
   readonly id: string;
   readonly content?: string;
   readonly quiz?: { readonly question: string; readonly options: readonly { readonly id: string }[] };
-  readonly practice?: { readonly sandbox: string; readonly prompt: string };
+  readonly practice?: {
+    readonly type: "sql" | "answer";
+    readonly prompt: string;
+    /** Только у `type: sql`. */
+    readonly sandbox?: string;
+    /** Только у `type: answer` — без эталонов и допусков. */
+    readonly fields?: readonly { readonly id: string; readonly label: string; readonly kind: string }[];
+  };
 }
 
 interface LessonProgress {
@@ -114,6 +145,12 @@ interface PracticeRunResponse extends CompletionResponse {
   };
   readonly error?: { readonly message: string; readonly code?: string };
   readonly check: { readonly present: boolean; readonly passed?: boolean };
+  readonly expected: { readonly present: boolean; readonly passed?: boolean; readonly reason?: string };
+}
+
+interface PracticeAnswerResponse extends CompletionResponse {
+  readonly ok: boolean;
+  readonly fields: Readonly<Record<string, { readonly correct: boolean }>>;
 }
 
 interface SandboxStatus {
@@ -154,6 +191,15 @@ interface ImportResult {
   readonly coursesNotInstalled: readonly string[];
 }
 
+/** Подмножество docs/contracts/capabilities.json, на которое опирается
+ * сценарий. Полное равенство с закоммиченным файлом проверяется отдельно —
+ * именно поэтому здесь перечислено только то, что тест утверждает сам. */
+interface EngineCapabilities {
+  readonly manifestContractVersion: number;
+  readonly practiceTypes: readonly { readonly type: string }[];
+  readonly sandboxTypes: readonly { readonly type: string }[];
+}
+
 interface RescanResponse {
   readonly accepted: number;
   readonly rejected: number;
@@ -182,6 +228,31 @@ void test("поднятый стек проходит сквозной поль�
       const health = await api.get<{ status: string; db: string }>("/health");
       assert.equal(health.status, 200);
       assert.deepEqual(health.body, { status: "ok", db: "ok" });
+    });
+
+    await t.test("движок отдаёт свой реестр возможностей и он совпадает с закоммиченным контрактом", async () => {
+      const capabilities = await api.get<EngineCapabilities>("/capabilities");
+      assert.equal(capabilities.status, 200);
+      assert.equal(typeof capabilities.body.manifestContractVersion, "number");
+      // Ровно то, чем движок умеет пользоваться, — и по этому списку пишутся
+      // курсы (в том числе генератором), поэтому он проверяется на живом
+      // стеке, а не только юнит-тестом реестра.
+      assert.deepEqual(
+        capabilities.body.practiceTypes.map((practice) => practice.type).sort(),
+        ["answer", "sql"],
+      );
+      assert.deepEqual(
+        capabilities.body.sandboxTypes.map((sandbox) => sandbox.type),
+        ["postgres"],
+      );
+
+      // Закоммиченный docs/contracts/capabilities.json — тот же документ.
+      // Если бы стек отдавал другое, читать файл вместо запуска движка было
+      // бы нельзя.
+      const committed: unknown = JSON.parse(
+        await readFile(new URL("../../docs/contracts/capabilities.json", import.meta.url), "utf8"),
+      );
+      assert.deepEqual(capabilities.body as unknown, committed);
     });
 
     await t.test("контент-пакет из courses/ проходит валидацию и виден в API", async () => {
@@ -279,37 +350,72 @@ void test("поднятый стек проходит сквозной поль�
       assert.equal(before.status, 200);
       assert.equal(before.body.active, false, "песочница поднимается по первому запуску практики, не раньше");
 
-      const run = await api.post<PracticeRunResponse>(
-        `/courses/${PILOT.courseId}/lessons/${PILOT.selfCheckedPracticeLesson}/practice/run`,
-        { sql: PILOT.selfCheckedPracticeSql },
+      // Заведомо неверное решение: без `where` вернутся все книги, а не
+      // только те, что в наличии.
+      const wrong = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
+        { sql: PILOT.comparedPracticeWrongSolution },
       );
-      assert.equal(run.status, 200);
-      assert.equal(run.body.ok, true, `SQL не выполнился: ${run.raw}`);
+      assert.equal(wrong.status, 200);
+      assert.equal(wrong.body.ok, true, `SQL не выполнился: ${wrong.raw}`);
       assert.deepEqual(
-        run.body.result?.columns.map((column) => column.name),
+        wrong.body.result?.columns.map((column) => column.name),
         ["title", "author"],
       );
-      assert.ok((run.body.result?.rows.length ?? 0) > 0, "seed курса должен быть применён — строки есть");
-      // Задание без check — самоотметка: движок его не засчитывает.
-      assert.deepEqual(run.body.check, { present: false });
-      assert.equal(run.body.lesson.status, "not_started");
+      assert.ok((wrong.body.result?.rows.length ?? 0) > 0, "seed курса должен быть применён — строки есть");
+      // У этого задания нет check — только сравнение с эталоном.
+      assert.deepEqual(wrong.body.check, { present: false });
+      assert.equal(wrong.body.expected.present, true);
+      assert.equal(wrong.body.expected.passed, false, `неверное решение засчитано: ${wrong.raw}`);
+      assert.match(wrong.body.expected.reason ?? "", /ожидалось строк/);
+      assert.equal(wrong.body.lesson.status, "not_started");
 
       const after = await api.get<SandboxStatus>(`/courses/${PILOT.courseId}/sandbox`);
       assert.equal(after.body.active, true);
       assert.deepEqual(after.body.seedFiles, ["sandbox/seed.sql"]);
 
-      const marked = await api.post<CompletionResponse>(
-        `/courses/${PILOT.courseId}/lessons/${PILOT.selfCheckedPracticeLesson}/complete`,
+      // Эталонное решение — засчитывается движком, без самоотметки.
+      const solved = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
+        { sql: PILOT.comparedPracticeSolution },
       );
-      assert.equal(marked.status, 200);
-      assert.equal(marked.body.lesson.status, "completed");
-      completed.add(PILOT.selfCheckedPracticeLesson);
-      assert.equal(marked.body.course.completedLessons, completed.size);
+      assert.equal(solved.status, 200);
+      assert.deepEqual(solved.body.expected, { present: true, passed: true });
+      assert.equal(solved.body.lesson.status, "completed");
+      assert.equal(solved.body.lesson.completionMode, "practice");
+      completed.add(PILOT.comparedPracticeLesson);
+      assert.equal(solved.body.course.completedLessons, completed.size);
+
+      // Ни эталонный запрос, ни признак «порядок важен» наружу не уходят.
+      assert.doesNotMatch(solved.raw, /"expectedSql"|in_stock = true/);
+    });
+
+    await t.test("ordered: true — тот же набор строк в другом порядке не засчитывается", async () => {
+      const unordered = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.orderedPracticeLesson}/practice/run`,
+        { sql: PILOT.orderedPracticeWrongSolution },
+      );
+      assert.equal(unordered.status, 200);
+      assert.equal(unordered.body.ok, true, `SQL не выполнился: ${unordered.raw}`);
+      // Строки те же и в том же количестве — не сходится именно порядок.
+      assert.equal(unordered.body.expected.passed, false, `запрос без ORDER BY засчитан: ${unordered.raw}`);
+      assert.match(unordered.body.expected.reason ?? "", /строки различаются/);
+      assert.equal(unordered.body.lesson.status, "not_started");
+
+      const ordered = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.orderedPracticeLesson}/practice/run`,
+        { sql: PILOT.orderedPracticeSolution },
+      );
+      assert.equal(ordered.status, 200);
+      assert.deepEqual(ordered.body.expected, { present: true, passed: true });
+      assert.equal(ordered.body.lesson.status, "completed");
+      completed.add(PILOT.orderedPracticeLesson);
+      assert.equal(ordered.body.course.completedLessons, completed.size);
     });
 
     await t.test("ошибка Postgres доходит до клиента как есть, а не как сбой API", async () => {
       const broken = await api.post<PracticeRunResponse>(
-        `/courses/${PILOT.courseId}/lessons/${PILOT.selfCheckedPracticeLesson}/practice/run`,
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
         { sql: "select * from no_such_table_here" },
       );
       assert.equal(broken.status, 200, "ошибка в учебном SQL — это не ошибка HTTP");
@@ -320,7 +426,7 @@ void test("поднятый стек проходит сквозной поль�
 
     await t.test("SQL пользователя исполняется под ролью песочницы — данные ядра ему недоступны", async () => {
       const forbidden = await api.post<PracticeRunResponse>(
-        `/courses/${PILOT.courseId}/lessons/${PILOT.selfCheckedPracticeLesson}/practice/run`,
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
         { sql: "select * from core.lesson_progress" },
       );
       assert.equal(forbidden.status, 200);
@@ -354,13 +460,62 @@ void test("поднятый стек проходит сквозной поль�
       assert.equal(solved.body.course.completedLessons, completed.size);
     });
 
+    await t.test("практика без песочницы засчитывается по введённым ответам", async () => {
+      // Урок с `type: answer`: песочницы у него нет, отправляется не SQL, а
+      // значения, которые ученик получил сам.
+      const lesson = await api.get<LessonDetail>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.answerPracticeLesson}`,
+      );
+      assert.equal(lesson.status, 200);
+      assert.equal(lesson.body.practice?.type, "answer");
+      assert.equal(lesson.body.practice?.sandbox, undefined, "у задания без песочницы её и не должно быть в ответе");
+      assert.deepEqual(
+        lesson.body.practice?.fields?.map((practiceField) => practiceField.id),
+        ["in-stock-count", "oldest-title", "average-year"],
+      );
+      // Эталоны — ответы к заданию, наружу они не уходят.
+      assert.doesNotMatch(lesson.raw, /"expected"|"tolerance"/);
+
+      const wrong = await api.post<PracticeAnswerResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.answerPracticeLesson}/practice/answer`,
+        { answers: PILOT.answerPracticeWrong },
+      );
+      assert.equal(wrong.status, 200);
+      assert.equal(wrong.body.ok, false, `неверные ответы засчитаны: ${wrong.raw}`);
+      assert.deepEqual(
+        Object.fromEntries(Object.entries(wrong.body.fields).map(([id, mark]) => [id, mark.correct])),
+        { "in-stock-count": false, "oldest-title": false, "average-year": false },
+      );
+      assert.equal(wrong.body.lesson.status, "not_started");
+
+      const right = await api.post<PracticeAnswerResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.answerPracticeLesson}/practice/answer`,
+        { answers: PILOT.answerPracticeCorrect },
+      );
+      assert.equal(right.status, 200);
+      assert.equal(right.body.ok, true, `верные ответы не засчитаны: ${right.raw}`);
+      assert.equal(right.body.lesson.status, "completed");
+      assert.equal(right.body.lesson.completionMode, "practice");
+      completed.add(PILOT.answerPracticeLesson);
+      assert.equal(right.body.course.completedLessons, completed.size);
+
+      // Задание для другого обработчика: SQL-практику сюда не отправить, и
+      // наоборот — движок отвечает 409, а не молча грейдит не то.
+      const wrongEndpoint = await api.post<{ error: string }>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.answerPracticeLesson}/practice/run`,
+        { sql: "select 1" },
+      );
+      assert.equal(wrongEndpoint.status, 409);
+      assert.equal(wrongEndpoint.body.error, "practice_type_mismatch");
+    });
+
     await t.test("сброс песочницы возвращает данные курса к исходным, прогресс остаётся", async () => {
       const reset = await api.post<SandboxStatus>(`/courses/${PILOT.courseId}/sandbox/reset`);
       assert.equal(reset.status, 200);
       assert.equal(reset.body.active, true);
 
       const run = await api.post<PracticeRunResponse>(
-        `/courses/${PILOT.courseId}/lessons/${PILOT.selfCheckedPracticeLesson}/practice/run`,
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
         { sql: `select count(*) as n from books where title = '${PILOT.checkedPracticeBookTitle}'` },
       );
       assert.equal(run.body.ok, true);

@@ -44,7 +44,7 @@ void test("ensure provisions the course's sandbox once and does nothing on the n
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver, now: FIXED_CLOCK });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver], now: FIXED_CLOCK });
 
     const first = await provisioner.ensure(FIXTURE_COURSE_ID);
     const second = await provisioner.ensure(FIXTURE_COURSE_ID);
@@ -67,7 +67,7 @@ void test("the spec handed to the driver carries every seed, in manifest order, 
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     await provisioner.ensure(FIXTURE_COURSE_ID);
 
@@ -99,7 +99,7 @@ void test("reset rebuilds even when this course's sandbox is already live", asyn
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     await provisioner.ensure(FIXTURE_COURSE_ID);
     await provisioner.reset(FIXTURE_COURSE_ID);
@@ -121,7 +121,7 @@ void test("switching courses rebuilds, and the previous course stops reporting a
       const registry = first.registry;
       registry.rescan();
       const { driver, specs } = recordingDriver();
-      const provisioner = createSandboxProvisioner({ courses: registry, driver });
+      const provisioner = createSandboxProvisioner({ courses: registry, drivers: [driver] });
 
       await provisioner.ensure("course-one");
       assert.ok(provisioner.status("course-one"));
@@ -149,7 +149,7 @@ void test("an unknown course, a course without a sandbox, and an unknown sandbox
   const withSandbox = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: withSandbox.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: withSandbox.registry, drivers: [driver] });
 
     const unknownCourse = await provisioner.ensure("no-such-course").catch((err: unknown) => err);
     assert.ok(unknownCourse instanceof SandboxError);
@@ -168,7 +168,7 @@ void test("an unknown course, a course without a sandbox, and an unknown sandbox
   const withoutSandbox = createSandboxFixture({ courseId: "no-sandbox-course", sandboxIds: [] });
   try {
     const { driver } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: withoutSandbox.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: withoutSandbox.registry, drivers: [driver] });
 
     const err = await provisioner.reset("no-sandbox-course").catch((thrown: unknown) => thrown);
 
@@ -184,7 +184,7 @@ void test("a course declaring several sandboxes requires the caller to say which
   const fixture = createSandboxFixture({ sandboxIds: ["main", "reporting"] });
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     const err = await provisioner.ensure(FIXTURE_COURSE_ID).catch((thrown: unknown) => thrown);
     assert.ok(err instanceof SandboxError);
@@ -207,7 +207,7 @@ void test("a seed file deleted after the scan is reported before anything is dro
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
     // The registry still believes this file exists — it was validated at
     // scan time and nothing watches the filesystem since.
     fs.rmSync(fixtureFilePath(fixture, FIXTURE_SEED_DATA));
@@ -229,7 +229,7 @@ void test("a failed rebuild leaves nothing claiming to be live, and the next ens
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver({ failOnce: new Error("simulated seed failure") });
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     await assert.rejects(provisioner.ensure(FIXTURE_COURSE_ID), /simulated seed failure/);
     assert.equal(provisioner.status(), undefined, "a half-wiped sandbox is not a live one");
@@ -264,7 +264,7 @@ void test("concurrent ensure calls serialize: the sandbox is rebuilt once, not r
         releaseProvision?.();
       },
     });
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     const [a, b] = await Promise.all([
       provisioner.ensure(FIXTURE_COURSE_ID),
@@ -284,7 +284,7 @@ void test("a rejected operation does not poison the queue for the next caller (e
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     const failed = provisioner.ensure("no-such-course");
     const succeeded = provisioner.ensure(FIXTURE_COURSE_ID);
@@ -301,7 +301,7 @@ void test("close() closes the driver", async () => {
   const fixture = createSandboxFixture();
   try {
     const { driver, closeCalls } = recordingDriver();
-    const provisioner = createSandboxProvisioner({ courses: fixture.registry, driver });
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     await provisioner.close();
 

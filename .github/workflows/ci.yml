@@ -75,4 +75,8 @@ jobs:
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm run build --if-present
+      # Keeps docs/contracts/capabilities.json in step with
+      # services/backend/src/capabilities.ts — see .mvp/ci-mirror.sh, whose
+      # command sequence this must stay identical to.
+      - run: npm run capabilities:check --if-present
       - run: npm run test --if-present

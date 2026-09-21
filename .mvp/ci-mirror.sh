@@ -1,4 +1,4 @@
-# npm command sequence below (ci/lint/build/test) must stay byte-identical
+# npm command sequence below (ci/lint/build/capabilities:check/test) must stay byte-identical
 # (same commands, same order) to the `steps:` in .github/workflows/ci.yml —
 # that's the whole contract of this file.
 #
@@ -169,6 +169,12 @@ fi
 if [ -f package-lock.json ]; then npm ci; fi
 if [ -f package.json ]; then npm run lint --if-present; fi
 if [ -f package.json ]; then npm run build --if-present; fi
+# The engine's capability contract (docs/contracts/capabilities.json) is
+# generated from services/backend/src/capabilities.ts and committed, so a
+# course author — or a generator — can read what the engine accepts without
+# running it. This step is what keeps the committed file from drifting
+# behind the code: it regenerates in memory and compares.
+if [ -f package.json ]; then npm run capabilities:check --if-present; fi
 
 if [ -f package.json ]; then
   # A green exit here is not enough on its own: `npm run test` exiting 0

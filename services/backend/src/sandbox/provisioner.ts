@@ -29,26 +29,33 @@ import { resolveSafePath } from "../courses/validate.js";
 import {
   SandboxError,
   type SandboxDriver,
+  type SandboxDriverRegistry,
   type SandboxProvisioner,
   type SandboxSeedFile,
   type SandboxSpec,
   type SandboxState,
+  type SandboxType,
 } from "./types.js";
 
-export interface CreateSandboxProvisionerOptions<TDriver extends SandboxDriver> {
+export interface CreateSandboxProvisionerOptions {
   /** The same registry `fastify.courses` serves from — the sandbox must
    * never build a second view of what's installed. */
   readonly courses: CourseRegistry;
-  readonly driver: TDriver;
+  /**
+   * The drivers this process can run, one per sandbox type. Registered by
+   * each driver's OWN `type` — a driver declares what it implements, the
+   * provisioner does not decide for it — so a second kind is added by
+   * passing one more driver here and nowhere else.
+   */
+  readonly drivers: readonly SandboxDriver[];
   /** Injectable clock, so tests can assert on `readyAt` without sleeping. */
   readonly now?: () => Date;
 }
 
-export function createSandboxProvisioner<TDriver extends SandboxDriver>(
-  options: CreateSandboxProvisionerOptions<TDriver>,
-): SandboxProvisioner<TDriver> {
-  const { courses, driver } = options;
+export function createSandboxProvisioner(options: CreateSandboxProvisionerOptions): SandboxProvisioner {
+  const { courses } = options;
   const now = options.now ?? (() => new Date());
+  const drivers = buildDriverRegistry(options.drivers);
 
   let state: SandboxState | undefined;
 
@@ -74,6 +81,17 @@ export function createSandboxProvisioner<TDriver extends SandboxDriver>(
 
   async function provisionNow(courseId: string, sandboxId: string | undefined): Promise<SandboxState> {
     const spec = resolveSpec(courses, courseId, sandboxId);
+    // Dispatch by the type the COURSE declared. This is the only thing
+    // this module knows about sandbox kinds, and the reason a new kind
+    // needs no change here.
+    const driver = drivers.get(spec.type);
+    if (driver === undefined) {
+      throw new SandboxError(
+        "unavailable",
+        `Course "${spec.courseId}" declares a sandbox of type "${spec.type}", which this build has no driver for ` +
+          `(registered: ${drivers.types.map((type) => `"${type}"`).join(", ") || "none"}).`,
+      );
+    }
     // Cleared BEFORE the rebuild, not after: from here until the driver
     // reports success, what is actually in the sandbox is unknown (the
     // driver is mid-wipe). If the rebuild fails, "nothing is live" is the
@@ -93,7 +111,7 @@ export function createSandboxProvisioner<TDriver extends SandboxDriver>(
   }
 
   return {
-    driver,
+    drivers,
 
     ensure(courseId: string, sandboxId?: string): Promise<SandboxState> {
       return serialize(async () => {
@@ -122,10 +140,36 @@ export function createSandboxProvisioner<TDriver extends SandboxDriver>(
       return state;
     },
 
-    close(): Promise<void> {
-      return driver.close();
+    async close(): Promise<void> {
+      // Every registered driver, not just the one that happens to be
+      // live: each owns its own resources (the Postgres driver owns a
+      // pool), and a driver that was never used still has to be released.
+      // `allSettled`, so one driver failing to close cannot leave the
+      // others open.
+      const results = await Promise.allSettled(drivers.types.map((type) => drivers.get(type)?.close()));
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure !== undefined) {
+        throw failure.reason instanceof Error ? failure.reason : new Error(String(failure.reason));
+      }
     },
   };
+}
+
+/**
+ * Indexes drivers by their own `type`. Two drivers claiming one type is a
+ * wiring bug, not a runtime condition: which of them would run is
+ * undefined, and the answer must not depend on argument order.
+ */
+function buildDriverRegistry(drivers: readonly SandboxDriver[]): SandboxDriverRegistry {
+  const byType = new Map<SandboxType, SandboxDriver>();
+  for (const driver of drivers) {
+    if (byType.has(driver.type)) {
+      throw new Error(`createSandboxProvisioner: two drivers registered for sandbox type "${driver.type}".`);
+    }
+    byType.set(driver.type, driver);
+  }
+  const types = [...byType.keys()];
+  return { types, get: (type) => byType.get(type) };
 }
 
 interface ResolvedSandbox {
@@ -229,15 +273,13 @@ function resolveSpec(courses: CourseRegistry, courseId: string, sandboxId: strin
 }
 
 // Makes `fastify.sandbox` (decorated in server.ts) visible to every route
-// file, the same way db/pool.ts declares `fastify.db`. It is typed with the
-// concrete Postgres driver because that is what the server actually wires
-// today and because task 009 reaches through `.driver` to run SQL; when a
-// second driver appears, this becomes a union (or the routes that need a
-// specific driver narrow on `driver.type`) — the provisioner itself, and
-// everything that only calls ensure/reset/status, needs no change either
-// way.
+// file, the same way db/pool.ts declares `fastify.db`. Driver-agnostic:
+// a route that only needs ensure/reset/status is written against this
+// as-is, and one that needs a specific driver's own operations asks
+// `sandbox.drivers.get(type)` and narrows — see the `sql` practice
+// strategy. Neither form changes when a second driver is registered.
 declare module "fastify" {
   interface FastifyInstance {
-    sandbox: SandboxProvisioner<import("./postgres-sandbox.js").PostgresSandboxDriver>;
+    sandbox: SandboxProvisioner;
   }
 }

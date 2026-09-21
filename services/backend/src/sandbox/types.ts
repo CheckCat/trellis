@@ -16,10 +16,13 @@
 //     material it is handed. A driver never touches the filesystem and never
 //     looks at a `Course` — it receives a fully resolved `SandboxSpec`.
 
-/** The sandbox kinds this core knows how to run. Mirrors the manifest's
- * `sandboxes[].type` enum (courses/manifest.schema.json) — widening one
- * means widening the other. */
-export type SandboxType = "postgres";
+/** The sandbox kinds this core knows how to run — re-exported from the
+ * capability registry, which is where a kind comes into existence
+ * (project invariant). The manifest's `sandboxes[].type` enum is checked
+ * against the same list by capabilities.test.ts. */
+import type { SandboxType } from "../capabilities.js";
+
+export type { SandboxType };
 
 /** One seed unit, already read off disk by the provisioner. `content` is
  * raw text handed to the driver as-is (for the Postgres driver: SQL). */
@@ -82,16 +85,38 @@ export interface SandboxDriver {
 }
 
 /**
- * The single entry point everything above the sandbox uses: routes, and
- * task 009's practice runner (`await fastify.sandbox.ensure(courseId,
- * sandboxId)` before running user SQL). Generic in its driver so a caller
- * that legitimately needs implementation-specific operations — 009 needs to
- * execute SQL, which only a Postgres sandbox can do — reaches them through
- * `driver` with full typing, while everything written against the plain
- * `SandboxProvisioner` stays implementation-agnostic.
+ * The drivers this process can run, looked up by the `sandboxes[].type` a
+ * course declares.
+ *
+ * A registry rather than a single driver because that is what makes a
+ * second sandbox kind a pure addition (project invariant: a kind exists
+ * only if it is registered in capabilities.ts). The provisioner picks the
+ * driver for `spec.type` and knows nothing else about it — adding a kind
+ * touches its own driver module and the registry, never provisioner.ts.
  */
-export interface SandboxProvisioner<TDriver extends SandboxDriver = SandboxDriver> {
-  readonly driver: TDriver;
+export interface SandboxDriverRegistry {
+  /** The registered types, in registration order. */
+  readonly types: readonly SandboxType[];
+  /** The driver for `type`, or `undefined` when nothing is registered for
+   * it — which is a 503 (`unavailable`), not a course-content error: the
+   * manifest was valid, this build just cannot run it. */
+  get(type: SandboxType): SandboxDriver | undefined;
+}
+
+/**
+ * The single entry point everything above the sandbox uses: routes, and
+ * the practice strategies (`await fastify.sandbox.ensure(courseId,
+ * sandboxId)` before running user SQL).
+ *
+ * A caller that legitimately needs implementation-specific operations —
+ * the `sql` practice strategy needs to execute SQL, which only a Postgres
+ * sandbox can do — reaches its driver through `drivers.get(type)` and
+ * narrows (see postgres-sandbox.ts's `isPostgresSandboxDriver`).
+ * Everything written against ensure/reset/status stays
+ * implementation-agnostic and needs no narrowing at all.
+ */
+export interface SandboxProvisioner {
+  readonly drivers: SandboxDriverRegistry;
   /**
    * Makes this course's sandbox live, doing nothing if it already is. This
    * is the "подключение курса" path: the first practice run of a course

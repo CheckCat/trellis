@@ -63,7 +63,7 @@ function buildAppUnderTest(
       : {
           sandbox: createSandboxProvisioner({
             courses: fixture.registry,
-            driver: createPostgresSandboxDriverFromPool(recording.pool),
+            drivers: [createPostgresSandboxDriverFromPool(recording.pool)],
           }),
         }),
   });

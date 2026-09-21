@@ -11,16 +11,16 @@ import { createProgressRepository, type ProgressRepository } from "./progress/re
 import {
   createPostgresSandboxDriver,
   createUnconfiguredPostgresSandboxDriver,
-  type PostgresSandboxDriver,
 } from "./sandbox/postgres-sandbox.js";
 import { createSandboxProvisioner } from "./sandbox/provisioner.js";
 import type { SandboxProvisioner } from "./sandbox/types.js";
 import healthRoutes from "./routes/health.js";
+import capabilitiesRoutes from "./routes/capabilities.js";
 import coursesRoutes from "./routes/courses.js";
 import progressRoutes from "./routes/progress.js";
 import quizRoutes from "./routes/quiz.js";
 import sandboxRoutes from "./routes/sandbox.js";
-import practiceRoutes from "./routes/practice.js";
+import practiceRoutes, { type PracticeStrategy } from "./routes/practice/index.js";
 import transferRoutes from "./routes/transfer.js";
 
 export interface BuildServerOptions {
@@ -75,7 +75,7 @@ export interface BuildServerOptions {
    * sandbox/testSupport.ts) and never touch a database. An injected
    * provisioner is the caller's own: `buildServer` does not close it.
    */
-  readonly sandbox?: SandboxProvisioner<PostgresSandboxDriver>;
+  readonly sandbox?: SandboxProvisioner;
   /**
    * Builds the sandbox's own pool from this connection string — always
    * `AppConfig.sandboxDatabaseUrl` (SANDBOX_DATABASE_URL), never
@@ -109,6 +109,13 @@ export interface BuildServerOptions {
    * block below) doesn't pass this, so it keeps the default `true`.
    */
   readonly logger?: FastifyServerOptions["logger"];
+  /**
+   * Overrides the practice-mechanic registry (routes/practice/registry.ts).
+   * Production never passes this; a test does, to register a mechanic the
+   * shipped build does not have and prove that doing so needs no change to
+   * routes/practice/index.ts.
+   */
+  readonly practiceStrategies?: readonly PracticeStrategy[];
 }
 
 /**
@@ -194,12 +201,16 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     options.sandbox ??
     createSandboxProvisioner({
       courses: registry,
-      driver:
+      // One driver per registered sandbox type (capabilities.ts). A second
+      // type is added by building its driver here and nowhere else — the
+      // provisioner dispatches on the type the course declares.
+      drivers: [
         options.sandboxDatabaseUrl === undefined
           ? createUnconfiguredPostgresSandboxDriver()
           : createPostgresSandboxDriver(options.sandboxDatabaseUrl, {
               onError: (err) => app.log.error({ err }, "practice sandbox pool error"),
             }),
+      ],
     });
   app.decorate("sandbox", sandbox);
   if (ownsSandbox) {
@@ -209,11 +220,12 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   }
 
   app.register(healthRoutes);
+  app.register(capabilitiesRoutes);
   app.register(coursesRoutes);
   app.register(progressRoutes);
   app.register(quizRoutes);
   app.register(sandboxRoutes);
-  app.register(practiceRoutes);
+  app.register(practiceRoutes, { strategies: options.practiceStrategies });
   app.register(transferRoutes);
   return app;
 }

@@ -37,7 +37,7 @@ void test(
     const recording = createRecordingPool();
     const injectedSandbox = createSandboxProvisioner({
       courses: fixture.registry,
-      driver: createPostgresSandboxDriverFromPool(recording.pool),
+      drivers: [createPostgresSandboxDriverFromPool(recording.pool)],
     });
 
     const app = buildServer({

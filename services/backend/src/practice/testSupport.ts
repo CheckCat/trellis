@@ -233,7 +233,7 @@ export async function withPracticeApp(
       logger: false,
       ...(options.configured === false
         ? {}
-        : { sandbox: createSandboxProvisioner({ courses: registry, driver: sandbox.driver }) }),
+        : { sandbox: createSandboxProvisioner({ courses: registry, drivers: [sandbox.driver] }) }),
     });
     try {
       await run({ app, progress, sandbox });
@@ -243,6 +243,132 @@ export async function withPracticeApp(
   } finally {
     fs.rmSync(coursesDir, { recursive: true, force: true });
   }
+}
+
+// --- The `expected` mechanic (practice/compare.ts) -----------------------
+
+/** A lesson graded ONLY by comparing the learner's rows with a reference
+ * query's — the `SELECT` case `check` cannot grade. */
+export const EXPECTED_LESSON_ID = "expected-lesson";
+/** A lesson declaring BOTH mechanics: passing requires passing both. */
+export const BOTH_MECHANICS_LESSON_ID = "both-mechanics-lesson";
+/** A lesson whose reference query asks for a specific row ORDER. */
+export const ORDERED_EXPECTED_LESSON_ID = "ordered-expected-lesson";
+
+/** The reference/check SQL those lessons declare — the texts that must
+ * never appear in any response. */
+export const FIXTURE_EXPECTED_SQL = "select a, b from reference_table";
+export const FIXTURE_ORDERED_EXPECTED_SQL = "select a from reference_table order by a";
+export const FIXTURE_BOTH_CHECK_SQL = "select count(*) = 1 from reference_table";
+
+/**
+ * A fixture manifest exercising the `expected` mechanic in its three
+ * shapes: alone, alongside a `check`, and with `ordered: true`.
+ */
+export function expectedManifestYaml(courseId = "progress-fixture"): string {
+  return [
+    `id: ${courseId}`,
+    "version: 1.0.0",
+    "title: Progress fixture course",
+    "sandboxes:",
+    "  - id: main",
+    "    type: postgres",
+    "    seed:",
+    "      - sandbox/01-schema.sql",
+    "modules:",
+    "  - id: only-module",
+    "    title: Only module",
+    "    lessons:",
+    `      - id: ${EXPECTED_LESSON_ID}`,
+    "        title: Compared practice lesson",
+    "        practice:",
+    "          sandbox: main",
+    "          prompt: Return the right rows.",
+    `          expected: "${FIXTURE_EXPECTED_SQL}"`,
+    `      - id: ${BOTH_MECHANICS_LESSON_ID}`,
+    "        title: Doubly graded practice lesson",
+    "        practice:",
+    "          sandbox: main",
+    "          prompt: Change the data AND return the right rows.",
+    `          check: "${FIXTURE_BOTH_CHECK_SQL}"`,
+    `          expected: "${FIXTURE_EXPECTED_SQL}"`,
+    `      - id: ${ORDERED_EXPECTED_LESSON_ID}`,
+    "        title: Order-sensitive practice lesson",
+    "        practice:",
+    "          sandbox: main",
+    "          prompt: Return the right rows in the right order.",
+    `          expected: "${FIXTURE_ORDERED_EXPECTED_SQL}"`,
+    "          ordered: true",
+    "",
+  ].join("\n");
+}
+
+// --- The `answer` mechanic (practice/answer.ts) --------------------------
+
+/** A lesson whose practice is done outside the platform: no sandbox, no
+ * SQL, just values the learner reports back. */
+export const ANSWER_LESSON_ID = "answer-lesson";
+/** A `sql` lesson in the SAME fixture, so "wrong endpoint for this kind of
+ * assignment" is testable in both directions. */
+export const ANSWER_FIXTURE_SQL_LESSON_ID = "sql-lesson";
+
+/** The right answers that fixture declares — the values that must never
+ * appear in any response. */
+export const ANSWER_FIXTURE_EXPECTED = {
+  headcount: 112,
+  turnover: 18.5,
+  reason: "По собственному желанию",
+} as const;
+
+/**
+ * A fixture manifest with one `answer` practice (a plain number, a number
+ * with a tolerance, and a text field) and one `sql` practice beside it.
+ *
+ * It declares a sandbox only because the `sql` lesson needs one — the
+ * `answer` lesson must work without any sandbox being prepared, which the
+ * scripted driver's recorded query list is what proves.
+ */
+export function answerManifestYaml(courseId = "progress-fixture"): string {
+  return [
+    `id: ${courseId}`,
+    "version: 1.0.0",
+    "title: Progress fixture course",
+    "sandboxes:",
+    "  - id: main",
+    "    type: postgres",
+    "    seed:",
+    "      - sandbox/01-schema.sql",
+    "modules:",
+    "  - id: only-module",
+    "    title: Only module",
+    "    lessons:",
+    `      - id: ${ANSWER_LESSON_ID}`,
+    "        title: Reported-answer lesson",
+    "        practice:",
+    "          type: answer",
+    "          prompt: Report the numbers you got.",
+    "          fields:",
+    "            - id: headcount",
+    '              label: "Сколько сотрудников?"',
+    "              kind: number",
+    `              expected: ${ANSWER_FIXTURE_EXPECTED.headcount}`,
+    "            - id: turnover",
+    '              label: "Текучесть, %"',
+    "              kind: number",
+    `              expected: ${ANSWER_FIXTURE_EXPECTED.turnover}`,
+    "              tolerance: 0.2",
+    "            - id: reason",
+    '              label: "Самая частая причина"',
+    "              kind: text",
+    `              expected: "${ANSWER_FIXTURE_EXPECTED.reason}"`,
+    `      - id: ${ANSWER_FIXTURE_SQL_LESSON_ID}`,
+    "        title: Sandbox practice lesson",
+    "        practice:",
+    "          sandbox: main",
+    "          prompt: Do the sandbox thing.",
+    '          check: "select count(*) = 1 from t"',
+    "",
+  ].join("\n");
 }
 
 /**

@@ -27,15 +27,87 @@ export interface CourseQuiz {
   readonly options: readonly CourseQuizOption[];
 }
 
-export interface CoursePractice {
-  readonly sandbox: string;
+/**
+ * Which kind of practice assignment this is — the discriminator of
+ * `CoursePractice` below, and the thing that decides which endpoint grades
+ * it. Normalized by validate.ts: always present in the domain model, even
+ * though a manifest that predates the second kind omits it.
+ *
+ * Re-exported from capabilities.ts rather than declared here: a practice
+ * kind exists only if it is registered there (project invariant), and two
+ * declarations of the same union could disagree.
+ */
+import type { AnswerFieldKind, SandboxType } from "../capabilities.js";
+
+export type { AnswerFieldKind, CoursePracticeType, SandboxType } from "../capabilities.js";
+
+/**
+ * A practice assignment done in a course SANDBOX: the learner writes SQL,
+ * the engine runs it and grades it.
+ *
+ * Both grading mechanics are optional and independent (an assignment may
+ * carry neither, one, or both); when both are present, the lesson is only
+ * completed when both pass — see routes/practice.ts. With neither, the
+ * lesson is self-marked.
+ */
+export interface CourseSqlPractice {
+  readonly type: "sql";
   readonly prompt: string;
+  readonly sandbox: string;
+  /** SQL over the sandbox's STATE, answering one boolean: was the exercise
+   * done? The only way to grade an assignment that changes the database. */
   readonly check?: string;
+  /** Reference SQL whose RESULT SET the learner's own result is compared
+   * against — the only way to grade a `SELECT`, which leaves no state
+   * behind to check (practice/compare.ts). Like `check`, it is the answer
+   * to the exercise and never leaves the backend. */
+  readonly expected?: string;
+  /** Whether row order matters in that comparison. Normalized by
+   * validate.ts: present (as `true`/`false`) exactly when `expected` is,
+   * absent otherwise — the manifest may omit it, the domain model may not
+   * leave "default false" implicit. */
+  readonly ordered?: boolean;
 }
+
+/** One value the learner is asked to report back in an `answer` practice. */
+export interface CourseAnswerField {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: AnswerFieldKind;
+  /** The right answer: a `number` for `kind: "number"`, a string for
+   * `kind: "text"` (validate.ts enforces the agreement). Never leaves the
+   * backend — same rule as a quiz's `correct` and a practice's `check`. */
+  readonly expected: number | string;
+  /** `kind: "number"` only. Absolute tolerance, normalized by validate.ts
+   * to a present number exactly when the field is numeric (the manifest's
+   * default is 0 — exact equality). */
+  readonly tolerance?: number;
+}
+
+/**
+ * A practice assignment done OUTSIDE the platform — in Excel, in a BI
+ * dashboard, on paper. There is no sandbox and nothing to execute: the
+ * learner types in the values they arrived at and the engine compares them
+ * with the course's own. The process is not graded, the result is.
+ */
+export interface CourseAnswerPractice {
+  readonly type: "answer";
+  readonly prompt: string;
+  /** At least one, with unique ids (validate.ts). Order is display order. */
+  readonly fields: readonly CourseAnswerField[];
+}
+
+/**
+ * A lesson's practice assignment. A discriminated union rather than one
+ * widened shape: `sandbox` is meaningless for an `answer` assignment and
+ * `fields` is meaningless for a `sql` one, and making the compiler say so
+ * is what keeps a third mechanic from quietly inheriting either.
+ */
+export type CoursePractice = CourseSqlPractice | CourseAnswerPractice;
 
 export interface CourseSandbox {
   readonly id: string;
-  readonly type: "postgres";
+  readonly type: SandboxType;
   /** Absolute, realpath'd filesystem paths — the output of validate.ts's
    * exported `resolveSafePath`, already confirmed to exist and to stay
    * inside the package directory (symlink escapes included). NOT the raw
