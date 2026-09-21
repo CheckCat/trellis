@@ -19,13 +19,18 @@ export function usePractice(courseId: string, lessonId: string, sandboxId: strin
   const runMutation = useMutation({
     mutationFn: (sql: string) => api.runPractice(courseId, lessonId, sql),
     onSuccess: (data) => {
-      // Only a passing check can have completed the lesson
-      // (routes/practice.ts never marks it complete otherwise) — re-fetch
-      // the progress tree the same way LessonView's manual-complete
-      // mutation and useQuiz's correct-answer path already do, rather than
-      // hand-patching the cache from this response's own `lesson`/`course`
-      // fields.
-      if (data.check.present && data.check.passed === true) {
+      // Only a run where every grading mechanic the lesson declares passed
+      // can have completed it (routes/practice.ts never marks it complete
+      // otherwise — with both `check` and `expected`, both must pass) —
+      // re-fetch the progress tree the same way LessonView's
+      // manual-complete mutation and useQuiz's correct-answer path already
+      // do, rather than hand-patching the cache from this response's own
+      // `lesson`/`course` fields.
+      const graded = data.check.present || data.expected.present;
+      const allPassed =
+        (!data.check.present || data.check.passed === true) &&
+        (!data.expected.present || data.expected.passed === true);
+      if (graded && allPassed) {
         void queryClient.invalidateQueries({ queryKey: ["courseProgress", courseId] });
       }
     },

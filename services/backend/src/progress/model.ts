@@ -24,12 +24,18 @@ export type LessonStatus = "completed" | "not_started";
  * How a lesson is allowed to become `completed`:
  *  - `quiz`     — the lesson has a quiz: answering it correctly is what
  *                 completes it (an explicit "mark as done" must not).
- *  - `practice` — the lesson has a practice assignment WITH a `check` query:
- *                 the check's boolean verdict is what completes it (task
- *                 009 runs that check under the sandbox role; the core has
- *                 no other grading logic — project invariant).
- *  - `manual`   — everything else (plain content, or a practice assignment
- *                 without a `check`): the user marks it done themselves.
+ *  - `practice` — the lesson has a practice assignment carrying at least
+ *                 one of the core's grading mechanics: for a `sql`
+ *                 assignment, `check` (a query over the sandbox's state)
+ *                 and/or `expected` (a reference query whose rows the
+ *                 learner's result is compared with); for an `answer`
+ *                 assignment, its `fields` (always present — an answer
+ *                 assignment is graded by construction). Their verdicts
+ *                 are what complete it, and the core has no grading logic
+ *                 beyond these declarative mechanics — project invariant.
+ *  - `manual`   — everything else (plain content, or a `sql` practice
+ *                 assignment with neither mechanic): the user marks it
+ *                 done themselves.
  *
  * A lesson carrying both a quiz and a checked practice resolves to `quiz`:
  * one lesson has exactly one gate, and the quiz is the cheaper/earlier one.
@@ -167,8 +173,13 @@ export function lessonCompletionMode(lesson: CourseLesson): LessonCompletionMode
   if (lesson.quiz !== undefined) {
     return "quiz";
   }
-  if (lesson.practice?.check !== undefined) {
-    return "practice";
+  const practice = lesson.practice;
+  if (practice !== undefined) {
+    const graded =
+      practice.type === "answer" || practice.check !== undefined || practice.expected !== undefined;
+    if (graded) {
+      return "practice";
+    }
   }
   return "manual";
 }

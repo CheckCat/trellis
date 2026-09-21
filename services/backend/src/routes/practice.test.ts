@@ -2,11 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  answerManifestYaml,
+  ANSWER_FIXTURE_SQL_LESSON_ID,
+  ANSWER_LESSON_ID,
+  BOTH_MECHANICS_LESSON_ID,
   checkResult,
   connectionError,
   databaseError,
   dualGateManifestYaml,
   DUAL_GATE_LESSON_ID,
+  expectedManifestYaml,
+  EXPECTED_LESSON_ID,
+  FIXTURE_BOTH_CHECK_SQL,
+  FIXTURE_EXPECTED_SQL,
+  FIXTURE_ORDERED_EXPECTED_SQL,
+  ORDERED_EXPECTED_LESSON_ID,
   resultSet,
   withPracticeApp,
   type ScriptedAnswer,
@@ -403,4 +413,519 @@ void test("POST practice/run answers 503 with a stated reason when no sandbox is
     },
     { configured: false },
   );
+});
+
+// --- The `expected` mechanic (practice/compare.ts) -----------------------
+
+const EXPECTED_RUN_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${EXPECTED_LESSON_ID}/practice/run`;
+const BOTH_RUN_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${BOTH_MECHANICS_LESSON_ID}/practice/run`;
+const ORDERED_RUN_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${ORDERED_EXPECTED_LESSON_ID}/practice/run`;
+
+/** Two text columns, the shape both the reference query and the learner's
+ * statement produce in these tests. */
+function pairRows(rows: readonly (readonly unknown[])[]): ReturnType<typeof resultSet> {
+  return resultSet({ columns: ["a", "b"], rows, dataTypeIds: [25, 25] });
+}
+
+/**
+ * Answers the learner's statement with `answer`, the course's reference
+ * query with `reference`, its check query with `verdict`, and every
+ * transaction-control statement with an empty result.
+ */
+function expectedScript(
+  answer: ScriptedAnswer,
+  reference: ScriptedAnswer,
+  verdict?: ScriptedAnswer,
+): (text: string) => ScriptedAnswer {
+  return (text: string) => {
+    if (text === FIXTURE_EXPECTED_SQL || text === FIXTURE_ORDERED_EXPECTED_SQL) {
+      return reference;
+    }
+    if (text === FIXTURE_BOTH_CHECK_SQL) {
+      return verdict ?? checkResult(false);
+    }
+    if (text === "rollback" || text === "discard all" || text === "begin transaction read only") {
+      return resultSet({ command: text.toUpperCase(), columns: [], rows: [], rowCount: null });
+    }
+    return answer;
+  };
+}
+
+void test("POST practice/run grades a SELECT by comparing it with the course's expected query", async () => {
+  const rows = [
+    ["Война и мир", "Лев Толстой"],
+    ["Отцы и дети", "Иван Тургенев"],
+  ];
+  await withPracticeApp(
+    async ({ app, progress, sandbox }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: EXPECTED_RUN_URL,
+        payload: { sql: "select title, author from books" },
+      });
+
+      assert.equal(response.statusCode, 200);
+      const body = response.json();
+      assert.equal(body.ok, true);
+      // No check on this lesson — the two mechanics are independent.
+      assert.deepEqual(body.check, { present: false });
+      assert.deepEqual(body.expected, { present: true, passed: true });
+      assert.equal(body.lesson.completionMode, "practice");
+      assert.equal(body.lesson.status, "completed");
+      assert.equal(progress.records().length, 1);
+
+      // The reference query runs on the same connection, after the
+      // attempt's transaction is rolled back, and inside a read-only one of
+      // its own.
+      assert.deepEqual(sandbox.texts(), [
+        "select title, author from books",
+        "rollback",
+        "begin transaction read only",
+        FIXTURE_EXPECTED_SQL,
+        "rollback",
+        "rollback",
+        "discard all",
+      ]);
+      assert.equal(sandbox.clientsOpen(), 0);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(pairRows(rows), pairRows(rows)),
+    },
+  );
+});
+
+void test("POST practice/run explains an expected mismatch in counts, without leaking the answer", async () => {
+  await withPracticeApp(
+    async ({ app, progress }) => {
+      const tooManyColumns = await app.inject({
+        method: "POST",
+        url: EXPECTED_RUN_URL,
+        payload: { sql: "select * from books" },
+      });
+      assert.equal(tooManyColumns.statusCode, 200);
+      assert.deepEqual(tooManyColumns.json().expected, {
+        present: true,
+        passed: false,
+        reason: "ожидалось столбцов: 2, получено: 3",
+      });
+      assert.equal(tooManyColumns.json().lesson.status, "not_started");
+      assert.deepEqual(progress.records(), []);
+      // Neither the reference query nor its values reach the client.
+      assert.doesNotMatch(tooManyColumns.body, /reference_table|Лев Толстой/);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(
+        resultSet({ columns: ["a", "b", "c"], rows: [["x", "y", "z"]], dataTypeIds: [25, 25, 25] }),
+        pairRows([["Война и мир", "Лев Толстой"]]),
+      ),
+    },
+  );
+
+  await withPracticeApp(
+    async ({ app }) => {
+      const tooFewRows = await app.inject({
+        method: "POST",
+        url: EXPECTED_RUN_URL,
+        payload: { sql: "select title, author from books limit 1" },
+      });
+      assert.deepEqual(tooFewRows.json().expected, {
+        present: true,
+        passed: false,
+        reason: "ожидалось строк: 2, получено: 1",
+      });
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(
+        pairRows([["a", "b"]]),
+        pairRows([
+          ["a", "b"],
+          ["c", "d"],
+        ]),
+      ),
+    },
+  );
+});
+
+void test("POST practice/run honours ordered: true — the same rows in the wrong order are not accepted", async () => {
+  const reference = resultSet({ columns: ["a"], rows: [["1"], ["2"], ["3"]], dataTypeIds: [25] });
+
+  await withPracticeApp(
+    async ({ app, progress }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: ORDERED_RUN_URL,
+        payload: { sql: "select a from t" },
+      });
+
+      assert.deepEqual(response.json().expected, {
+        present: true,
+        passed: false,
+        reason: "строки различаются (первое расхождение — строка 1)",
+      });
+      assert.deepEqual(progress.records(), []);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(resultSet({ columns: ["a"], rows: [["2"], ["1"], ["3"]], dataTypeIds: [25] }), reference),
+    },
+  );
+
+  await withPracticeApp(
+    async ({ app, progress }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: ORDERED_RUN_URL,
+        payload: { sql: "select a from t order by a" },
+      });
+
+      assert.deepEqual(response.json().expected, { present: true, passed: true });
+      assert.equal(progress.records().length, 1);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(resultSet({ columns: ["a"], rows: [["1"], ["2"], ["3"]], dataTypeIds: [25] }), reference),
+    },
+  );
+});
+
+void test("POST practice/run requires BOTH mechanics to pass when the lesson declares both", async () => {
+  const rows = [["a", "b"]];
+  const cases = [
+    { check: true, expected: false, completes: false },
+    { check: false, expected: true, completes: false },
+    { check: true, expected: true, completes: true },
+  ] as const;
+
+  for (const scenario of cases) {
+    await withPracticeApp(
+      async ({ app, progress }) => {
+        const response = await app.inject({ method: "POST", url: BOTH_RUN_URL, payload: { sql: "select a, b from t" } });
+
+        const body = response.json();
+        assert.equal(body.check.passed, scenario.check, JSON.stringify(scenario));
+        assert.equal(body.expected.passed, scenario.expected, JSON.stringify(scenario));
+        assert.equal(body.lesson.status, scenario.completes ? "completed" : "not_started", JSON.stringify(scenario));
+        assert.equal(progress.records().length, scenario.completes ? 1 : 0, JSON.stringify(scenario));
+      },
+      {
+        manifestYaml: expectedManifestYaml(),
+        respond: expectedScript(
+          pairRows(rows),
+          pairRows(scenario.expected ? rows : [["different", "rows"]]),
+          checkResult(scenario.check),
+        ),
+      },
+    );
+  }
+});
+
+void test("POST practice/run does not run the expected query when the learner's own SQL failed", async () => {
+  await withPracticeApp(
+    async ({ app, progress, sandbox }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: BOTH_RUN_URL,
+        payload: { sql: "select * from bookz" },
+      });
+
+      assert.equal(response.statusCode, 200);
+      const body = response.json();
+      assert.equal(body.ok, false);
+      assert.equal(body.error.code, "42P01");
+      // There were no rows to compare: "не сошлось" and "не проверялось"
+      // must not look alike, so `passed`/`reason` are absent, not `false`.
+      assert.deepEqual(body.expected, { present: true });
+      // The check still runs — it grades the sandbox's state, not the
+      // statement that failed.
+      assert.deepEqual(body.check, { present: true, passed: false });
+      assert.deepEqual(sandbox.texts(), [
+        "select * from bookz",
+        "rollback",
+        FIXTURE_BOTH_CHECK_SQL,
+        "rollback",
+        "discard all",
+      ]);
+      assert.deepEqual(progress.records(), []);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(
+        databaseError('relation "bookz" does not exist', { code: "42P01" }),
+        pairRows([["a", "b"]]),
+        checkResult(false),
+      ),
+    },
+  );
+});
+
+void test("POST practice/run answers 422, never a wrong-answer verdict, when the expected query is broken", async () => {
+  await withPracticeApp(
+    async ({ app, progress }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: EXPECTED_RUN_URL,
+        payload: { sql: "select a, b from t" },
+      });
+
+      // Broken course content — the same class (and status) as a broken
+      // check or a seed the database rejects.
+      assert.equal(response.statusCode, 422);
+      const body = response.json();
+      assert.equal(body.error, "expected_failed");
+      assert.equal(body.databaseError, 'relation "reference_table" does not exist');
+      // ...and even then the query's own text stays inside.
+      assert.doesNotMatch(body.message, /select a, b from reference_table/);
+      assert.deepEqual(progress.records(), []);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(
+        pairRows([["a", "b"]]),
+        databaseError('relation "reference_table" does not exist', { code: "42P01" }),
+      ),
+    },
+  );
+});
+
+void test("POST practice/run compares against the UNtruncated result, not the 200-row display grid", async () => {
+  // MAX_RESULT_ROWS caps what the client is shown; it must have no say in
+  // grading. Both sides here are 250 identical rows: a comparison run on
+  // the truncated grid would still pass, so the assertion that matters is
+  // the negative one below — one differing row past row 200 must fail.
+  const identical = Array.from({ length: 250 }, (_, index) => [`row-${index}`, "x"]);
+  const differingPastTheCap = identical.map((row, index) => (index === 240 ? ["row-different", "x"] : row));
+
+  await withPracticeApp(
+    async ({ app }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: EXPECTED_RUN_URL,
+        payload: { sql: "select a, b from t" },
+      });
+      const body = response.json();
+      // The grid the learner sees is still capped...
+      assert.equal(body.result.rows.length, 200);
+      assert.equal(body.result.truncated, true);
+      // ...while the comparison saw all 250 and found the difference.
+      assert.equal(body.expected.passed, false);
+      assert.match(body.expected.reason, /первая строка без пары — строка 241/);
+    },
+    {
+      manifestYaml: expectedManifestYaml(),
+      respond: expectedScript(pairRows(differingPastTheCap), pairRows(identical)),
+    },
+  );
+});
+
+// --- type: answer — practice done outside the platform ------------------
+
+const ANSWER_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${ANSWER_LESSON_ID}/practice/answer`;
+const SQL_LESSON_ANSWER_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${ANSWER_FIXTURE_SQL_LESSON_ID}/practice/answer`;
+const ANSWER_LESSON_RUN_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${ANSWER_LESSON_ID}/practice/run`;
+
+/** All three fields right, in the plainest spelling. */
+const CORRECT_ANSWERS = { headcount: "112", turnover: "18.5", reason: "По собственному желанию" };
+
+async function withAnswerApp(run: Parameters<typeof withPracticeApp>[0]): Promise<void> {
+  await withPracticeApp(run, { manifestYaml: answerManifestYaml() });
+}
+
+void test("POST practice/answer completes the lesson when every field is right, without touching the sandbox", async () => {
+  await withAnswerApp(async ({ app, progress, sandbox }) => {
+    const response = await app.inject({ method: "POST", url: ANSWER_URL, payload: { answers: CORRECT_ANSWERS } });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.fields, {
+      headcount: { correct: true },
+      turnover: { correct: true },
+      reason: { correct: true },
+    });
+    assert.equal(body.lesson.completionMode, "practice");
+    assert.equal(body.lesson.status, "completed");
+    assert.equal(progress.records().length, 1);
+
+    // The whole point of this mechanic: no sandbox is prepared, no
+    // connection is taken, nothing is executed. An `answer` lesson works
+    // in a course with no sandbox at all and cannot fail on Postgres.
+    assert.equal(sandbox.provisionCalls(), 0);
+    assert.deepEqual(sandbox.texts(), []);
+    assert.equal(sandbox.clientsOpen(), 0);
+  });
+});
+
+void test("POST practice/answer marks each field separately and completes nothing when one is wrong", async () => {
+  await withAnswerApp(async ({ app, progress }) => {
+    const response = await app.inject({
+      method: "POST",
+      url: ANSWER_URL,
+      payload: { answers: { ...CORRECT_ANSWERS, turnover: "25" } },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.ok, false);
+    // Partial credit is reported honestly — the learner has to know which
+    // value to go back and re-derive — but it does not complete anything.
+    assert.deepEqual(body.fields, {
+      headcount: { correct: true },
+      turnover: { correct: false },
+      reason: { correct: true },
+    });
+    assert.equal(body.lesson.status, "not_started");
+    assert.deepEqual(progress.records(), []);
+  });
+});
+
+void test("POST practice/answer reads a comma decimal, spaced thousands and a different letter case", async () => {
+  await withAnswerApp(async ({ app }) => {
+    const response = await app.inject({
+      method: "POST",
+      url: ANSWER_URL,
+      payload: {
+        answers: {
+          // A person typing a number, not a JSON serializer emitting one.
+          headcount: " 112 ",
+          // Within the 0.2 tolerance, written with a comma.
+          turnover: "18,6",
+          reason: "  по собственному ЖЕЛАНИЮ  ",
+        },
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().ok, true, response.body);
+  });
+});
+
+void test("POST practice/answer marks a field the learner left out, rather than dropping it", async () => {
+  await withAnswerApp(async ({ app }) => {
+    const response = await app.inject({ method: "POST", url: ANSWER_URL, payload: { answers: {} } });
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.ok, false);
+    // One entry per DECLARED field: the form has to be able to mark every
+    // input, including the ones nothing was typed into.
+    assert.deepEqual(Object.keys(body.fields).sort(), ["headcount", "reason", "turnover"]);
+    assert.equal(body.fields.headcount.correct, false);
+  });
+});
+
+void test("POST practice/answer never returns the right answers, on any outcome", async () => {
+  await withAnswerApp(async ({ app }) => {
+    const right = await app.inject({ method: "POST", url: ANSWER_URL, payload: { answers: CORRECT_ANSWERS } });
+    const wrong = await app.inject({
+      method: "POST",
+      url: ANSWER_URL,
+      payload: { answers: { headcount: "1", turnover: "2", reason: "нет" } },
+    });
+
+    for (const body of [right.body, wrong.body]) {
+      // `112` is the learner's own submitted value in the first case, so
+      // the assertion is about the fields the RESPONSE is built from: a
+      // verdict carries booleans and nothing else.
+      assert.doesNotMatch(body, /"expected"|"tolerance"|18\.5|По собственному желанию/);
+    }
+    // And the wrong submission gets no hint of how far off it was.
+    assert.doesNotMatch(wrong.body, /112/);
+  });
+});
+
+void test("POST practice/answer stays idempotent and never un-completes a lesson", async () => {
+  await withAnswerApp(async ({ app, progress }) => {
+    const first = await app.inject({ method: "POST", url: ANSWER_URL, payload: { answers: CORRECT_ANSWERS } });
+    const completedAt = first.json().lesson.completedAt;
+
+    const again = await app.inject({ method: "POST", url: ANSWER_URL, payload: { answers: CORRECT_ANSWERS } });
+    assert.equal(again.json().lesson.completedAt, completedAt, "a repeat pass must not move completedAt");
+
+    // "Можно исправить и отправить снова" cuts both ways: a later wrong
+    // submission reports itself honestly and leaves the pass alone.
+    const wrong = await app.inject({ method: "POST", url: ANSWER_URL, payload: { answers: { headcount: "1" } } });
+    assert.equal(wrong.json().ok, false);
+    assert.equal(wrong.json().lesson.status, "completed");
+    assert.equal(progress.records().length, 1);
+  });
+});
+
+void test("POST practice/answer and practice/run each refuse the other kind of assignment", async () => {
+  await withAnswerApp(async ({ app, progress, sandbox }) => {
+    const sqlToAnswer = await app.inject({
+      method: "POST",
+      url: SQL_LESSON_ANSWER_URL,
+      payload: { answers: { headcount: "112" } },
+    });
+    assert.equal(sqlToAnswer.statusCode, 409);
+    assert.equal(sqlToAnswer.json().error, "practice_type_mismatch");
+    assert.match(sqlToAnswer.json().message, /practice\/run/);
+
+    const answerToSql = await app.inject({
+      method: "POST",
+      url: ANSWER_LESSON_RUN_URL,
+      payload: { sql: "select 1" },
+    });
+    assert.equal(answerToSql.statusCode, 409);
+    assert.equal(answerToSql.json().error, "practice_type_mismatch");
+    assert.match(answerToSql.json().message, /practice\/answer/);
+
+    // Neither mistake reached the sandbox or the progress store.
+    assert.equal(sandbox.provisionCalls(), 0);
+    assert.deepEqual(sandbox.texts(), []);
+    assert.deepEqual(progress.records(), []);
+  });
+});
+
+void test("POST practice/answer rejects a request that names no answer practice", async () => {
+  await withAnswerApp(async ({ app }) => {
+    const unknownCourse = await app.inject({
+      method: "POST",
+      url: "/courses/nope/lessons/whatever/practice/answer",
+      payload: { answers: {} },
+    });
+    assert.equal(unknownCourse.statusCode, 404);
+    assert.equal(unknownCourse.json().error, "course_not_found");
+
+    const unknownLesson = await app.inject({
+      method: "POST",
+      url: `/courses/${FIXTURE_COURSE_ID}/lessons/nope/practice/answer`,
+      payload: { answers: {} },
+    });
+    assert.equal(unknownLesson.statusCode, 404);
+    assert.equal(unknownLesson.json().error, "lesson_not_found");
+  });
+});
+
+void test("POST practice/answer validates the body before grading anything", async () => {
+  await withAnswerApp(async ({ app }) => {
+    for (const payload of [
+      {},
+      { answers: "112" },
+      { answers: { headcount: { nested: "object" } } },
+      // Past the per-answer length cap — a form field, not a payload.
+      { answers: { headcount: "1".repeat(1001) } },
+      // Not a legal field id, so it could never name a declared field.
+      { answers: { "not a field id": "112" } },
+    ]) {
+      const response = await app.inject({ method: "POST", url: ANSWER_URL, payload });
+      assert.equal(response.statusCode, 400, `expected 400 for ${JSON.stringify(payload).slice(0, 80)}`);
+    }
+
+    // A JSON number where a string was declared is COERCED, not rejected:
+    // Fastify's ajv runs with `coerceTypes` (its default, unchanged by
+    // this app), so `112` arrives as "112" and grades the same as a form
+    // would have sent it. Asserted so the leniency is a stated contract
+    // rather than something a config change could silently remove.
+    const coerced = await app.inject({
+      method: "POST",
+      url: ANSWER_URL,
+      payload: { answers: { ...CORRECT_ANSWERS, headcount: 112 } },
+    });
+    assert.equal(coerced.statusCode, 200);
+    assert.equal(coerced.json().ok, true);
+  });
 });

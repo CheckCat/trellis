@@ -11,10 +11,12 @@ import type { ErrorObject } from "ajv";
 
 import manifestSchema from "./manifest.schema.json" with { type: "json" };
 import type {
+  CourseAnswerField,
   CourseSandbox,
   CourseQuiz,
   CourseQuizOption,
   CoursePractice,
+  CoursePracticeType,
   ValidatedLesson,
   ValidatedManifest,
   ValidatedModule,
@@ -49,10 +51,31 @@ interface RawQuiz {
   readonly options: readonly RawQuizOption[];
 }
 
+interface RawAnswerField {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: "number" | "text";
+  readonly expected: number | string;
+  readonly tolerance?: number;
+}
+
+/**
+ * The manifest's `practice` block BEFORE the discriminator is applied: the
+ * schema declares every property of both kinds on one object, so anything
+ * kind-specific is optional here and `validatePractice` below is what
+ * decides which combination is actually legal.
+ */
 interface RawPractice {
-  readonly sandbox: string;
+  readonly type?: CoursePracticeType;
   readonly prompt: string;
+  readonly sandbox?: string;
   readonly check?: string;
+  readonly expected?: string;
+  /** Only writable alongside `expected` (manifest.schema.json's
+   * `dependentRequired`), and normalized to a present boolean by
+   * `validatePractice` below. */
+  readonly ordered?: boolean;
+  readonly fields?: readonly RawAnswerField[];
 }
 
 interface RawLesson {
@@ -256,18 +279,161 @@ function validateLesson(
 
   const quiz = lesson.quiz === undefined ? undefined : validateQuiz(lesson.quiz, `${lessonPath}.quiz`, errors);
 
-  let practice: CoursePractice | undefined;
-  if (lesson.practice !== undefined) {
-    if (!sandboxIds.has(lesson.practice.sandbox)) {
-      errors.push({
-        path: `${lessonPath}.practice.sandbox`,
-        message: `practice.sandbox "${lesson.practice.sandbox}" does not reference a declared sandboxes[].id.`,
-      });
-    }
-    practice = { sandbox: lesson.practice.sandbox, prompt: lesson.practice.prompt, check: lesson.practice.check };
-  }
+  const practice =
+    lesson.practice === undefined
+      ? undefined
+      : validatePractice(lesson.practice, `${lessonPath}.practice`, sandboxIds, errors);
 
   return { id: lesson.id, title: lesson.title, contentPath, quiz, practice };
+}
+
+/**
+ * Applies the `type` discriminator the JSON Schema deliberately doesn't:
+ * the schema declares both kinds' properties on one object (so an unknown
+ * property is still a structural error), and this decides which of them
+ * are legal together.
+ *
+ * Done here rather than as a schema `oneOf` so that writing `sandbox:` on
+ * an `answer` assignment produces one sentence naming the offending
+ * property, instead of ajv reporting every way the manifest failed to
+ * match either branch.
+ *
+ * Always returns a practice, even when it pushed errors: `validateManifest`
+ * discards the whole domain model as soon as `errors` is non-empty, and
+ * returning a value here keeps the rest of the lesson's checks running so
+ * an author sees every problem at once (same contract as `validateQuiz`).
+ */
+function validatePractice(
+  practice: RawPractice,
+  practicePath: string,
+  sandboxIds: ReadonlySet<string>,
+  errors: ValidationError[],
+): CoursePractice {
+  // Absent means `sql`: courses written before the `answer` mechanic
+  // existed must stay valid, unchanged, forever.
+  const type: CoursePracticeType = practice.type ?? "sql";
+
+  if (type === "answer") {
+    for (const forbidden of ["sandbox", "check", "expected", "ordered"] as const) {
+      if (practice[forbidden] !== undefined) {
+        errors.push({
+          path: `${practicePath}.${forbidden}`,
+          message: `"${forbidden}" belongs to a practice of type "sql" — a practice of type "answer" has no sandbox and nothing to execute, it compares the learner's typed-in answers with "fields[].expected".`,
+        });
+      }
+    }
+    if (practice.fields === undefined) {
+      errors.push({
+        path: `${practicePath}.fields`,
+        message: `A practice of type "answer" must declare "fields" — at least one value the learner is asked to report.`,
+      });
+      return { type: "answer", prompt: practice.prompt, fields: [] };
+    }
+    return {
+      type: "answer",
+      prompt: practice.prompt,
+      fields: validateAnswerFields(practice.fields, `${practicePath}.fields`, errors),
+    };
+  }
+
+  if (practice.fields !== undefined) {
+    errors.push({
+      path: `${practicePath}.fields`,
+      message: `"fields" belongs to a practice of type "answer" — a practice of type "sql" is graded by running the learner's own SQL ("check"/"expected").`,
+    });
+  }
+  if (practice.sandbox === undefined) {
+    errors.push({
+      path: `${practicePath}.sandbox`,
+      message: `A practice of type "sql" must declare "sandbox" — the course sandbox its SQL runs in.`,
+    });
+  } else if (!sandboxIds.has(practice.sandbox)) {
+    errors.push({
+      path: `${practicePath}.sandbox`,
+      message: `practice.sandbox "${practice.sandbox}" does not reference a declared sandboxes[].id.`,
+    });
+  }
+
+  return {
+    type: "sql",
+    prompt: practice.prompt,
+    // Placeholder for the missing-sandbox case above: an error was already
+    // recorded, so this model is on its way to being discarded — it exists
+    // only so the remaining lessons still get validated.
+    sandbox: practice.sandbox ?? "",
+    check: practice.check,
+    expected: practice.expected,
+    // "по умолчанию false" is resolved here, once, rather than at every
+    // read site: `ordered` exists in the domain model exactly when
+    // `expected` does (types.ts). The schema's `dependentRequired`
+    // already rejected an `ordered` without an `expected`, so there is
+    // no manifest-declared value to drop here.
+    ...(practice.expected === undefined ? {} : { ordered: practice.ordered ?? false }),
+  };
+}
+
+function validateAnswerFields(
+  fields: readonly RawAnswerField[],
+  fieldsPath: string,
+  errors: ValidationError[],
+): CourseAnswerField[] {
+  const seenIds = new Set<string>();
+
+  return fields.map((field, index) => {
+    const fieldPath = `${fieldsPath}[${index}]`;
+    if (seenIds.has(field.id)) {
+      errors.push({
+        path: `${fieldPath}.id`,
+        message: `Duplicate answer field id "${field.id}" — field ids must be unique within a practice assignment (they are the keys the client submits answers under).`,
+      });
+    } else {
+      seenIds.add(field.id);
+    }
+
+    // The schema allows `expected` to be a number OR a string, because the
+    // right one depends on a sibling property; naming the mismatch is this
+    // pass's job.
+    const numeric = field.kind === "number";
+    if (numeric && typeof field.expected !== "number") {
+      errors.push({
+        path: `${fieldPath}.expected`,
+        // The VALUE is never quoted back — `expected` is the answer to the
+        // exercise, and a validation error is not a place to print it.
+        message: `Answer field "${field.id}" is kind "number", so its "expected" must be a number, not a string.`,
+      });
+    }
+    if (!numeric && typeof field.expected !== "string") {
+      errors.push({
+        path: `${fieldPath}.expected`,
+        message: `Answer field "${field.id}" is kind "text", so its "expected" must be a string, not a number.`,
+      });
+    } else if (!numeric && (field.expected as string).trim() === "") {
+      errors.push({
+        path: `${fieldPath}.expected`,
+        // Answers are compared trimmed (practice/answer.ts), so a blank
+        // expected value would be matched by a learner submitting nothing
+        // at all — an assignment that grades itself.
+        message: `Answer field "${field.id}" has a blank "expected" — there would be nothing to get right.`,
+      });
+    }
+    if (!numeric && field.tolerance !== undefined) {
+      errors.push({
+        path: `${fieldPath}.tolerance`,
+        message: `Answer field "${field.id}" is kind "text": "tolerance" only means something for a numeric field.`,
+      });
+    }
+
+    return {
+      id: field.id,
+      label: field.label,
+      kind: field.kind,
+      expected: field.expected,
+      // Same normalization choice as `ordered` above: the default lives
+      // here, once, and the domain model carries `tolerance` exactly when
+      // the field is numeric.
+      ...(numeric ? { tolerance: field.tolerance ?? 0 } : {}),
+    };
+  });
 }
 
 function validateQuiz(quiz: RawQuiz, quizPath: string, errors: ValidationError[]): CourseQuiz {

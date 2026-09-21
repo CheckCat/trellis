@@ -230,7 +230,7 @@ export function courseFixture(id = "structure-fixture", version = "1.0.0"): Cour
         id: "m2",
         title: "Module two",
         lessons: [
-          { id: "b1", title: "Lesson b1", practice: { sandbox: "main", prompt: "Do it.", check: "select true" } },
+          { id: "b1", title: "Lesson b1", practice: { type: "sql", sandbox: "main", prompt: "Do it.", check: "select true" } },
           { id: "b2", title: "Lesson b2", content: "# b2" },
         ],
       },

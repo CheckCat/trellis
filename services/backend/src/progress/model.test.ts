@@ -23,16 +23,30 @@ void test("lessonCompletionMode: a lesson with a quiz is completed by the quiz, 
   assert.equal(lessonCompletionMode(lesson), "quiz");
 });
 
-void test("lessonCompletionMode: practice WITH a check is completed by the check, WITHOUT one it is self-marked", () => {
+void test("lessonCompletionMode: practice WITH a grading mechanic is completed by it, WITHOUT one it is self-marked", () => {
   const checked: CourseLesson = {
     id: "l",
     title: "L",
-    practice: { sandbox: "main", prompt: "Do it.", check: "select true" },
+    practice: { type: "sql", sandbox: "main", prompt: "Do it.", check: "select true" },
   };
-  const unchecked: CourseLesson = { id: "l", title: "L", practice: { sandbox: "main", prompt: "Do it." } };
+  // `expected` is the second mechanic and gates a lesson on its own — a
+  // SELECT exercise leaves no state for a `check` to look at.
+  const compared: CourseLesson = {
+    id: "l",
+    title: "L",
+    practice: { type: "sql", sandbox: "main", prompt: "Do it.", expected: "select a from t", ordered: false },
+  };
+  const both: CourseLesson = {
+    id: "l",
+    title: "L",
+    practice: { type: "sql", sandbox: "main", prompt: "Do it.", check: "select true", expected: "select a from t", ordered: true },
+  };
+  const ungraded: CourseLesson = { id: "l", title: "L", practice: { type: "sql", sandbox: "main", prompt: "Do it." } };
   assert.equal(lessonCompletionMode(checked), "practice");
-  // Project invariant: "задание без check — самоотметка".
-  assert.equal(lessonCompletionMode(unchecked), "manual");
+  assert.equal(lessonCompletionMode(compared), "practice");
+  assert.equal(lessonCompletionMode(both), "practice");
+  // Project invariant: "задание без механик зачёта — самоотметка".
+  assert.equal(lessonCompletionMode(ungraded), "manual");
 });
 
 void test("lessonCompletionMode: a quiz wins over a checked practice on the same lesson (edge case)", () => {
@@ -40,7 +54,7 @@ void test("lessonCompletionMode: a quiz wins over a checked practice on the same
     id: "l",
     title: "L",
     quiz,
-    practice: { sandbox: "main", prompt: "Do it.", check: "select true" },
+    practice: { type: "sql", sandbox: "main", prompt: "Do it.", check: "select true" },
   };
   assert.equal(lessonCompletionMode(lesson), "quiz");
 });

@@ -1,23 +1,24 @@
 import { useState } from "react";
 import { ApiError } from "../../api/client";
-import type { PracticeSqlError, PublicPractice } from "../../api/types";
+import type { PracticeSqlError, PublicPractice, PublicSqlPractice } from "../../api/types";
+import { AnswerForm } from "./AnswerForm";
 import { ResultTable } from "./ResultTable";
 import { SqlEditor } from "./SqlEditor";
 import { usePractice } from "./usePractice";
 
 /**
- * A lesson's practice exercise: an SQL editor against the course's sandbox,
- * the raw result (or Postgres' own error text) of the last run, the check
- * query's verdict when the lesson has one, and a way to reset the sandbox
- * back to its seeded state.
+ * A lesson's practice exercise, in whichever kind the course declared.
  *
  * Rendered whenever the lesson carries a `practice` assignment at all —
  * not gated on `completionMode` the way `QuizView` is gated on `"quiz"`.
- * A practice without a check (`completionMode: "manual"`) still needs this
- * UI to let the learner run SQL; `LessonView`'s existing "mark as done"
- * button (unchanged by this task) is what completes that kind of lesson,
- * exactly as task-009's report describes ("Задание без check —
- * самоотметка... это уже закрывает существующий .../complete").
+ * A `sql` practice with no grading mechanic (`completionMode: "manual"`)
+ * still needs this UI to let the learner run SQL; `LessonView`'s "mark as
+ * done" button is what completes that kind of lesson.
+ *
+ * The two kinds share the prompt and nothing else — a different input, a
+ * different endpoint, a different verdict shape, and one of them has no
+ * sandbox at all — so this dispatches instead of branching inside one
+ * component.
  */
 export function PracticeView({
   courseId,
@@ -27,6 +28,27 @@ export function PracticeView({
   courseId: string;
   lessonId: string;
   practice: PublicPractice;
+}) {
+  if (practice.type === "answer") {
+    return <AnswerForm courseId={courseId} lessonId={lessonId} practice={practice} />;
+  }
+  return <SqlPracticeView courseId={courseId} lessonId={lessonId} practice={practice} />;
+}
+
+/**
+ * The SQL kind: an editor against the course's sandbox, the raw result (or
+ * Postgres' own error text) of the last run, the verdict of each grading
+ * mechanic the lesson declares, and a way to reset the sandbox back to its
+ * seeded state.
+ */
+function SqlPracticeView({
+  courseId,
+  lessonId,
+  practice,
+}: {
+  courseId: string;
+  lessonId: string;
+  practice: PublicSqlPractice;
 }) {
   const [sql, setSql] = useState("");
   const { execution, isRunning, runError, run, isResetting, resetError, resetSucceeded, reset } = usePractice(
@@ -51,15 +73,22 @@ export function PracticeView({
           {execution.ok
             ? execution.result !== undefined && <ResultTable result={execution.result} />
             : execution.error !== undefined && <PracticeSqlErrorView error={execution.error} />}
+          {/* One line per grading mechanic the lesson declares. A lesson
+           * carrying both is only completed when both pass
+           * (routes/practice.ts), so both verdicts are shown — collapsing
+           * them into a single line would hide which half is missing. */}
           {execution.check.present && (
-            <p
-              className={
-                execution.check.passed === true
-                  ? "practice-verdict practice-verdict--passed"
-                  : "practice-verdict practice-verdict--failed"
-              }
-            >
+            <p className={verdictClassName(execution.check.passed)}>
               {execution.check.passed === true ? "Проверка пройдена." : "Проверка не пройдена."}
+            </p>
+          )}
+          {execution.expected.present && execution.expected.passed !== undefined && (
+            <p className={verdictClassName(execution.expected.passed)}>
+              {execution.expected.passed
+                ? "Результат совпал с ожидаемым."
+                : `Результат не совпал с ожидаемым${
+                    execution.expected.reason === undefined ? "" : `: ${execution.expected.reason}`
+                  }.`}
             </p>
           )}
         </div>
@@ -87,6 +116,13 @@ export function PracticeView({
       </div>
     </section>
   );
+}
+
+/** Shared by both verdict lines. `passed` is `undefined` only for a
+ * mechanic that did not run (the learner's SQL errored), which the callers
+ * already filter out — the failed styling is the safe default. */
+function verdictClassName(passed: boolean | undefined): string {
+  return passed === true ? "practice-verdict practice-verdict--passed" : "practice-verdict practice-verdict--failed";
 }
 
 /** Postgres' own error, verbatim — see `PracticeSqlError`'s doc comment for

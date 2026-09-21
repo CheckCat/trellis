@@ -104,11 +104,59 @@
     "practice": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sandbox", "prompt"],
+      "required": ["prompt"],
+      "description": "A practice assignment. `type` selects the mechanic: `sql` (the default when absent) runs the learner's SQL in a course sandbox and grades it with `check` (database state -> one boolean) and/or `expected` (the learner's result set vs a reference query's); `answer` asks the learner to type in the results they got elsewhere (Excel, a BI dashboard) and compares them field by field with `fields[].expected`. WHICH properties are legal depends on `type` — that rule lives in validate.ts, not here, so a course author gets one named error instead of a wall of oneOf branch failures.",
+      "dependentRequired": {
+        "ordered": ["expected"]
+      },
       "properties": {
-        "sandbox": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["sql", "answer"],
+          "description": "Absent means `sql` — courses written before the second mechanic existed stay valid unchanged."
+        },
         "prompt": { "type": "string", "minLength": 1, "pattern": "\\S" },
-        "check": { "type": "string", "minLength": 1 }
+        "sandbox": { "type": "string", "minLength": 1 },
+        "check": { "type": "string", "minLength": 1 },
+        "expected": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "type: sql only. Reference SQL query. The core runs it under the sandbox role in a read-only transaction and compares its result set with the learner's. Never sent to the client."
+        },
+        "ordered": {
+          "type": "boolean",
+          "description": "type: sql only. Does row ORDER matter when comparing against `expected`? Defaults to false (multiset comparison). Only allowed together with `expected` — see dependentRequired above."
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "description": "type: answer only. The values the learner is asked to report, in the order they are shown.",
+          "items": { "$ref": "#/$defs/answerField" }
+        }
+      }
+    },
+    "answerField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "kind", "expected"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable field id — the key the client submits its answer under. Unique within the assignment (checked in validate.ts). Same id-safe character set as module/lesson ids.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "label": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "kind": { "type": "string", "enum": ["number", "text"] },
+        "expected": {
+          "description": "The right answer. Which of the two types is correct depends on the sibling `kind`, so that agreement (and the non-blank rule for text) is checked in validate.ts, where the mismatch can be named instead of reported as \"matched no branch\". Never sent to the client.",
+          "anyOf": [{ "type": "number" }, { "type": "string" }]
+        },
+        "tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "kind: number only. Absolute tolerance; 0 (the default) means exact equality."
+        }
       }
     }
   }

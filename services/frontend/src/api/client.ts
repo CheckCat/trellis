@@ -7,6 +7,7 @@ import type {
   ImportResult,
   LessonCompletionResponse,
   LessonDetailResponse,
+  PracticeAnswerResponse,
   PracticeRunResponse,
   ProgressExportFile,
   QuizAnswerResponse,
@@ -104,6 +105,23 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sql }),
+      },
+    ),
+
+  submitPracticeAnswers: (
+    courseId: string,
+    lessonId: string,
+    answers: Record<string, string>,
+  ): Promise<PracticeAnswerResponse> =>
+    apiFetch<PracticeAnswerResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/practice/answer`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Values go over as typed, never pre-parsed: reading "18,5" as a
+        // number is the backend's rule (practice/answer.ts), and doing it
+        // here too would be a second implementation of it, free to drift.
+        body: JSON.stringify({ answers }),
       },
     ),
 

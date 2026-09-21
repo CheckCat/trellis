@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 
-import type { Course, CourseLesson } from "../courses/types.js";
+import type { Course, CourseLesson, CoursePractice } from "../courses/types.js";
 
 /**
  * Course content API — read-only, backed by `fastify.courses` (the in-memory
@@ -128,7 +128,7 @@ function toCourseDetailResponse(course: Course) {
 
 /**
  * Maps a `CourseLesson` to the public lesson shape. This is the one place
- * that must never let a quiz's correct answer or a practice's `check` query
+ * that must never let a quiz's correct answer or a practice's own answers
  * leak out: quiz options are rebuilt as `{ id, text }` pairs only — dropping
  * `correct` on every option, not just the true one, and dropping
  * `explanation` on every option too. Stripping `correct` alone would still
@@ -136,6 +136,12 @@ function toCourseDetailResponse(course: Course) {
  * `explanation` required on every *incorrect* option and optional on the
  * correct one, so "which option has no explanation" would out it) — see
  * courses/validate.ts's quiz rules and the task-006 brief.
+ *
+ * The same rebuild-don't-strip rule applies to practice: whichever kind it
+ * is, the response is built field by field from the few things a client
+ * needs to RENDER the assignment. `check`/`expected`/`ordered` and an
+ * answer field's `expected`/`tolerance` are never named here, so a new
+ * answer-bearing manifest property cannot start leaking by default.
  */
 function toLessonResponse(lesson: CourseLesson) {
   return {
@@ -149,11 +155,19 @@ function toLessonResponse(lesson: CourseLesson) {
             question: lesson.quiz.question,
             options: lesson.quiz.options.map((option) => ({ id: option.id, text: option.text })),
           },
-    practice:
-      lesson.practice === undefined
-        ? undefined
-        : { sandbox: lesson.practice.sandbox, prompt: lesson.practice.prompt },
+    practice: lesson.practice === undefined ? undefined : toPublicPractice(lesson.practice),
   };
+}
+
+function toPublicPractice(practice: CoursePractice) {
+  if (practice.type === "answer") {
+    return {
+      type: practice.type,
+      prompt: practice.prompt,
+      fields: practice.fields.map((field) => ({ id: field.id, label: field.label, kind: field.kind })),
+    };
+  }
+  return { type: practice.type, prompt: practice.prompt, sandbox: practice.sandbox };
 }
 
 // --- JSON Schemas (plain JSON Schema, no TypeBox — see task-003 report's
@@ -263,13 +277,35 @@ const publicQuizSchema = {
   },
 } as const;
 
+/** One input of an `answer` assignment, as the client needs to render it:
+ * what to call it and what sort of value to ask for. `expected` and
+ * `tolerance` are the answer and stay on the server — same rule as a quiz
+ * option's `correct` and a practice's `check`. */
+const publicAnswerFieldSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "label", "kind"],
+  properties: {
+    id: { type: "string" },
+    label: { type: "string" },
+    kind: { type: "string", enum: ["number", "text"] },
+  },
+} as const;
+
+/** One schema for both kinds, `type` telling them apart: fast-json-stringify
+ * has no discriminated-union support, and `additionalProperties: false`
+ * already guarantees nothing beyond these fields is serialized either way.
+ * `sandbox` is present only for `sql`, `fields` only for `answer` — see
+ * `toLessonResponse`. */
 const publicPracticeSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["sandbox", "prompt"],
+  required: ["type", "prompt"],
   properties: {
-    sandbox: { type: "string" },
+    type: { type: "string", enum: ["sql", "answer"] },
     prompt: { type: "string" },
+    sandbox: { type: "string" },
+    fields: { type: "array", items: publicAnswerFieldSchema },
   },
 } as const;
 

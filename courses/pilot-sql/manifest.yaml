@@ -1,5 +1,5 @@
 id: pilot-sql
-version: 1.0.0
+version: 1.2.0
 title: "Основы SQL: работа с таблицей книг"
 description: "Пилотный курс для обкатки платформы: SELECT, WHERE и изменение данных на примере небольшой таблицы книг."
 sandboxes:
@@ -35,6 +35,13 @@ modules:
         practice:
           sandbox: main
           prompt: "Напишите запрос, который выбирает название (title) и автора (author) всех книг, которые сейчас есть в наличии (in_stock = true)."
+          # SELECT ничего не меняет в базе, поэтому check-запрос по
+          # состоянию здесь бесполезен: задание проверяется сравнением
+          # результата с эталонным запросом. Порядок строк не задан
+          # условием — ordered: false (значение по умолчанию, выписано
+          # явно, потому что это часть условия задания).
+          expected: "select title, author from books where in_stock = true"
+          ordered: false
   - id: filtering
     title: "Фильтрация и изменение данных"
     lessons:
@@ -67,6 +74,40 @@ modules:
           sandbox: main
           prompt: "Отметьте книгу с id = 1 («Война и мир») как отсутствующую в продаже: обновите in_stock на false."
           check: "select count(*) = 1 as ok from books where id = 1 and in_stock = false"
+      - id: practice-by-year
+        title: "Практика: книги по году издания"
+        content: lessons/practice-by-year.md
+        practice:
+          sandbox: main
+          prompt: "Напишите запрос, который выбирает название (title) и год издания (published_year) всех книг, отсортированные по году издания от самой старой к самой новой."
+          # Порядок строк здесь — часть правильного ответа (иначе ORDER BY
+          # в задании был бы декоративным), поэтому ordered: true.
+          expected: "select title, published_year from books order by published_year"
+          ordered: true
+      - id: self-check-books
+        title: "Проверьте себя: что вы знаете о таблице books"
+        content: lessons/self-check-books.md
+        practice:
+          # Задание без песочницы: ученик считает сам (где угодно) и
+          # вписывает результат, движок сверяет его с эталоном. Проверяется
+          # результат, не процесс.
+          type: answer
+          prompt: "Впишите значения, которые у вас получились по таблице books из seed курса."
+          fields:
+            - id: in-stock-count
+              label: "Сколько книг сейчас в наличии (in_stock = true)?"
+              kind: number
+              expected: 3
+            - id: oldest-title
+              label: "Название самой старой книги (наименьший published_year)"
+              kind: text
+              expected: "Евгений Онегин"
+            - id: average-year
+              label: "Средний год издания всех книг"
+              kind: number
+              # (1869 + 1866 + 1862 + 1833 + 1842) / 5 = 1854.4
+              expected: 1854.4
+              tolerance: 0.5
       - id: wrap-up
         title: "Что дальше"
         content: lessons/wrap-up.md

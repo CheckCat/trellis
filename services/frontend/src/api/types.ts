@@ -70,10 +70,33 @@ export interface PublicQuiz {
   options: PublicQuizOption[];
 }
 
-export interface PublicPractice {
-  sandbox: string;
+/** A practice assignment done in the course's SQL sandbox. */
+export interface PublicSqlPractice {
+  type: "sql";
   prompt: string;
+  sandbox: string;
 }
+
+/** One value an `answer` assignment asks the learner to report. `kind`
+ * decides how the input behaves; the right answer stays on the server. */
+export interface PublicAnswerField {
+  id: string;
+  label: string;
+  kind: "number" | "text";
+}
+
+/** A practice assignment done outside the platform (Excel, a BI
+ * dashboard): the learner types in the values they got, and the backend
+ * compares them with the course's own. No sandbox is involved. */
+export interface PublicAnswerPractice {
+  type: "answer";
+  prompt: string;
+  fields: PublicAnswerField[];
+}
+
+/** Discriminated on `type` — a lesson carries exactly one kind, and each
+ * has its own submit endpoint (`practice/run` vs `practice/answer`). */
+export type PublicPractice = PublicSqlPractice | PublicAnswerPractice;
 
 /** GET /courses/:courseId/lessons/:lessonId — routes/courses.ts,
  * `lessonResponseSchema`. `content` is the lesson's Markdown body (may be
@@ -223,12 +246,30 @@ export interface PracticeSqlError {
 }
 
 /** Whether the lesson's check query ran and, if so, what it said
- * (`practiceCheckSchema`). `present: false` means the lesson has no check —
- * self-marked via the existing "mark as done" control, not this. `passed`
- * is only present when `present` is `true`. */
+ * (`practiceCheckSchema`). `present: false` means the lesson has no check;
+ * `passed` is only present when `present` is `true`. A lesson is
+ * self-marked (the "mark as done" control) only when neither `check` nor
+ * `expected` is present. */
 export interface PracticeCheckResult {
   present: boolean;
   passed?: boolean;
+}
+
+/**
+ * The other grading mechanic (`practiceExpectedSchema`): the learner's
+ * result set compared with the course's reference query. `present: false`
+ * means the lesson declares no reference query.
+ *
+ * `passed` and `reason` are both absent — not `false` — when the learner's
+ * own SQL errored: there were no rows to compare, so the comparison never
+ * ran. `reason` explains a failure in counts and positions only
+ * («ожидалось строк: 19, получено: 22»); the reference query itself never
+ * reaches the client.
+ */
+export interface PracticeExpectedResult {
+  present: boolean;
+  passed?: boolean;
+  reason?: string;
 }
 
 /** POST /courses/:courseId/lessons/:lessonId/practice/run —
@@ -245,6 +286,20 @@ export interface PracticeRunResponse {
   error?: PracticeSqlError;
   durationMs: number;
   check: PracticeCheckResult;
+  expected: PracticeExpectedResult;
+  lesson: LessonProgress;
+  course: LessonCompletionResponse["course"];
+}
+
+/** POST /courses/:courseId/lessons/:lessonId/practice/answer —
+ * routes/practice.ts's `practiceAnswerResponseSchema`. `fields` carries one
+ * entry per DECLARED field (keyed by field id), including fields the
+ * learner left blank — a blank is marked wrong, not omitted. `ok` is true
+ * only when every field is correct, which is also what completes the
+ * lesson. Nothing here says what the right answer was. */
+export interface PracticeAnswerResponse {
+  ok: boolean;
+  fields: Record<string, { correct: boolean }>;
   lesson: LessonProgress;
   course: LessonCompletionResponse["course"];
 }

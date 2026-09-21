@@ -114,7 +114,7 @@ void test("GET /courses/:courseId responds 404 for a rejected (invalid) course i
   });
 });
 
-void test("GET /courses/:courseId/lessons/:lessonId never leaks quiz answers or the practice check query", async () => {
+void test("GET /courses/:courseId/lessons/:lessonId never leaks quiz answers or the practice grading queries", async () => {
   await withApp(async (app) => {
     const response = await app.inject({ method: "GET", url: "/courses/good-course/lessons/first-lesson" });
     assert.equal(response.statusCode, 200);
@@ -130,7 +130,7 @@ void test("GET /courses/:courseId/lessons/:lessonId never leaks quiz answers or 
         { id: "b", text: "5" },
       ],
     });
-    assert.deepEqual(body.practice, { sandbox: "main", prompt: "Do the thing." });
+    assert.deepEqual(body.practice, { type: "sql", sandbox: "main", prompt: "Do the thing." });
 
     // Belt and braces on top of the deepEqual shape checks above: the raw
     // response text must not contain the answer-bearing keys at all.
@@ -138,6 +138,11 @@ void test("GET /courses/:courseId/lessons/:lessonId never leaks quiz answers or 
     assert.ok(!bodyText.includes("explanation"), "response must not contain an `explanation` field");
     assert.ok(!bodyText.includes("check"), "response must not contain the practice `check` query");
     assert.ok(!bodyText.includes("select count"), "response must not contain the check query's SQL");
+    // The reference query is the answer to the exercise just as much as
+    // the check is — and so is whether its row order matters.
+    assert.ok(!bodyText.includes("expected"), "response must not contain the practice `expected` query");
+    assert.ok(!bodyText.includes("order by"), "response must not contain the expected query's SQL");
+    assert.ok(!bodyText.includes("ordered"), "response must not reveal whether row order is graded");
   });
 });
 
