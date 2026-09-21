@@ -92,7 +92,12 @@ export function validManifestYaml(courseId = "fixture-course", lessonId = "first
     `        practice:\n` +
     `          sandbox: main\n` +
     `          prompt: Do the thing.\n` +
-    `          check: "select count(*) = 1 from t"\n`
+    `          check: "select count(*) = 1 from t"\n` +
+    // Both grading mechanics on one lesson: the fixture is what the
+    // "nothing answer-bearing leaks out" tests are checked against, so it
+    // has to carry an `expected` too.
+    `          expected: "select id from t order by id"\n` +
+    `          ordered: true\n`
   );
 }
 

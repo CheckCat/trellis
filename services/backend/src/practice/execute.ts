@@ -79,8 +79,32 @@ export interface PracticeSqlError {
   readonly where?: string;
 }
 
+/**
+ * The attempt's result as the GRADER sees it, which is not the same thing
+ * as what the client sees: `MAX_RESULT_ROWS` is a display cap ("how much
+ * fits in a grid"), and grading a `SELECT` against a reference query
+ * (practice/compare.ts) must not be decided on a truncated result.
+ *
+ * So this carries its own, much larger cap (`gradingRows`, set by the
+ * caller) plus `totalRows` — the untruncated count — so a comparison can
+ * reject a mismatch on size alone without ever materializing a runaway
+ * result set beyond that cap.
+ */
+export interface PracticeGradingRows {
+  readonly rows: readonly (readonly (string | null)[])[];
+  /** How many rows the statement really returned, whatever `rows` holds. */
+  readonly totalRows: number;
+}
+
 export type PracticeExecution =
-  | { readonly ok: true; readonly result: PracticeResultSet; readonly durationMs: number }
+  | {
+      readonly ok: true;
+      readonly result: PracticeResultSet;
+      /** Present only when `options.gradingRows` asked for it. Never part
+       * of any API response — the client gets `result` (see above). */
+      readonly grading?: PracticeGradingRows;
+      readonly durationMs: number;
+    }
   | { readonly ok: false; readonly error: PracticeSqlError; readonly durationMs: number };
 
 export interface ExecutePracticeSqlOptions {
@@ -88,6 +112,10 @@ export interface ExecutePracticeSqlOptions {
   /** Injectable monotonic-ish clock, so a test can assert on `durationMs`
    * without sleeping. */
   readonly now?: () => number;
+  /** When set, the execution also carries up to this many rows for
+   * server-side grading — see `PracticeGradingRows`. Omitted (the default)
+   * means nothing grades this attempt's rows, and none are retained. */
+  readonly gradingRows?: number;
 }
 
 /**
@@ -116,7 +144,13 @@ export async function executePracticeSql(
     // which is what lets a user submit several statements at once the way
     // any SQL client would.
     const raw: unknown = await client.query({ text: sql, rowMode: "array" });
-    return { ok: true, result: toResultSet(raw, maxRows), durationMs: clock() - startedAt };
+    const grading = options.gradingRows === undefined ? undefined : toGradingRows(raw, options.gradingRows);
+    return {
+      ok: true,
+      result: toResultSet(raw, maxRows),
+      ...(grading === undefined ? {} : { grading }),
+      durationMs: clock() - startedAt,
+    };
   } catch (err) {
     // `DatabaseError` is `pg`'s own class for "the server answered with an
     // ErrorResponse" — a real verdict on the submitted statement (syntax
@@ -252,9 +286,7 @@ export function formatCell(value: unknown): string | null {
  * normalized here; everything is read defensively, because this is the one
  * place where a driver-shape surprise would otherwise crash a route. */
 function toResultSet(raw: unknown, maxRows: number): PracticeResultSet {
-  const results = Array.isArray(raw) ? (raw as unknown[]) : [raw];
-  const last = results.length === 0 ? undefined : results[results.length - 1];
-  const record = isRecord(last) ? last : {};
+  const { record, statementCount } = lastStatement(raw);
 
   const fields = Array.isArray(record.fields) ? (record.fields as unknown[]) : [];
   const columns: PracticeColumn[] = fields.map((field, index) => {
@@ -265,19 +297,37 @@ function toResultSet(raw: unknown, maxRows: number): PracticeResultSet {
     };
   });
 
-  const rawRows = Array.isArray(record.rows) ? (record.rows as unknown[]) : [];
-  const rows = rawRows
-    .slice(0, maxRows)
-    .map((row) => (Array.isArray(row) ? (row as unknown[]) : [row]).map(formatCell));
+  const rawRows = rowsOf(record);
 
   return {
     ...(typeof record.command === "string" ? { command: record.command } : {}),
     rowCount: typeof record.rowCount === "number" ? record.rowCount : null,
     columns,
-    rows,
+    rows: formatRows(rawRows, maxRows),
     truncated: rawRows.length > maxRows,
-    statementCount: Math.max(results.length, 1),
+    statementCount,
   };
+}
+
+/** The same last-statement result, read for grading instead of display —
+ * a bigger cap and the true row count (see `PracticeGradingRows`). */
+function toGradingRows(raw: unknown, cap: number): PracticeGradingRows {
+  const rawRows = rowsOf(lastStatement(raw).record);
+  return { rows: formatRows(rawRows, cap), totalRows: rawRows.length };
+}
+
+function lastStatement(raw: unknown): { record: Record<string, unknown>; statementCount: number } {
+  const results = Array.isArray(raw) ? (raw as unknown[]) : [raw];
+  const last = results.length === 0 ? undefined : results[results.length - 1];
+  return { record: isRecord(last) ? last : {}, statementCount: Math.max(results.length, 1) };
+}
+
+function rowsOf(record: Record<string, unknown>): unknown[] {
+  return Array.isArray(record.rows) ? (record.rows as unknown[]) : [];
+}
+
+function formatRows(rawRows: readonly unknown[], cap: number): (string | null)[][] {
+  return rawRows.slice(0, cap).map((row) => (Array.isArray(row) ? (row as unknown[]) : [row]).map(formatCell));
 }
 
 function optionalText(value: unknown): string | undefined {

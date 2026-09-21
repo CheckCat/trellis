@@ -15,7 +15,7 @@ flowchart TB
         end
 
         backend -->|роль приложения| core
-        backend -->|sandbox-роль: SQL пользователя, seed, check| sandbox
+        backend -->|sandbox-роль: SQL пользователя, seed, check, expected| sandbox
     end
 
     courses[/папка courses/: manifest.yaml + Markdown/] -->|валидация по схеме при старте| backend
@@ -32,5 +32,5 @@ flowchart TB
 ## Границы (см. `.mvp/invariants.md`)
 
 - frontend никогда не подключается к postgres/песочнице напрямую — только через backend.
-- Всё, что исполняется в песочнице (запросы пользователя, seed, check), идёт от sandbox-роли.
+- Всё, что исполняется в песочнице (запросы пользователя, seed, check- и expected-запросы курса), идёт от sandbox-роли.
 - Ядро не содержит знаний о конкретном курсе; песочница — интерфейс, Postgres — первая реализация.

@@ -234,3 +234,37 @@ void test("resetSandboxSession discards the attempt's session state, rollback fi
   });
   assert.deepEqual(scripted.texts(), ["rollback", "discard all"]);
 });
+
+void test("executePracticeSql retains grading rows only when asked, past the display cap", async () => {
+  const rows = Array.from({ length: MAX_RESULT_ROWS + 5 }, (_, index) => [index]);
+  const answer = (): ScriptedAnswer => resultSet({ columns: ["n"], rows, rowCount: rows.length });
+
+  // Nothing grades this attempt: no rows are kept beyond the grid.
+  const ungraded = await execute(answer);
+  assert.ok(ungraded.execution.ok);
+  assert.equal(ungraded.execution.grading, undefined);
+
+  // With a grading cap, the full result is available to the comparator
+  // while the client's grid stays capped at MAX_RESULT_ROWS.
+  const graded = await execute(answer, "select n from t", { gradingRows: 1000 });
+  assert.ok(graded.execution.ok);
+  assert.equal(graded.execution.result.rows.length, MAX_RESULT_ROWS);
+  assert.equal(graded.execution.grading?.rows.length, MAX_RESULT_ROWS + 5);
+  assert.equal(graded.execution.grading?.totalRows, MAX_RESULT_ROWS + 5);
+  assert.deepEqual(graded.execution.grading?.rows[MAX_RESULT_ROWS + 4], [String(MAX_RESULT_ROWS + 4)]);
+});
+
+void test("executePracticeSql reports the true row count even when the grading cap truncates", async () => {
+  const rows = Array.from({ length: 20 }, (_, index) => [index]);
+  const { execution } = await execute(
+    () => resultSet({ columns: ["n"], rows, rowCount: rows.length }),
+    "select n from t",
+    { gradingRows: 5 },
+  );
+
+  assert.ok(execution.ok);
+  // `totalRows` is what a comparison rejects an oversized result on — it
+  // must not be the number of rows that happened to be kept.
+  assert.equal(execution.grading?.rows.length, 5);
+  assert.equal(execution.grading?.totalRows, 20);
+});

@@ -53,10 +53,10 @@ export default async function progressRoutes(fastify: FastifyInstance): Promise<
         return sendLessonNotFound(reply, course.id, request.params.lessonId);
       }
 
-      // A lesson whose completion is earned (quiz answer, practice check)
-      // must not also be claimable by hand — that would make the quiz and
-      // the check decorative. The 409 names the gate so the client can say
-      // what to do instead.
+      // A lesson whose completion is earned (quiz answer, practice
+      // grading) must not also be claimable by hand — that would make the
+      // quiz and the grading mechanics decorative. The 409 names the gate
+      // so the client can say what to do instead.
       const mode = lessonCompletionMode(location.lesson);
       if (mode !== "manual") {
         return reply.code(409).send({
@@ -64,7 +64,7 @@ export default async function progressRoutes(fastify: FastifyInstance): Promise<
           message:
             mode === "quiz"
               ? `Lesson "${location.lesson.id}" is completed by answering its quiz correctly, not by marking it done.`
-              : `Lesson "${location.lesson.id}" is completed by passing its practice check, not by marking it done.`,
+              : `Lesson "${location.lesson.id}" is completed by passing its practice assignment, not by marking it done.`,
         });
       }
 
