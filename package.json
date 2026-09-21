@@ -9,13 +9,14 @@
     "node": ">=22"
   },
   "scripts": {
-    "lint": "npm run lint --workspaces --if-present && eslint tests",
+    "start": "node scripts/start.mjs",
+    "lint": "npm run lint --workspaces --if-present && eslint tests scripts",
     "build": "npm run build --workspaces --if-present && tsc -p tests/e2e/tsconfig.json",
     "capabilities:write": "npm run capabilities:write --workspace @trellis/backend",
     "capabilities:check": "npm run capabilities:check --workspace @trellis/backend",
     "course:lint": "npm run course:lint --workspace @trellis/backend --",
     "pretest": "node scripts/check-text-sources.mjs",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test scripts/*.test.mjs",
     "pretest:e2e": "tsc -p tests/e2e/tsconfig.json",
     "test:e2e": "node --test 'tests/e2e/dist/**/*.test.js'"
   },
@@ -23,6 +24,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.2",
     "eslint": "^10.10.0",
+    "globals": "^16.5.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.0"
   }

@@ -18,18 +18,27 @@
     Привести пароли ролей Postgres в базе к тем, что сейчас записаны в
     .env. Нужно ровно в одном случае: пароль в .env поменяли ПОСЛЕ первого
     запуска, и ядро (backend) больше не может подключиться к базе. Обычный
-    запуск пароли не трогает. Подробности — docs/run-windows.md.
+    запуск пароли не трогает. Подробности — docs/run.md.
 
 .EXAMPLE
-    .\start.ps1
+    .\scripts\start.ps1
 
 .EXAMPLE
-    .\start.ps1 -SyncPasswords
+    .\scripts\start.ps1 -SyncPasswords
 #>
 [CmdletBinding()]
 param(
     [switch]$SyncPasswords
 )
+
+# ПРАВИШЬ ЗДЕСЬ — ПОПРАВЬ И В scripts/start.sh (и наоборот). Держать одну
+# реализацию не выходит: скрипт работает до того, как поднято хоть что-то,
+# и не может полагаться ни на что, кроме того, что уже стоит в системе, —
+# а это PowerShell на Windows и sh на всём остальном. Требовать ради самого
+# лаунчера ещё и Node нельзя: пользователю ставится только Docker Desktop
+# (сама платформа Node не требует — он внутри образов).
+# Чтобы расхождение не прошло тихо, значения, которые обязаны совпадать,
+# сверяет тест scripts/launcher-parity.test.mjs.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -389,7 +398,7 @@ function Show-FailureDiagnosis {
             $hints.Add('Так бывает, если пароль в .env поменяли ПОСЛЕ первого запуска: база запоминает пароли') | Out-Null
             $hints.Add('один раз, при самом первом старте, и сама по себе их больше не перечитывает.') | Out-Null
             $hints.Add('') | Out-Null
-            $hints.Add('Починить без потери прогресса:  .\start.ps1 -SyncPasswords') | Out-Null
+            $hints.Add('Починить без потери прогресса:  .\scripts\start.ps1 -SyncPasswords') | Out-Null
             $hints.Add('(эта команда приводит пароли ролей в базе к тем, что сейчас в .env)') | Out-Null
         } elseif ($logs -match 'ECONNREFUSED|getaddrinfo|ENOTFOUND|connection refused') {
             $hints.Add('Ядро не достучалось до базы по сети Docker.') | Out-Null
@@ -465,18 +474,21 @@ $totalSteps = 5
 # кликом из любого места, текущий каталог cmd.exe при этом произвольный.
 if ([string]::IsNullOrEmpty($PSScriptRoot)) {
     Stop-WithProblem -Title 'не удалось определить папку скрипта' -Hints @(
-        'Запусти скрипт как файл: .\start.ps1 (а не построчно из консоли).'
+        'Запусти скрипт как файл: .\scripts\start.ps1 (а не построчно из консоли).'
     )
 }
-Set-Location -LiteralPath $PSScriptRoot
 
-$composeFile = Join-Path $PSScriptRoot 'docker-compose.yml'
+# Скрипт лежит в scripts/, а работать должен из корня проекта: docker
+# compose ищет docker-compose.yml и .env в текущем каталоге.
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$composeFile = Join-Path $projectRoot 'docker-compose.yml'
 if (-not (Test-Path -LiteralPath $composeFile)) {
-    Stop-WithProblem -Title "рядом со скриптом нет docker-compose.yml" -Hints @(
-        "Скрипт должен лежать в корне проекта Trellis, рядом с docker-compose.yml.",
-        "Сейчас он лежит в: $PSScriptRoot"
+    Stop-WithProblem -Title "в корне проекта нет docker-compose.yml" -Hints @(
+        "Скрипт должен лежать в папке scripts/ проекта Trellis, рядом с которой есть docker-compose.yml.",
+        "Сейчас корнем считается: $projectRoot"
     )
 }
+Set-Location -LiteralPath $projectRoot
 
 # --- Шаг 1: Docker ---------------------------------------------------------
 
@@ -577,8 +589,8 @@ if (Test-DockerDaemon) {
 
 Write-Step -Number 2 -Total $totalSteps -Text 'Проверяю настройки (файл .env)'
 
-$envPath = Join-Path $PSScriptRoot '.env'
-$envExamplePath = Join-Path $PSScriptRoot '.env.example'
+$envPath = Join-Path $projectRoot '.env'
+$envExamplePath = Join-Path $projectRoot '.env.example'
 
 if (-not (Test-Path -LiteralPath $envPath)) {
     if (-not (Test-Path -LiteralPath $envExamplePath)) {
@@ -590,7 +602,7 @@ if (-not (Test-Path -LiteralPath $envPath)) {
     New-EnvFileFromExample -ExamplePath $envExamplePath -TargetPath $envPath
     Write-Ok 'Создан файл .env со случайными паролями.'
     Write-Note 'Эти пароли база запомнит при первом запуске. Менять их потом можно только'
-    Write-Note 'вместе с командой .\start.ps1 -SyncPasswords — см. docs/run-windows.md.'
+    Write-Note 'вместе с командой .\scripts\start.ps1 -SyncPasswords — см. docs/run.md.'
 }
 
 $envMap = Read-EnvFile -Path $envPath

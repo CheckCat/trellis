@@ -7,7 +7,7 @@
 - backend: Fastify (Node.js, TypeScript) — `services/backend`
 - frontend: React SPA + CodeMirror (SQL-редактор практики) — `services/frontend`
 - db: PostgreSQL (именованный volume; песочница практики — отдельная схема/роль в том же инстансе)
-- deploy: docker-compose, только `localhost`; пользовательский запуск — `.ps1`/`.bat` (Windows)
+- deploy: docker-compose, только `localhost`; пользовательский запуск — `scripts/start.ps1`+`.bat` (Windows) и `scripts/start.sh` (macOS/Linux), кроссплатформенный диспетчер — `npm start`
 - layout: npm workspaces в корне; root-скрипты гоняют все workspace-пакеты
 
 ## Команды
@@ -34,7 +34,9 @@ npm run capabilities:write      # -> docs/contracts/capabilities.json (комм�
 npm run course:lint -- courses/pilot-sql
 ```
 
-Запуск стека для разработки: `docker compose up` (отдельного dev-скрипта нет; `.ps1`/`.bat` — только пользовательская упаковка).
+Запуск стека: `npm start` (диспетчер, выбирает лаунчер по системе) или напрямую `docker compose up`.
+
+Лаунчеров два и это осознанно: скрипт запуска работает до того, как поднято хоть что-то, и не может полагаться ни на что, кроме встроенного в систему (PowerShell на Windows, sh на остальных). Node ради него требовать нельзя — пользователю ставится только Docker Desktop, платформе Node не нужен (он внутри образов). Правишь один — правь и второй; совпадение таймаутов, шагов, имён сервисов и ключей `.env` сторожит `scripts/launcher-parity.test.mjs` в обычном `npm test`.
 
 Сквозной smoke-тест собранного стека — отдельной командой, в `npm run test` и в CI он не входит (поднимает docker-compose-стек, нужен Docker Compose >= 2.24):
 
