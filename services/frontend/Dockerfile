@@ -1,4 +1,13 @@
-# syntax=docker/dockerfile:1
+# Директивы `# syntax=docker/dockerfile:1` здесь намеренно НЕТ.
+#
+# Она заставляет BuildKit на каждой сборке ходить в Docker Hub за образом
+# frontend'а (тег `:1` подвижный, поэтому он перепроверяется), и на
+# нестабильной сети сборка падает с «failed to resolve source metadata for
+# docker.io/docker/dockerfile:1» ещё до того, как прочитан хоть один слой.
+# За сессию это уронило сквозной тест трижды. Ничего из того, что требует
+# внешнего frontend'а (RUN --mount, heredoc'и, COPY --parents/--link),
+# здесь не используется — встроенного в BuildKit достаточно, а у локального
+# приложения на одну зависимость от внешнего сервиса меньше.
 #
 # Build context is the repository root (see docker-compose.yml:
 # `frontend.build.context: .`, `frontend.build.dockerfile:

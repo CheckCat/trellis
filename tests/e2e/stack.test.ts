@@ -23,9 +23,10 @@
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
 
-import { startStack } from "./helpers/compose.js";
+import { repoRoot, startStack } from "./helpers/compose.js";
 
 /**
  * Что тест знает о пилотном контент-пакете (courses/pilot-sql, задача 017).
@@ -250,7 +251,7 @@ void test("поднятый стек проходит сквозной поль�
       // Если бы стек отдавал другое, читать файл вместо запуска движка было
       // бы нельзя.
       const committed: unknown = JSON.parse(
-        await readFile(new URL("../../docs/contracts/capabilities.json", import.meta.url), "utf8"),
+        await readFile(join(repoRoot(), "docs/contracts/capabilities.json"), "utf8"),
       );
       assert.deepEqual(capabilities.body as unknown, committed);
     });

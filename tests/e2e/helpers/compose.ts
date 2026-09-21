@@ -84,11 +84,18 @@ export async function startStack(): Promise<StackHandle> {
     { stream: true },
   );
   if (started.code !== 0) {
+    // Журнал healthcheck'ов — ПЕРЕД логами сервисов. `up --wait` падает
+    // строкой вида «container ... is unhealthy», которая не говорит, какая
+    // именно проверка не прошла и что она увидела; а логи сервиса на это
+    // не отвечают вовсе, если сервис в порядке, а не отвечает тот, к кому
+    // он ходит (ровно случай frontend -> /api/health -> backend). Один
+    // раз уже стоило долгого разбирательства.
+    const health = await describeHealth();
     const logs = await compose(["logs", "--no-color", "--tail", "80"]);
     await tearDown();
     throw new Error(
       `Не удалось поднять стек ${PROJECT_NAME} (docker compose up завершился с кодом ${started.code}).\n` +
-        `${started.stderr.trim()}\n--- логи сервисов ---\n${logs.stdout.trim()}`,
+        `${started.stderr.trim()}\n--- healthcheck'и ---\n${health}\n--- логи сервисов ---\n${logs.stdout.trim()}`,
     );
   }
 
@@ -113,6 +120,28 @@ export async function startStack(): Promise<StackHandle> {
       await tearDown();
     },
   };
+}
+
+/**
+ * Состояние и последние проверки healthcheck каждого контейнера проекта.
+ * Отвечает на вопрос, которого нет ни в сообщении `up --wait`, ни в логах:
+ * какая проверка падала и что именно она вывела.
+ */
+async function describeHealth(): Promise<string> {
+  const ids = await compose(["ps", "--all", "--quiet"]);
+  const containers = ids.stdout.split("\n").filter((line) => line.trim() !== "");
+  if (containers.length === 0) {
+    return "(контейнеров нет)";
+  }
+
+  const format = [
+    "{{.Name}}: {{if .State.Health}}{{.State.Health.Status}}",
+    "(неудач подряд: {{.State.Health.FailingStreak}}){{range .State.Health.Log}}",
+    "    [{{.Start}}] exit={{.ExitCode}} {{printf \"%q\" .Output}}{{end}}",
+    "{{else}}healthcheck не объявлен, state={{.State.Status}}{{end}}",
+  ].join("");
+  const described = await run("docker", ["inspect", "--format", format, ...containers]);
+  return described.stdout.trim() || described.stderr.trim();
 }
 
 /** Внешний адрес опубликованного порта сервиса: `docker compose port` —
@@ -209,7 +238,14 @@ let cachedRepoRoot: string | undefined;
  * docker-compose.yml. Ищется вверх от этого модуля, а не берётся из
  * process.cwd(): так тест одинаково работает и из npm-скрипта, и при
  * ручном запуске `node --test` из любого каталога. */
-function repoRoot(): string {
+/**
+ * Корень репозитория — ищется вверх по дереву от ЭТОГО модуля, а не от
+ * `process.cwd()` и не относительным `../../..`: тест выполняется уже
+ * скомпилированным (`tests/e2e/dist/`), и глубина от исходника и от
+ * сборки разная. Экспортируется, чтобы сценарий читал файлы репозитория
+ * тем же способом, каким compose находит docker-compose.yml.
+ */
+export function repoRoot(): string {
   if (cachedRepoRoot !== undefined) {
     return cachedRepoRoot;
   }
