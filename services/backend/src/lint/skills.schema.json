@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trellis.local/schemas/skills.schema.json",
+  "title": "Trellis course skills map",
+  "description": "Structural schema for a course package's optional skills.yaml — the teaching plan behind the manifest: which skills the course builds, which lesson teaches each one, what has to come first, and how each lesson is meant to be verified. The ENGINE never reads this file; only `npm run course:lint` does. Rules a JSON Schema cannot express (ids resolving against manifest.yaml, prerequisite ordering, cycles, verify-vs-content agreement) are enforced in lint/course.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "lessons"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Version of THIS file's format. Unrelated to the course's own `version` in manifest.yaml."
+    },
+    "skills": {
+      "type": "array",
+      "description": "The skills this course builds. Optional: a course may plan its lesson order without naming skills.",
+      "items": { "$ref": "#/$defs/skill" }
+    },
+    "lessons": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per lesson of manifest.yaml — the lint requires the two lists to cover each other exactly.",
+      "items": { "$ref": "#/$defs/lesson" }
+    },
+    "modules": {
+      "type": "array",
+      "description": "Per-module planning budgets. Optional, and only for modules that have one.",
+      "items": { "$ref": "#/$defs/module" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "requires": {
+          "type": "array",
+          "description": "Ids of other skills that must be taught earlier in the course.",
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "lesson": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "verify"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id", "description": "Must name a lesson of manifest.yaml." },
+        "teaches": {
+          "type": "array",
+          "description": "Ids of skills[] this lesson is the one to build.",
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "requires": {
+          "type": "array",
+          "description": "Ids of LESSONS that must come earlier in manifest order.",
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "verify": {
+          "type": "string",
+          "enum": ["quiz", "sql-state", "sql-result", "answer", "self"],
+          "description": "How this lesson is meant to be checked. The lint holds the manifest to it: quiz -> a quiz; sql-state -> practice.check; sql-result -> practice.expected; answer -> practice.type: answer; self -> no automatic check at all."
+        },
+        "hours": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Planned study time, counted against the module's budget_hours."
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "budget_hours"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id", "description": "Must name a module of manifest.yaml." },
+        "budget_hours": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

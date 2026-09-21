@@ -1,0 +1,83 @@
+# План курса «Основы SQL»: какие умения он строит, в каком порядке и чем
+# проверяется каждый урок.
+#
+# Движок этот файл не читает — он нужен только линту
+# (`npm run course:lint -- courses/pilot-sql`), который сверяет план с
+# manifest.yaml и с возможностями движка. Формат описан в courses/README.md.
+version: 1
+
+skills:
+  - id: read-table
+    title: "Понимать, что такое таблица, строка и столбец"
+  - id: select-columns
+    title: "Выбрать нужные столбцы запросом SELECT"
+    requires: [read-table]
+  - id: filter-rows
+    title: "Отобрать строки условием WHERE"
+    requires: [select-columns]
+  - id: order-rows
+    title: "Задать порядок строк через ORDER BY"
+    requires: [select-columns]
+  - id: insert-row
+    title: "Добавить строку в таблицу через INSERT"
+    requires: [read-table]
+  - id: update-row
+    title: "Изменить существующие строки через UPDATE с условием"
+    requires: [filter-rows]
+  - id: read-own-result
+    title: "Прочитать собственный результат и сформулировать вывод по нему"
+    requires: [filter-rows, order-rows]
+
+lessons:
+  - id: what-is-sql
+    teaches: [read-table]
+    verify: self
+    hours: 0.5
+  - id: select-basics
+    teaches: [select-columns]
+    requires: [what-is-sql]
+    verify: quiz
+    hours: 0.5
+  # Задание на SELECT: сравнение результата с эталонным запросом
+  # (practice.expected), порядок строк не важен.
+  - id: practice-instock
+    teaches: [filter-rows]
+    requires: [select-basics]
+    verify: sql-result
+    hours: 1
+  - id: where-clause
+    requires: [practice-instock]
+    verify: quiz
+    hours: 0.5
+  # Задание меняет базу, поэтому проверяется её состоянием (practice.check).
+  - id: practice-add-book
+    teaches: [insert-row]
+    requires: [where-clause]
+    verify: sql-state
+    hours: 1
+  - id: practice-update-stock
+    teaches: [update-row]
+    requires: [practice-add-book]
+    verify: sql-state
+    hours: 1
+  - id: practice-by-year
+    teaches: [order-rows]
+    requires: [practice-instock]
+    verify: sql-result
+    hours: 1
+  # Задание без песочницы: ученик считает сам и вписывает результат.
+  - id: self-check-books
+    teaches: [read-own-result]
+    requires: [practice-by-year]
+    verify: answer
+    hours: 0.5
+  - id: wrap-up
+    requires: [self-check-books]
+    verify: self
+    hours: 0.5
+
+modules:
+  - id: intro
+    budget_hours: 3
+  - id: filtering
+    budget_hours: 5
