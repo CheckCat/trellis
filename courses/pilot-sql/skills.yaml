@@ -28,6 +28,34 @@ skills:
     title: "Прочитать собственный результат и сформулировать вывод по нему"
     requires: [filter-rows, order-rows]
 
+# Словарь курса: какое слово вводит какой урок. Линт читает тексты уроков
+# и не даёт употребить термин раньше, чем курс его объяснил; `grants_sql`
+# добавляет к этому проверку заданий — если эталонное решение опирается на
+# конструкцию, объяснённую позже, задание нерешаемо тем, что курс уже дал.
+terms:
+  - term: SQL
+    introduced_in: what-is-sql
+  - term: таблица
+    introduced_in: what-is-sql
+  - term: столбец
+    introduced_in: what-is-sql
+  - term: SELECT
+    introduced_in: select-basics
+    grants_sql: [select]
+  - term: WHERE
+    introduced_in: where-clause
+    grants_sql: [where]
+  - term: INSERT
+    forms: ["INSERT INTO"]
+    introduced_in: practice-add-book
+    grants_sql: [insert]
+  - term: UPDATE
+    introduced_in: practice-update-stock
+    grants_sql: [update]
+  - term: ORDER BY
+    introduced_in: practice-by-year
+    grants_sql: [order-by]
+
 lessons:
   - id: what-is-sql
     teaches: [read-table]
@@ -38,21 +66,25 @@ lessons:
     requires: [what-is-sql]
     verify: quiz
     hours: 0.5
-  # Задание на SELECT: сравнение результата с эталонным запросом
-  # (practice.expected), порядок строк не важен.
-  - id: practice-instock
+  # WHERE объясняется ДО задания на фильтрацию, а не после: обратный
+  # порядок (как было до версии 1.4.0) требовал от ученика конструкции,
+  # которой курс ещё не давал. Это и ловит правило
+  # practice-uses-untaught-sql.
+  - id: where-clause
     teaches: [filter-rows]
     requires: [select-basics]
-    verify: sql-result
-    hours: 1
-  - id: where-clause
-    requires: [practice-instock]
     verify: quiz
     hours: 0.5
+  # Задание на SELECT с условием: сравнение результата с эталонным
+  # запросом (practice.expected), порядок строк не важен.
+  - id: practice-instock
+    requires: [where-clause]
+    verify: sql-result
+    hours: 1
   # Задание меняет базу, поэтому проверяется её состоянием (practice.check).
   - id: practice-add-book
     teaches: [insert-row]
-    requires: [where-clause]
+    requires: [practice-instock]
     verify: sql-state
     hours: 1
   - id: practice-update-stock
@@ -62,7 +94,7 @@ lessons:
     hours: 1
   - id: practice-by-year
     teaches: [order-rows]
-    requires: [practice-instock]
+    requires: [practice-update-stock]
     verify: sql-result
     hours: 1
   # Задание без песочницы: ученик считает сам и вписывает результат.
@@ -80,4 +112,4 @@ modules:
   - id: intro
     budget_hours: 3
   - id: filtering
-    budget_hours: 5
+    budget_hours: 6

@@ -23,7 +23,10 @@
 
 import { CAPABILITIES, type EngineCapabilities } from "../capabilities.js";
 import type { Course, CourseLesson, CourseModule } from "../courses/types.js";
-import type { SkillsDocument, SkillsLessonEntry, VerifyKind } from "./skills.js";
+import type { SkillsDocument, SkillsLessonEntry, TermEntry, VerifyKind } from "./skills.js";
+import { mentions, phrasesOf, stemsOf } from "./terms.js";
+import { SQL_FEATURES, sqlFeaturesOf } from "./sqlFeatures.js";
+import { gradeAnswers } from "../practice/answer.js";
 
 export type LintSeverity = "error" | "warning";
 
@@ -69,6 +72,16 @@ export interface LintCourseOptions {
    * construction, and the rule would be unreachable.
    */
   readonly capabilities?: EngineCapabilities;
+  /**
+   * Lesson id -> the Markdown of its `content` file. Supplied by the CLI,
+   * which is the only part of the lint allowed to touch the disk; rules
+   * that need text simply do not run when a text is missing.
+   *
+   * Without it the vocabulary rules are silent rather than wrong: a lint
+   * run over a course whose files could not be read must not claim that
+   * every term is undefined.
+   */
+  readonly lessonTexts?: ReadonlyMap<string, string>;
 }
 
 /** How many lessons in a row with nothing to do before the pacing warning
@@ -102,7 +115,10 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   // before a plan exists.
   checkPacing(lessons, course, findings);
   checkQuizExplanations(lessons, findings);
+  checkQuizGuessable(lessons, findings);
   checkStrictGrading(lessons, findings);
+  checkAnswerFields(lessons, findings);
+  checkPlaceholders(lessons, skeleton, options.lessonTexts, findings);
 
   const skills = options.skills;
   if (skills === undefined) {
@@ -115,6 +131,8 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   checkSkills(skills, planned, byId, findings);
   checkVerify(planned, byId, skeleton, options.capabilities ?? CAPABILITIES, findings);
   checkBudgets(skills, planned, course, findings);
+  checkTerms(skills, lessons, byId, skeleton, options.lessonTexts, findings);
+  checkTaughtSql(skills, planned, byId, skeleton, findings);
 
   return findings;
 }
@@ -624,6 +642,328 @@ function checkBudgets(
   });
 }
 
+/** A lesson whose text still carries this marker is a skeleton entry:
+ * agreed structure, unwritten content. Matched case-insensitively at a
+ * word boundary so the word can be used normally in a sentence about
+ * something else. */
+const PLACEHOLDER_MARKER = /(^|[^\p{L}])ЗАГЛУШКА([^\p{L}]|$)/iu;
+
+/** Below this many characters of prose a lesson is not an explanation.
+ * Deliberately low: a short lesson is a style, an empty one is a hole. */
+export const MIN_LESSON_PROSE = 400;
+
+/** E/W: a course out of skeleton must not ship placeholder lessons.
+ *
+ * This is the rule that makes "the course is empty" a build failure. It
+ * exists because the previous answer to an empty lesson was a human
+ * noticing, and a human reviewing seventy lessons stops noticing around
+ * the twentieth. */
+function checkPlaceholders(
+  lessons: readonly PositionedLesson[],
+  skeleton: boolean,
+  texts: ReadonlyMap<string, string> | undefined,
+  findings: LintFinding[],
+): void {
+  if (skeleton || texts === undefined) {
+    return;
+  }
+  for (const entry of lessons) {
+    const text = texts.get(entry.lesson.id);
+    if (text === undefined) {
+      continue;
+    }
+    if (PLACEHOLDER_MARKER.test(text)) {
+      findings.push({
+        severity: "error",
+        rule: "lesson-is-placeholder",
+        path: entry.path,
+        message: `Lesson "${entry.lesson.id}" is still a placeholder, but this course no longer calls itself a skeleton.`,
+      });
+      continue;
+    }
+    const prose = text.replace(/^#.*$/gm, "").trim();
+    if (prose.length < MIN_LESSON_PROSE) {
+      findings.push({
+        severity: "warning",
+        rule: "lesson-too-short",
+        path: entry.path,
+        message: `Lesson "${entry.lesson.id}" has ${prose.length} characters of text — too little to explain anything.`,
+      });
+    }
+  }
+}
+
+/** How much longer the correct option may be before the quiz is
+ * guessable without knowing the answer. */
+const GUESSABLE_RATIO = 1.6;
+const GUESSABLE_MARGIN = 24;
+
+/** W: the correct option must not stand out by length.
+ *
+ * A generated quiz tends to explain itself in the right answer and leave
+ * the wrong ones curt. The learner then scores full marks by picking the
+ * longest line, and the course believes it taught something. */
+function checkQuizGuessable(lessons: readonly PositionedLesson[], findings: LintFinding[]): void {
+  for (const entry of lessons) {
+    const quiz = entry.lesson.quiz;
+    if (quiz === undefined) {
+      continue;
+    }
+    const correct = quiz.options.find((option) => option.correct === true);
+    const others = quiz.options.filter((option) => option.correct !== true);
+    if (correct === undefined || others.length === 0) {
+      continue;
+    }
+    const longestWrong = Math.max(...others.map((option) => option.text.length));
+    if (
+      correct.text.length >= longestWrong * GUESSABLE_RATIO &&
+      correct.text.length - longestWrong >= GUESSABLE_MARGIN
+    ) {
+      findings.push({
+        severity: "warning",
+        rule: "quiz-answer-guessable",
+        path: `${entry.path}.quiz`,
+        message: `The correct option is ${correct.text.length} characters against ${longestWrong} for the longest wrong one — it can be picked without knowing the answer.`,
+      });
+    }
+  }
+}
+
+/** E/W: an `answer` exercise whose own reference would not pass it.
+ *
+ * The self-check is the cheap half: feeding `expected` back through the
+ * very function that grades a learner catches a reference that cannot be
+ * right. The tolerance warning is the half that matters in practice — a
+ * fractional answer with an exact-equality tolerance fails everyone who
+ * rounded in Excel, which is everyone. */
+function checkAnswerFields(lessons: readonly PositionedLesson[], findings: LintFinding[]): void {
+  for (const entry of lessons) {
+    const practice = entry.lesson.practice;
+    if (practice?.type !== "answer") {
+      continue;
+    }
+    const reference: Record<string, string> = {};
+    for (const field of practice.fields) {
+      reference[field.id] = String(field.expected);
+    }
+    if (!gradeAnswers(practice.fields, reference).ok) {
+      findings.push({
+        severity: "error",
+        rule: "answer-expected-fails-own-check",
+        path: `${entry.path}.practice.fields`,
+        message: "The reference answers do not pass this exercise's own grading — nobody can pass it.",
+      });
+    }
+    practice.fields.forEach((field, index) => {
+      if (field.kind !== "number" || typeof field.expected !== "number") {
+        return;
+      }
+      if (!Number.isInteger(field.expected) && (field.tolerance ?? 0) === 0) {
+        findings.push({
+          severity: "warning",
+          rule: "answer-number-without-tolerance",
+          path: `${entry.path}.practice.fields[${index}]`,
+          message: `Field "${field.id}" expects ${field.expected} exactly. A learner who rounded anywhere on the way will be told they are wrong.`,
+        });
+      }
+    });
+  }
+}
+
+/** E/W: the course's own vocabulary, held to reading order.
+ *
+ * The rule a non-technical course needs most: module 1 using "eNPS" as if
+ * it were common knowledge is the same defect as an exercise needing
+ * WHERE before WHERE is taught. What it can prove is narrow but exact —
+ * the WORD appears in a lesson earlier than the lesson that owns it.
+ * Leaning on a concept without naming it stays invisible to it, and
+ * stays the author's job. */
+function checkTerms(
+  skills: SkillsDocument,
+  lessons: readonly PositionedLesson[],
+  byId: ReadonlyMap<string, PositionedLesson>,
+  skeleton: boolean,
+  texts: ReadonlyMap<string, string> | undefined,
+  findings: LintFinding[],
+): void {
+  const terms = skills.terms ?? [];
+  if (terms.length === 0) {
+    if (!skeleton && texts !== undefined && lessons.length > 0) {
+      findings.push({
+        severity: "warning",
+        rule: "course-without-glossary",
+        path: "skills.terms",
+        message:
+          "The plan declares no terms, so nothing stops a lesson from using a word the course explains later.",
+      });
+    }
+    return;
+  }
+  if (texts === undefined) {
+    return;
+  }
+
+  // Stemming every lesson once: a course has few terms and many words.
+  const stemsByLesson = new Map<string, readonly string[]>();
+  for (const entry of lessons) {
+    const text = texts.get(entry.lesson.id);
+    if (text !== undefined) {
+      stemsByLesson.set(entry.lesson.id, stemsOf(text));
+    }
+  }
+
+  terms.forEach((term: TermEntry, index: number) => {
+    const home = byId.get(term.introduced_in);
+    if (home === undefined) {
+      findings.push({
+        severity: "error",
+        rule: "term-introduced-unknown",
+        path: `skills.terms[${index}].introduced_in`,
+        message: `Term "${term.term}" is introduced by lesson "${term.introduced_in}", which the manifest does not have.`,
+      });
+      return;
+    }
+
+    const allowed = new Set(term.mentioned_before ?? []);
+    for (const id of allowed) {
+      if (!byId.has(id)) {
+        findings.push({
+          severity: "error",
+          rule: "term-mentioned-before-unknown",
+          path: `skills.terms[${index}].mentioned_before`,
+          message: `Term "${term.term}" allows an early mention in lesson "${id}", which the manifest does not have.`,
+        });
+      }
+    }
+
+    const phrases = phrasesOf(term);
+    const homeStems = stemsByLesson.get(home.lesson.id);
+    if (homeStems !== undefined && !skeleton && !mentions(homeStems, phrases)) {
+      findings.push({
+        severity: "error",
+        rule: "term-not-introduced",
+        path: `skills.terms[${index}].introduced_in`,
+        message: `Lesson "${home.lesson.id}" is supposed to introduce "${term.term}", but its text never uses the word.`,
+      });
+    }
+
+    for (const entry of lessons) {
+      if (entry.order >= home.order || allowed.has(entry.lesson.id)) {
+        continue;
+      }
+      const stems = stemsByLesson.get(entry.lesson.id);
+      if (stems !== undefined && mentions(stems, phrases)) {
+        findings.push({
+          severity: "error",
+          rule: "term-used-before-introduced",
+          path: entry.path,
+          message: `Lesson "${entry.lesson.id}" uses "${term.term}", which is only explained later, in "${home.lesson.id}". Move the explanation, reword it, or list this lesson in mentioned_before.`,
+        });
+      }
+    }
+  });
+}
+
+/** E/W: an exercise must be solvable with the SQL the course has taught.
+ *
+ * The same question as checkTerms, asked of a different witness. A term
+ * catches what the text SAYS; this catches what an exercise REQUIRES —
+ * and the gap between the two is exactly where the worst case lives. Our
+ * own pilot had it: an exercise asking the learner to filter rows, one
+ * lesson before WHERE is explained, and never using the word "WHERE"
+ * anywhere in the text. No prose rule can see that. The author's own
+ * reference statement can: if solving it needed WHERE, so does the
+ * learner.
+ *
+ * Availability is taken from the TERM that explains a construct, not from
+ * the skill a plan says a lesson teaches. A practice lesson can be
+ * planned as `teaches: [filter-rows]` while explaining nothing at all —
+ * which is precisely the defect, so it cannot also be the evidence.
+ */
+function checkTaughtSql(
+  skills: SkillsDocument,
+  planned: readonly PlannedLesson[],
+  byId: ReadonlyMap<string, PositionedLesson>,
+  skeleton: boolean,
+  findings: LintFinding[],
+): void {
+  const terms = skills.terms ?? [];
+  const granting = terms.filter((term) => (term.grants_sql ?? []).length > 0);
+  const hasSqlPractice = planned.some(
+    (entry) => entry.at.lesson.practice !== undefined && entry.at.lesson.practice.type !== "answer",
+  );
+
+  if (granting.length === 0) {
+    // A course with no glossary at all is already told so once, by
+    // course-without-glossary. Saying it twice for the same omission
+    // teaches authors to read lint findings diagonally.
+    if (terms.length > 0 && hasSqlPractice && !skeleton) {
+      findings.push({
+        severity: "warning",
+        rule: "course-without-sql-grants",
+        path: "skills.terms",
+        message:
+          "No term declares grants_sql, so nothing stops an exercise from needing SQL the course has not explained yet.",
+      });
+    }
+    return;
+  }
+
+  // Where each construct becomes available: the position of the lesson
+  // that introduces the earliest term granting it.
+  const availableFrom = new Map<string, number>();
+  granting.forEach((term, index) => {
+    const home = byId.get(term.introduced_in);
+    for (const feature of term.grants_sql ?? []) {
+      if (!SQL_FEATURES.includes(feature)) {
+        findings.push({
+          severity: "error",
+          rule: "sql-feature-unknown",
+          path: `skills.terms[${index}].grants_sql`,
+          message: `Term "${term.term}" grants "${feature}", which is not a construct the lint knows (see lint/sqlFeatures.ts).`,
+        });
+        continue;
+      }
+      if (home === undefined) {
+        // Already reported by checkTerms as term-introduced-unknown.
+        continue;
+      }
+      const current = availableFrom.get(feature);
+      if (current === undefined || home.order < current) {
+        availableFrom.set(feature, home.order);
+      }
+    }
+  });
+
+  for (const lesson of planned) {
+    const practice = byId.get(lesson.entry.id)?.lesson.practice;
+    if (practice === undefined || practice.type === "answer") {
+      continue;
+    }
+    const statements = [practice.solution, practice.expected, practice.check].filter(
+      (sql): sql is string => typeof sql === "string",
+    );
+    const used = new Set(statements.flatMap((sql) => sqlFeaturesOf(sql)));
+    for (const feature of SQL_FEATURES) {
+      if (!used.has(feature)) {
+        continue;
+      }
+      const from = availableFrom.get(feature);
+      if (from === undefined || from > lesson.at.order) {
+        findings.push({
+          severity: "error",
+          rule: "practice-uses-untaught-sql",
+          path: `${lesson.at.path}.practice`,
+          message:
+            from === undefined
+              ? `Solving this needs ${feature.toUpperCase()}, which no term of this course explains.`
+              : `Solving this needs ${feature.toUpperCase()}, explained later in the course.`,
+        });
+      }
+    }
+  }
+}
+
 /** Every rule this lint can report, with the severity it reports at.
  * Exported so the tests can assert that the list in courses/README.md and
  * the rules that actually exist are the same set. */
@@ -644,4 +984,19 @@ export const LINT_RULES: readonly string[] = [
   "module-without-checks",
   "module-over-budget",
   "module-unknown",
+  "quiz-wrong-option-without-explanation",
+  "quiz-answer-guessable",
+  "practice-check-without-solution",
+  "lesson-is-placeholder",
+  "lesson-too-short",
+  "answer-expected-fails-own-check",
+  "answer-number-without-tolerance",
+  "term-introduced-unknown",
+  "term-mentioned-before-unknown",
+  "term-not-introduced",
+  "term-used-before-introduced",
+  "course-without-glossary",
+  "sql-feature-unknown",
+  "practice-uses-untaught-sql",
+  "course-without-sql-grants",
 ];

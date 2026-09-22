@@ -91,11 +91,14 @@ void test("runLint reports per package and totals errors and warnings across the
     (dir) => {
       const result = runLint([dir, dir]);
 
+      // Two warnings per package: the budget it blows, and the missing
+      // glossary (this plan declares no `terms`, so nothing guards the
+      // order in which the course introduces words).
       assert.equal(result.errors, 0);
-      assert.equal(result.warnings, 2, "both packages contribute their own warning");
+      assert.equal(result.warnings, 4, "both packages contribute their own warnings");
       // One header line per package plus one line per finding.
-      assert.equal(result.lines.length, 4);
-      assert.match(result.lines[0] ?? "", /0 error\(s\), 1 warning\(s\)$/);
+      assert.equal(result.lines.length, 6);
+      assert.match(result.lines[0] ?? "", /0 error\(s\), 2 warning\(s\)$/);
       assert.match(result.lines[1] ?? "", /^ {2}WARN {2}modules\[0\] \[module-over-budget\]/);
     },
   );

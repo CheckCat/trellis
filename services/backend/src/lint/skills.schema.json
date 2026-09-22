@@ -17,6 +17,11 @@
       "description": "The skills this course builds. Optional: a course may plan its lesson order without naming skills.",
       "items": { "$ref": "#/$defs/skill" }
     },
+    "terms": {
+      "type": "array",
+      "description": "Vocabulary of the course: a term and the lesson that introduces it. The lint reads the lessons' Markdown and reports a term used before its own lesson — the non-technical half of the same problem `grants_sql` covers for SQL.",
+      "items": { "$ref": "#/$defs/term" }
+    },
     "lessons": {
       "type": "array",
       "minItems": 1,
@@ -44,6 +49,38 @@
         "requires": {
           "type": "array",
           "description": "Ids of other skills that must be taught earlier in the course.",
+          "items": { "$ref": "#/$defs/id" }
+        }
+      }
+    },
+    "term": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["term", "introduced_in"],
+      "properties": {
+        "term": {
+          "type": "string",
+          "minLength": 2,
+          "pattern": "\\S",
+          "description": "Canonical spelling. Inflected forms are matched automatically; spell out only what a light stemmer cannot reach (человек/люди, abbreviations) in `forms`."
+        },
+        "forms": {
+          "type": "array",
+          "description": "Extra spellings that mean the same term — synonyms, abbreviations, irregular forms.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "introduced_in": {
+          "$ref": "#/$defs/id",
+          "description": "Id of the lesson that explains this term. Must name a lesson of manifest.yaml, and that lesson's text must actually contain the term."
+        },
+        "grants_sql": {
+          "type": "array",
+          "description": "SQL constructs this term makes available — the closed list lives in lint/sqlFeatures.ts (where, order-by, join, aggregate, ...). A term explaining WHERE grants \"where\", and from then on exercises may need it. An exercise whose reference statement uses a construct granted later is an error, even when the lesson text never says the word.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "mentioned_before": {
+          "type": "array",
+          "description": "Lessons allowed to use the term before it is introduced — a deliberate announcement (\"это разберём в модуле 3\"). Each entry is a decision the author signs off on, which is why silence is not an option.",
           "items": { "$ref": "#/$defs/id" }
         }
       }

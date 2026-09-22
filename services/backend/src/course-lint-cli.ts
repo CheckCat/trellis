@@ -10,10 +10,12 @@
 // the course has errors, 2 when the command itself could not be carried
 // out (no such directory, unusable manifest).
 
+import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { loadCoursePackage } from "./courses/loader.js";
+import type { Course } from "./courses/types.js";
 import { lintCourse, type LintFinding } from "./lint/course.js";
 import { loadSkillsDocument, SKILLS_FILE_NAME } from "./lint/skills.js";
 
@@ -62,8 +64,38 @@ export function lintPackage(dir: string): LintedPackage {
   return {
     dir,
     linted: true,
-    findings: lintCourse(loaded.course, skills.kind === "ok" ? { skills: skills.skills } : {}),
+    findings: lintCourse(loaded.course, {
+      ...(skills.kind === "ok" ? { skills: skills.skills } : {}),
+      lessonTexts: readLessonTexts(loaded.course),
+    }),
   };
+}
+
+/**
+ * The lessons' Markdown, by lesson id — the only disk access the lint
+ * does beyond the two files it already reads.
+ *
+ * A lesson whose file cannot be read is simply absent from the map, and
+ * the rules that need text skip it. Reporting it here would duplicate the
+ * manifest validation that already covers a missing `content` file, and
+ * an unreadable file must not turn every term in the course into a
+ * finding.
+ */
+function readLessonTexts(course: Course): ReadonlyMap<string, string> {
+  const texts = new Map<string, string>();
+  for (const module of course.modules) {
+    for (const lesson of module.lessons) {
+      if (lesson.content === undefined) {
+        continue;
+      }
+      try {
+        texts.set(lesson.id, fs.readFileSync(path.join(course.dir, lesson.content), "utf8"));
+      } catch {
+        // Left out on purpose — see above.
+      }
+    }
+  }
+  return texts;
 }
 
 /** One finding, as a line. `severity path rule: message` — greppable, and

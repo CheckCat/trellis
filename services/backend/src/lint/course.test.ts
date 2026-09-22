@@ -506,3 +506,287 @@ void test("the correct option needs no explanation, and a fully annotated quiz i
   // does not — the shape every course should end up in.
   assert.deepEqual(of(lintCourse(course({ intro: [{ id: "q", quiz: QUIZ }] })), "quiz-wrong-option-without-explanation"), []);
 });
+
+// --- Vocabulary ----------------------------------------------------------
+// The rule a non-technical course needs most. Everything above reasons
+// about the plan; these read the lessons themselves, which is why they
+// take `lessonTexts` — the CLI supplies it, and a course whose files
+// could not be read simply skips them.
+
+const GLOSSARY_PLAN = `
+version: 1
+terms:
+  - term: текучесть
+    introduced_in: turnover
+lessons:
+  - id: intro
+    verify: self
+  - id: turnover
+    verify: self
+`;
+
+function texts(entries: Readonly<Record<string, string>>): ReadonlyMap<string, string> {
+  return new Map(Object.entries(entries));
+}
+
+void test("a term used before the lesson that explains it is an error", () => {
+  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
+    skills: skills(GLOSSARY_PLAN),
+    lessonTexts: texts({
+      // The defect in one line: module 1 speaks as if the reader already
+      // knew the word. Nothing about the plan is wrong — only the text.
+      intro: "# Введение\n\nВысокая текучесть — наша главная проблема.",
+      turnover: "# Текучесть\n\nТекучесть — это доля сотрудников, ушедших за период.",
+    }),
+  });
+
+  const found = of(findings, "term-used-before-introduced");
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? "", /"текучесть"/);
+  // The finding points at the lesson that has to change, not at the plan.
+  assert.equal(found[0]?.path, "modules[0].lessons[0]");
+});
+
+void test("an inflected form counts as the same word", () => {
+  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
+    skills: skills(GLOSSARY_PLAN),
+    lessonTexts: texts({
+      intro: "# Введение\n\nПоговорим о текучести кадров.",
+      turnover: "# Текучесть\n\nТекучесть — это доля ушедших.",
+    }),
+  });
+
+  assert.equal(of(findings, "term-used-before-introduced").length, 1);
+});
+
+void test("a deliberate announcement is declared, not silenced", () => {
+  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
+    skills: skills(`
+version: 1
+terms:
+  - term: текучесть
+    introduced_in: turnover
+    mentioned_before: [intro]
+lessons:
+  - id: intro
+    verify: self
+  - id: turnover
+    verify: self
+`),
+    lessonTexts: texts({
+      intro: "# Введение\n\nТекучесть разберём во втором модуле.",
+      turnover: "# Текучесть\n\nТекучесть — это доля ушедших.",
+    }),
+  });
+
+  assert.deepEqual(of(findings, "term-used-before-introduced"), []);
+});
+
+void test("a lesson that does not actually introduce its term is an error", () => {
+  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
+    skills: skills(GLOSSARY_PLAN),
+    lessonTexts: texts({
+      intro: "# Введение\n\nО метриках вообще.",
+      // The plan promises this lesson explains the word; the text never
+      // uses it. Either the plan or the lesson is lying.
+      turnover: "# Увольнения\n\nСчитаем ушедших за период.",
+    }),
+  });
+
+  assert.equal(of(findings, "term-not-introduced").length, 1);
+});
+
+void test("a course without a glossary is warned about once", () => {
+  const findings = lintCourse(course({ m: [{ id: "one", practice: SQL_EXPECTED }] }), {
+    skills: skills(`
+version: 1
+lessons:
+  - id: one
+    verify: sql-result
+`),
+    lessonTexts: texts({ one: "# One\n\nSome text." }),
+  });
+
+  assert.deepEqual(rules(findings).filter((rule) => rule.startsWith("course-without")), [
+    "course-without-glossary",
+  ]);
+});
+
+// --- Untaught SQL --------------------------------------------------------
+
+void test("an exercise needing SQL the course has not explained is an error", () => {
+  // This is the pilot's own defect, reduced: an exercise that filters
+  // rows, standing before the lesson that explains WHERE — and never
+  // using the word "WHERE" in its text, so no prose rule could see it.
+  const findings = lintCourse(
+    course({
+      m: [
+        "select-basics",
+        { id: "practice", practice: { type: "sql", prompt: "Filter.", sandbox: "main", expected: "select a from t where b = 1" } },
+        "where-clause",
+      ],
+    }),
+    {
+      skills: skills(`
+version: 1
+terms:
+  - term: SELECT
+    introduced_in: select-basics
+    grants_sql: [select]
+  - term: WHERE
+    introduced_in: where-clause
+    grants_sql: [where]
+lessons:
+  - id: select-basics
+    verify: self
+  - id: practice
+    verify: sql-result
+  - id: where-clause
+    verify: self
+`),
+      lessonTexts: texts({
+        "select-basics": "# SELECT\n\nКоманда `SELECT` читает данные.",
+        practice: "# Практика\n\nВыберите нужные книги.",
+        "where-clause": "# WHERE\n\nКлючевое слово `WHERE` отбирает строки.",
+      }),
+    },
+  );
+
+  const found = of(findings, "practice-uses-untaught-sql");
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? "", /WHERE/);
+});
+
+void test("the same exercise after the explanation is fine", () => {
+  const findings = lintCourse(
+    course({
+      m: [
+        "select-basics",
+        "where-clause",
+        { id: "practice", practice: { type: "sql", prompt: "Filter.", sandbox: "main", expected: "select a from t where b = 1" } },
+      ],
+    }),
+    {
+      skills: skills(`
+version: 1
+terms:
+  - term: SELECT
+    introduced_in: select-basics
+    grants_sql: [select]
+  - term: WHERE
+    introduced_in: where-clause
+    grants_sql: [where]
+lessons:
+  - id: select-basics
+    verify: self
+  - id: where-clause
+    verify: self
+  - id: practice
+    verify: sql-result
+`),
+      lessonTexts: texts({
+        "select-basics": "# SELECT\n\nКоманда `SELECT` читает данные.",
+        "where-clause": "# WHERE\n\nКлючевое слово `WHERE` отбирает строки.",
+        practice: "# Практика\n\nВыберите нужные книги.",
+      }),
+    },
+  );
+
+  assert.deepEqual(of(findings, "practice-uses-untaught-sql"), []);
+});
+
+void test("a construct no term explains at all is reported differently", () => {
+  const findings = lintCourse(
+    course({
+      m: [
+        "basics",
+        { id: "practice", practice: { type: "sql", prompt: "Join.", sandbox: "main", expected: "select a from t join u on t.id = u.id" } },
+      ],
+    }),
+    {
+      skills: skills(`
+version: 1
+terms:
+  - term: SELECT
+    introduced_in: basics
+    grants_sql: [select]
+lessons:
+  - id: basics
+    verify: self
+  - id: practice
+    verify: sql-result
+`),
+      lessonTexts: texts({ basics: "# Basics\n\nКоманда `SELECT` читает данные.", practice: "# Практика\n\nСоберите данные." }),
+    },
+  );
+
+  const found = of(findings, "practice-uses-untaught-sql");
+  assert.equal(found.length, 1);
+  assert.match(found[0]?.message ?? "", /no term of this course explains/);
+});
+
+// --- Empty and guessable content ----------------------------------------
+
+void test("a placeholder lesson is an error once the course stops calling itself a skeleton", () => {
+  const lessonTexts = texts({ one: "# One\n\n> ЗАГЛУШКА — текст урока не написан.\n" });
+
+  const shipped = lintCourse(course({ m: ["one"] }, "1.0.0"), { lessonTexts });
+  assert.equal(of(shipped, "lesson-is-placeholder").length, 1);
+
+  // While the version says skeleton, placeholders are the point.
+  const skeleton = lintCourse(course({ m: ["one"] }, "0.1.0-skeleton"), { lessonTexts });
+  assert.deepEqual(of(skeleton, "lesson-is-placeholder"), []);
+});
+
+void test("a lesson too short to explain anything is a warning", () => {
+  const findings = lintCourse(course({ m: ["one"] }), {
+    lessonTexts: texts({ one: "# One\n\nКороткий урок." }),
+  });
+
+  assert.equal(of(findings, "lesson-too-short").length, 1);
+});
+
+void test("a quiz whose correct option is visibly the longest is a warning", () => {
+  const findings = lintCourse(
+    course({
+      m: [
+        {
+          id: "quizzed",
+          quiz: {
+            question: "Why?",
+            options: [
+              {
+                id: "long",
+                text: "Потому что метрика считается за период и сравнивается со средней численностью",
+                correct: true,
+              },
+              { id: "a", text: "Просто так", correct: false, explanation: "Нет." },
+              { id: "b", text: "Не знаю", correct: false, explanation: "Нет." },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(of(findings, "quiz-answer-guessable").length, 1);
+});
+
+void test("an exact fractional answer warns, because everyone rounds somewhere", () => {
+  const findings = lintCourse(
+    course({
+      m: [
+        {
+          id: "answered",
+          practice: {
+            type: "answer",
+            prompt: "Report it.",
+            fields: [{ id: "rate", label: "Текучесть, %", kind: "number", expected: 18.4, tolerance: 0 }],
+          },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(of(findings, "answer-number-without-tolerance").length, 1);
+});

@@ -36,6 +36,17 @@ export interface SkillEntry {
   readonly requires?: readonly string[];
 }
 
+/** One entry of the course's vocabulary: a word and the lesson that owes
+ * the reader an explanation of it. */
+export interface TermEntry {
+  readonly term: string;
+  readonly forms?: readonly string[];
+  readonly introduced_in: string;
+  /** SQL constructs this term makes available — see lint/sqlFeatures.ts. */
+  readonly grants_sql?: readonly string[];
+  readonly mentioned_before?: readonly string[];
+}
+
 export interface SkillsLessonEntry {
   readonly id: string;
   readonly teaches?: readonly string[];
@@ -52,6 +63,7 @@ export interface SkillsModuleEntry {
 export interface SkillsDocument {
   readonly version: 1;
   readonly skills?: readonly SkillEntry[];
+  readonly terms?: readonly TermEntry[];
   readonly lessons: readonly SkillsLessonEntry[];
   readonly modules?: readonly SkillsModuleEntry[];
 }

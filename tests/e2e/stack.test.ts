@@ -37,7 +37,7 @@ import { repoRoot, startStack } from "./helpers/compose.js";
  */
 const PILOT = {
   courseId: "pilot-sql",
-  courseVersion: "1.3.0",
+  courseVersion: "1.4.0",
   totalLessons: 9,
   /** Урок без квиза и практики — закрывается только самоотметкой. */
   manualLesson: "what-is-sql",
