@@ -37,24 +37,40 @@ terms:
     introduced_in: what-is-sql
   - term: таблица
     introduced_in: what-is-sql
+  # «столбцы» стеммер к «столбец» не сводит: беглая гласная — случай, для
+  # которого и существует `forms`.
   - term: столбец
+    forms: ["столбцы"]
     introduced_in: what-is-sql
+  # Вводный урок перечисляет команды курса («в следующих уроках вы
+  # научитесь…») — это анонс, а не употребление термина как известного.
   - term: SELECT
     introduced_in: select-basics
     grants: [sql:select]
+    mentioned_before: [what-is-sql]
   - term: WHERE
     introduced_in: where-clause
     grants: [sql:where]
+    mentioned_before: [what-is-sql]
   - term: INSERT
     forms: ["INSERT INTO"]
     introduced_in: practice-add-book
     grants: [sql:insert]
+    # Квизы уроков select-basics и where-clause используют INSERT как
+    # неверный вариант и тут же поясняют его: слово названо и объяснено на
+    # месте, а не употреблено как уже известное.
+    mentioned_before: [what-is-sql, select-basics, where-clause]
+  # Урок про WHERE заканчивается тем, что WHERE работает и в UPDATE/DELETE,
+  # — тоже анонс.
   - term: UPDATE
     introduced_in: practice-update-stock
     grants: [sql:update]
+    mentioned_before: [what-is-sql, where-clause]
+  # Урок про SELECT оговаривает, что за порядок строк отвечает ORDER BY.
   - term: ORDER BY
     introduced_in: practice-by-year
     grants: [sql:order-by]
+    mentioned_before: [select-basics, where-clause]
 
 lessons:
   - id: what-is-sql

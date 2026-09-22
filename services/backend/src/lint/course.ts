@@ -72,16 +72,6 @@ export interface LintCourseOptions {
    * construction, and the rule would be unreachable.
    */
   readonly capabilities?: EngineCapabilities;
-  /**
-   * Lesson id -> the Markdown of its `content` file. Supplied by the CLI,
-   * which is the only part of the lint allowed to touch the disk; rules
-   * that need text simply do not run when a text is missing.
-   *
-   * Without it the vocabulary rules are silent rather than wrong: a lint
-   * run over a course whose files could not be read must not claim that
-   * every term is undefined.
-   */
-  readonly lessonTexts?: ReadonlyMap<string, string>;
 }
 
 /** How many lessons in a row with nothing to do before the pacing warning
@@ -118,7 +108,7 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   checkQuizGuessable(lessons, findings);
   checkStrictGrading(lessons, findings);
   checkAnswerFields(lessons, findings);
-  checkPlaceholders(lessons, skeleton, options.lessonTexts, findings);
+  checkPlaceholders(lessons, skeleton, findings);
 
   const skills = options.skills;
   if (skills === undefined) {
@@ -131,7 +121,7 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   checkSkills(skills, planned, byId, findings);
   checkVerify(planned, byId, skeleton, options.capabilities ?? CAPABILITIES, findings);
   checkBudgets(skills, planned, course, findings);
-  checkTerms(skills, lessons, byId, skeleton, options.lessonTexts, findings);
+  checkTerms(skills, lessons, byId, skeleton, findings);
   checkGrants(skills, planned, byId, skeleton, findings);
 
   return findings;
@@ -658,18 +648,15 @@ export const MIN_LESSON_PROSE = 400;
  * exists because the previous answer to an empty lesson was a human
  * noticing, and a human reviewing seventy lessons stops noticing around
  * the twentieth. */
-function checkPlaceholders(
-  lessons: readonly PositionedLesson[],
-  skeleton: boolean,
-  texts: ReadonlyMap<string, string> | undefined,
-  findings: LintFinding[],
-): void {
-  if (skeleton || texts === undefined) {
+function checkPlaceholders(lessons: readonly PositionedLesson[], skeleton: boolean, findings: LintFinding[]): void {
+  if (skeleton) {
     return;
   }
   for (const entry of lessons) {
-    const text = texts.get(entry.lesson.id);
+    const text = entry.lesson.content;
     if (text === undefined) {
+      // A lesson that is only a quiz or only an exercise declares no
+      // `content` at all, so there is no text to be a placeholder.
       continue;
     }
     if (PLACEHOLDER_MARKER.test(text)) {
@@ -679,6 +666,14 @@ function checkPlaceholders(
         path: entry.path,
         message: `Lesson "${entry.lesson.id}" is still a placeholder, but this course no longer calls itself a skeleton.`,
       });
+      continue;
+    }
+    if (entry.lesson.practice !== undefined) {
+      // An exercise lesson is not an explanation: its substance is the
+      // assignment, and the prose above it introduces that assignment.
+      // Holding it to the length of a teaching lesson would fire on every
+      // practice lesson of every course, and a warning that is always on
+      // is a warning nobody reads.
       continue;
     }
     const prose = text.replace(/^#.*$/gm, "").trim();
@@ -770,6 +765,46 @@ function checkAnswerFields(lessons: readonly PositionedLesson[], findings: LintF
   }
 }
 
+/**
+ * Everything of a lesson the learner reads that does NOT live in its
+ * Markdown: the title, the quiz, the exercise prompt, the labels of an
+ * `answer` assignment's fields.
+ *
+ * It matters because the defect the glossary exists to catch hides here
+ * most often. An exercise lesson's Markdown can be three lines, while the
+ * sentence that actually reaches the learner — "отфильтруйте строки через
+ * WHERE" — sits in the manifest. Reading only the Markdown would leave the
+ * single most likely place for a term-from-the-future unread.
+ *
+ * Quiz explanations are in: the learner sees them the moment they answer
+ * wrongly. Nothing that never reaches the learner is — no `check`, no
+ * `expected`, no `solution`, no `fields[].expected`. Those are the answers
+ * to the exercise, and this corpus models what a learner has READ.
+ */
+function visibleTextOf(lesson: CourseLesson): string {
+  const parts: string[] = [lesson.title];
+  const quiz = lesson.quiz;
+  if (quiz !== undefined) {
+    parts.push(quiz.question);
+    for (const option of quiz.options) {
+      parts.push(option.text);
+      if (option.explanation !== undefined) {
+        parts.push(option.explanation);
+      }
+    }
+  }
+  const practice = lesson.practice;
+  if (practice !== undefined) {
+    parts.push(practice.prompt);
+    if (practice.type === "answer") {
+      for (const field of practice.fields) {
+        parts.push(field.label);
+      }
+    }
+  }
+  return parts.join("\n\n");
+}
+
 /** E/W: the course's own vocabulary, held to reading order.
  *
  * The rule a non-technical course needs most: module 1 using "eNPS" as if
@@ -783,12 +818,11 @@ function checkTerms(
   lessons: readonly PositionedLesson[],
   byId: ReadonlyMap<string, PositionedLesson>,
   skeleton: boolean,
-  texts: ReadonlyMap<string, string> | undefined,
   findings: LintFinding[],
 ): void {
   const terms = skills.terms ?? [];
   if (terms.length === 0) {
-    if (!skeleton && texts !== undefined && lessons.length > 0) {
+    if (!skeleton && lessons.length > 0) {
       findings.push({
         severity: "warning",
         rule: "course-without-glossary",
@@ -799,17 +833,26 @@ function checkTerms(
     }
     return;
   }
-  if (texts === undefined) {
-    return;
-  }
-
-  // Stemming every lesson once: a course has few terms and many words.
-  const stemsByLesson = new Map<string, readonly string[]>();
+  // Two corpora, because the two rules below ask different questions.
+  //
+  // "Where is this term EXPLAINED?" can only be answered by a lesson's
+  // prose: a word that appears solely in an exercise prompt has been used,
+  // not taught.
+  //
+  // "Where does the learner MEET this term?" has to cover everything the
+  // learner reads, and for an exercise lesson that is mostly the manifest —
+  // the prompt, the quiz, the labels of the fields to fill in. A lesson can
+  // carry no Markdown at all and still put a word in front of the learner.
+  //
+  // Stemming each lesson once: a course has few terms and many words.
+  const proseStems = new Map<string, readonly string[]>();
+  const seenStems = new Map<string, readonly string[]>();
   for (const entry of lessons) {
-    const text = texts.get(entry.lesson.id);
-    if (text !== undefined) {
-      stemsByLesson.set(entry.lesson.id, stemsOf(text));
+    const prose = entry.lesson.content;
+    if (prose !== undefined) {
+      proseStems.set(entry.lesson.id, stemsOf(prose));
     }
+    seenStems.set(entry.lesson.id, stemsOf([prose ?? "", visibleTextOf(entry.lesson)].join("\n\n")));
   }
 
   terms.forEach((term: TermEntry, index: number) => {
@@ -837,7 +880,7 @@ function checkTerms(
     }
 
     const phrases = phrasesOf(term);
-    const homeStems = stemsByLesson.get(home.lesson.id);
+    const homeStems = proseStems.get(home.lesson.id);
     if (homeStems !== undefined && !skeleton && !mentions(homeStems, phrases)) {
       findings.push({
         severity: "error",
@@ -851,7 +894,7 @@ function checkTerms(
       if (entry.order >= home.order || allowed.has(entry.lesson.id)) {
         continue;
       }
-      const stems = stemsByLesson.get(entry.lesson.id);
+      const stems = seenStems.get(entry.lesson.id);
       if (stems !== undefined && mentions(stems, phrases)) {
         findings.push({
           severity: "error",

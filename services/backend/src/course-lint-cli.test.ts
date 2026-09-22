@@ -33,6 +33,149 @@ void test("the shipped pilot course passes the lint with no findings", () => {
   assert.deepEqual(result.findings, [], JSON.stringify(result.findings, null, 2));
 });
 
+// --- Lesson text, end to end --------------------------------------------
+// These exist because of a bug the unit tests could not have caught. The
+// rules that read lesson text were tested by handing them a map of texts
+// directly, while the CLI built that map by treating `lesson.content` — the
+// Markdown itself — as a path to a file. Every read threw, every throw was
+// swallowed, and five rules were silent for months behind a green suite.
+//
+// So these go through `lintPackage`: a real package on disk, read by the
+// real loader. The text now travels the one way it travels in production.
+
+/** A two-lesson package where the SECOND lesson introduces a term the
+ * FIRST one may or may not use — the smallest course a vocabulary rule can
+ * have an opinion about. */
+function withTextPackage(
+  files: { earlier: string; later: string; prompt?: string; version?: string },
+  skillsYaml: string | undefined,
+  run: (dir: string) => void,
+): void {
+  const practice =
+    files.prompt === undefined
+      ? ""
+      : "        practice:\n" +
+        "          type: answer\n" +
+        `          prompt: ${JSON.stringify(files.prompt)}\n` +
+        "          fields:\n" +
+        "            - id: n\n" +
+        "              label: Сколько человек ушло?\n" +
+        "              kind: number\n" +
+        "              expected: 12\n";
+  const manifest =
+    "id: texts\n" +
+    `version: ${files.version ?? "1.0.0"}\n` +
+    "title: Texts\n" +
+    "modules:\n" +
+    "  - id: only\n" +
+    "    title: Only module\n" +
+    "    lessons:\n" +
+    "      - id: earlier\n" +
+    "        title: Earlier lesson\n" +
+    "        content: lessons/earlier.md\n" +
+    practice +
+    "      - id: later\n" +
+    "        title: Later lesson\n" +
+    "        content: lessons/later.md\n";
+
+  const coursesDir = makeTempDir("trellis-lint-texts-");
+  try {
+    writeCoursePackage(coursesDir, "texts", manifest, [
+      { path: "lessons/earlier.md", content: files.earlier },
+      { path: "lessons/later.md", content: files.later },
+    ]);
+    const dir = path.join(coursesDir, "texts");
+    if (skillsYaml !== undefined) {
+      fs.writeFileSync(path.join(dir, "skills.yaml"), skillsYaml, "utf8");
+    }
+    run(dir);
+  } finally {
+    fs.rmSync(coursesDir, { recursive: true, force: true });
+  }
+}
+
+/** The plan both vocabulary tests below share: `текучесть` belongs to the
+ * second lesson. `verify` matches whichever shape the manifest takes. */
+function glossaryPlan(earlierVerify: "self" | "answer"): string {
+  return (
+    "version: 1\n" +
+    "terms:\n" +
+    "  - term: текучесть\n" +
+    "    introduced_in: later\n" +
+    "lessons:\n" +
+    "  - id: earlier\n" +
+    `    verify: ${earlierVerify}\n` +
+    "  - id: later\n" +
+    "    verify: self\n"
+  );
+}
+
+void test("a term used before its lesson is found through the CLI, in the lesson's Markdown", () => {
+  withTextPackage(
+    {
+      earlier: "# Раньше\n\nВысокая текучесть — наша главная проблема, и все это знают.",
+      later: "# Позже\n\nТекучесть — это доля сотрудников, ушедших за период.",
+    },
+    glossaryPlan("self"),
+    (dir) => {
+      const found = lintPackage(dir).findings.filter((f) => f.rule === "term-used-before-introduced");
+      assert.equal(found.length, 1, JSON.stringify(lintPackage(dir).findings, null, 2));
+      assert.equal(found[0]?.path, "modules[0].lessons[0]");
+    },
+  );
+});
+
+void test("a term used only in an exercise prompt is found too — the manifest is text the learner reads", () => {
+  // The case Markdown alone cannot see: an exercise lesson whose body says
+  // nothing while the assignment itself puts the word in front of the
+  // learner. For a practice lesson this is where the text usually lives.
+  withTextPackage(
+    {
+      earlier: "# Раньше\n\nОткройте выгрузку и посчитайте по инструкции ниже.",
+      prompt: "Посчитайте текучесть за 2024 год и впишите результат.",
+      later: "# Позже\n\nТекучесть — это доля сотрудников, ушедших за период.",
+    },
+    glossaryPlan("answer"),
+    (dir) => {
+      const found = lintPackage(dir).findings.filter((f) => f.rule === "term-used-before-introduced");
+      assert.equal(found.length, 1, JSON.stringify(lintPackage(dir).findings, null, 2));
+      assert.equal(found[0]?.path, "modules[0].lessons[0]");
+    },
+  );
+});
+
+void test("a placeholder lesson in a released course is an error through the CLI", () => {
+  withTextPackage(
+    {
+      earlier: "# Раньше\n\n> ЗАГЛУШКА — текст урока не написан.\n",
+      later: "# Позже\n\nЗдесь уже написан настоящий текст урока.",
+    },
+    undefined,
+    (dir) => {
+      const found = lintPackage(dir).findings.filter((f) => f.rule === "lesson-is-placeholder");
+      assert.equal(found.length, 1);
+      assert.equal(found[0]?.severity, "error");
+    },
+  );
+});
+
+void test("the same placeholder is allowed while the course still calls itself a skeleton", () => {
+  withTextPackage(
+    {
+      earlier: "# Раньше\n\n> ЗАГЛУШКА — текст урока не написан.\n",
+      later: "# Позже\n\n> ЗАГЛУШКА — текст урока не написан.\n",
+      version: "0.1.0-skeleton",
+    },
+    undefined,
+    (dir) => {
+      assert.deepEqual(
+        lintPackage(dir).findings.filter((f) => f.rule === "lesson-is-placeholder"),
+        [],
+      );
+    },
+  );
+});
+
 void test("a package with no skills.yaml is still linted, just with fewer rules", () => {
   withPackage(undefined, (dir) => {
     const result = lintPackage(dir);

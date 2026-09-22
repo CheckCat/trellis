@@ -34,14 +34,43 @@ const ANSWER: CoursePractice = {
   fields: [{ id: "n", label: "How many?", kind: "number", expected: 1, tolerance: 0 }],
 };
 
-/** `id` alone is a plain content lesson; the suffixes attach content. */
-type LessonSpec = string | { id: string; quiz?: CourseQuiz; practice?: CoursePractice };
+/** `id` alone is a plain content lesson; the fields attach content.
+ *
+ * `content` is the lesson's Markdown, spelled out only by the rules that
+ * read it. It is a field of the lesson rather than a map passed beside the
+ * course on purpose: the text reaches the rules here exactly the way it
+ * reaches them in production, through `CourseLesson.content`. The previous
+ * shape — a separate `lessonTexts` map the test filled in by hand — let
+ * these tests pass while the CLI delivered no text at all. */
+type LessonSpec = string | { id: string; content?: string; quiz?: CourseQuiz; practice?: CoursePractice };
+
+/** The default body of a fixture lesson: long enough not to trip
+ * `lesson-too-short`, which is a rule about real courses and only noise in
+ * a test about structure. Tests that care about the text say so with an
+ * explicit `content`. */
+const FILLER =
+  "Этот урок существует только в тестах, и его текст ничего не объясняет. " +
+  "Он нужен лишь затем, чтобы урок не считался пустым: правило lesson-too-short " +
+  "измеряет длину прозы, а не её смысл, и структурные проверки не должны " +
+  "спотыкаться о него. Ни одно правило линта не смотрит на содержание этого " +
+  "абзаца — проверяется только то, что он есть и что он достаточно длинный, " +
+  "поэтому мысль здесь повторяется дважды без всякой пользы для читателя.";
+
+function body(id: string): string {
+  return `# ${id}\n\n${FILLER}`;
+}
 
 function lesson(spec: LessonSpec): CourseLesson {
   if (typeof spec === "string") {
-    return { id: spec, title: spec, content: `# ${spec}` };
+    return { id: spec, title: spec, content: body(spec) };
   }
-  return { id: spec.id, title: spec.id, content: `# ${spec.id}`, quiz: spec.quiz, practice: spec.practice };
+  return {
+    id: spec.id,
+    title: spec.id,
+    content: spec.content ?? body(spec.id),
+    quiz: spec.quiz,
+    practice: spec.practice,
+  };
 }
 
 function course(modules: Readonly<Record<string, readonly LessonSpec[]>>, version = "1.0.0"): Course {
@@ -72,6 +101,15 @@ function rules(findings: readonly LintFinding[]): string[] {
   return findings.map((finding) => finding.rule);
 }
 
+/** Course-level advice fires for ANY plan without a glossary, so repeating
+ * it in every structural assertion would turn each of those tests into a
+ * test of two things. Both warnings have their own tests below. */
+const ADVICE = new Set(["course-without-glossary", "course-without-grants"]);
+
+function ruleset(findings: readonly LintFinding[]): string[] {
+  return rules(findings).filter((rule) => !ADVICE.has(rule));
+}
+
 function of(findings: readonly LintFinding[], rule: string): LintFinding[] {
   return findings.filter((finding) => finding.rule === rule);
 }
@@ -81,7 +119,10 @@ function of(findings: readonly LintFinding[], rule: string): LintFinding[] {
 void test("a consistent plan produces no findings at all", () => {
   const findings = lintCourse(
     course({
-      intro: ["start", { id: "quizzed", quiz: QUIZ }],
+      intro: [
+        { id: "start", content: `${body("start")}\n\nКоманда SELECT читает данные из таблицы.` },
+        { id: "quizzed", quiz: QUIZ },
+      ],
       practice: [{ id: "written", practice: SQL_EXPECTED }],
     }),
     {
@@ -93,6 +134,10 @@ skills:
   - id: selecting
     title: Select columns
     requires: [reading]
+terms:
+  - term: SELECT
+    introduced_in: start
+    grants: [sql:select]
 lessons:
   - id: start
     teaches: [reading]
@@ -157,8 +202,8 @@ lessons:
 `),
   });
 
-  assert.deepEqual(rules(findings), ["lesson-duplicated"]);
-  assert.equal(findings[0]?.path, "skills.lessons[1].id");
+  assert.deepEqual(ruleset(findings), ["lesson-duplicated"]);
+  assert.equal(of(findings, "lesson-duplicated")[0]?.path, "skills.lessons[1].id");
 });
 
 // --- Prerequisite order --------------------------------------------------
@@ -352,7 +397,7 @@ lessons:
     verify: ${verify}
 `),
     });
-    assert.deepEqual(findings, [], `verify: ${verify} should be satisfied`);
+    assert.deepEqual(ruleset(findings), [], `verify: ${verify} should be satisfied`);
   }
 });
 
@@ -377,10 +422,10 @@ lessons:
 `);
   const withExpected = course({ intro: [{ id: "a", practice: SQL_EXPECTED }] });
 
-  assert.deepEqual(lintCourse(withExpected, { skills: plan }), [], "supported by the real engine");
+  assert.deepEqual(ruleset(lintCourse(withExpected, { skills: plan })), [], "supported by the real engine");
 
   const findings = lintCourse(withExpected, { skills: plan, capabilities: withoutExpected });
-  assert.deepEqual(rules(findings), ["verify-unsupported"]);
+  assert.deepEqual(ruleset(findings), ["verify-unsupported"]);
   assert.equal(findings[0]?.severity, "error");
   assert.match(findings[0]?.message ?? "", /needs the "expected" mechanic of practice type "sql"/);
   assert.match(findings[0]?.message ?? "", /docs\/contracts\/capabilities\.json/);
@@ -509,9 +554,8 @@ void test("the correct option needs no explanation, and a fully annotated quiz i
 
 // --- Vocabulary ----------------------------------------------------------
 // The rule a non-technical course needs most. Everything above reasons
-// about the plan; these read the lessons themselves, which is why they
-// take `lessonTexts` — the CLI supplies it, and a course whose files
-// could not be read simply skips them.
+// about the plan; these read the lessons themselves, so their fixtures
+// carry real `content`.
 
 const GLOSSARY_PLAN = `
 version: 1
@@ -525,20 +569,19 @@ lessons:
     verify: self
 `;
 
-function texts(entries: Readonly<Record<string, string>>): ReadonlyMap<string, string> {
-  return new Map(Object.entries(entries));
-}
 
 void test("a term used before the lesson that explains it is an error", () => {
-  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
-    skills: skills(GLOSSARY_PLAN),
-    lessonTexts: texts({
-      // The defect in one line: module 1 speaks as if the reader already
-      // knew the word. Nothing about the plan is wrong — only the text.
-      intro: "# Введение\n\nВысокая текучесть — наша главная проблема.",
-      turnover: "# Текучесть\n\nТекучесть — это доля сотрудников, ушедших за период.",
+  const findings = lintCourse(
+    course({
+      m: [
+        // The defect in one line: module 1 speaks as if the reader already
+        // knew the word. Nothing about the plan is wrong — only the text.
+        { id: "intro", content: "# Введение\n\nВысокая текучесть — наша главная проблема." },
+        { id: "turnover", content: "# Текучесть\n\nТекучесть — это доля сотрудников, ушедших за период." },
+      ],
     }),
-  });
+    { skills: skills(GLOSSARY_PLAN) },
+  );
 
   const found = of(findings, "term-used-before-introduced");
   assert.equal(found.length, 1);
@@ -548,20 +591,29 @@ void test("a term used before the lesson that explains it is an error", () => {
 });
 
 void test("an inflected form counts as the same word", () => {
-  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
-    skills: skills(GLOSSARY_PLAN),
-    lessonTexts: texts({
-      intro: "# Введение\n\nПоговорим о текучести кадров.",
-      turnover: "# Текучесть\n\nТекучесть — это доля ушедших.",
+  const findings = lintCourse(
+    course({
+      m: [
+        { id: "intro", content: "# Введение\n\nПоговорим о текучести кадров." },
+        { id: "turnover", content: "# Текучесть\n\nТекучесть — это доля ушедших." },
+      ],
     }),
-  });
+    { skills: skills(GLOSSARY_PLAN) },
+  );
 
   assert.equal(of(findings, "term-used-before-introduced").length, 1);
 });
 
 void test("a deliberate announcement is declared, not silenced", () => {
-  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
-    skills: skills(`
+  const findings = lintCourse(
+    course({
+      m: [
+        { id: "intro", content: "# Введение\n\nТекучесть разберём во втором модуле." },
+        { id: "turnover", content: "# Текучесть\n\nТекучесть — это доля ушедших." },
+      ],
+    }),
+    {
+      skills: skills(`
 version: 1
 terms:
   - term: текучесть
@@ -573,38 +625,36 @@ lessons:
   - id: turnover
     verify: self
 `),
-    lessonTexts: texts({
-      intro: "# Введение\n\nТекучесть разберём во втором модуле.",
-      turnover: "# Текучесть\n\nТекучесть — это доля ушедших.",
-    }),
-  });
+    },
+  );
 
   assert.deepEqual(of(findings, "term-used-before-introduced"), []);
 });
 
 void test("a lesson that does not actually introduce its term is an error", () => {
-  const findings = lintCourse(course({ m: ["intro", "turnover"] }), {
-    skills: skills(GLOSSARY_PLAN),
-    lessonTexts: texts({
-      intro: "# Введение\n\nО метриках вообще.",
-      // The plan promises this lesson explains the word; the text never
-      // uses it. Either the plan or the lesson is lying.
-      turnover: "# Увольнения\n\nСчитаем ушедших за период.",
+  const findings = lintCourse(
+    course({
+      m: [
+        { id: "intro", content: "# Введение\n\nО метриках вообще." },
+        // The plan promises this lesson explains the word; the text never
+        // uses it. Either the plan or the lesson is lying.
+        { id: "turnover", content: "# Увольнения\n\nСчитаем ушедших за период." },
+      ],
     }),
-  });
+    { skills: skills(GLOSSARY_PLAN) },
+  );
 
   assert.equal(of(findings, "term-not-introduced").length, 1);
 });
 
 void test("a course without a glossary is warned about once", () => {
-  const findings = lintCourse(course({ m: [{ id: "one", practice: SQL_EXPECTED }] }), {
+  const findings = lintCourse(course({ m: [{ id: "one", practice: SQL_EXPECTED, content: "# One\n\nSome text." }] }), {
     skills: skills(`
 version: 1
 lessons:
   - id: one
     verify: sql-result
 `),
-    lessonTexts: texts({ one: "# One\n\nSome text." }),
   });
 
   assert.deepEqual(rules(findings).filter((rule) => rule.startsWith("course-without")), [
@@ -621,9 +671,13 @@ void test("an exercise needing what the course has not explained is an error", (
   const findings = lintCourse(
     course({
       m: [
-        "select-basics",
-        { id: "practice", practice: { type: "sql", prompt: "Filter.", sandbox: "main", expected: "select a from t where b = 1" } },
-        "where-clause",
+        { id: "select-basics", content: "# SELECT\n\nКоманда `SELECT` читает данные." },
+        {
+          id: "practice",
+          content: "# Практика\n\nВыберите нужные книги.",
+          practice: { type: "sql", prompt: "Filter.", sandbox: "main", expected: "select a from t where b = 1" },
+        },
+        { id: "where-clause", content: "# WHERE\n\nКлючевое слово `WHERE` отбирает строки." },
       ],
     }),
     {
@@ -644,11 +698,6 @@ lessons:
   - id: where-clause
     verify: self
 `),
-      lessonTexts: texts({
-        "select-basics": "# SELECT\n\nКоманда `SELECT` читает данные.",
-        practice: "# Практика\n\nВыберите нужные книги.",
-        "where-clause": "# WHERE\n\nКлючевое слово `WHERE` отбирает строки.",
-      }),
     },
   );
 
@@ -663,9 +712,13 @@ void test("the same exercise after the explanation is fine", () => {
   const findings = lintCourse(
     course({
       m: [
-        "select-basics",
-        "where-clause",
-        { id: "practice", practice: { type: "sql", prompt: "Filter.", sandbox: "main", expected: "select a from t where b = 1" } },
+        { id: "select-basics", content: "# SELECT\n\nКоманда `SELECT` читает данные." },
+        { id: "where-clause", content: "# WHERE\n\nКлючевое слово `WHERE` отбирает строки." },
+        {
+          id: "practice",
+          content: "# Практика\n\nВыберите нужные книги.",
+          practice: { type: "sql", prompt: "Filter.", sandbox: "main", expected: "select a from t where b = 1" },
+        },
       ],
     }),
     {
@@ -686,11 +739,6 @@ lessons:
   - id: practice
     verify: sql-result
 `),
-      lessonTexts: texts({
-        "select-basics": "# SELECT\n\nКоманда `SELECT` читает данные.",
-        "where-clause": "# WHERE\n\nКлючевое слово `WHERE` отбирает строки.",
-        practice: "# Практика\n\nВыберите нужные книги.",
-      }),
     },
   );
 
@@ -701,8 +749,12 @@ void test("a construct no term explains at all is reported differently", () => {
   const findings = lintCourse(
     course({
       m: [
-        "basics",
-        { id: "practice", practice: { type: "sql", prompt: "Join.", sandbox: "main", expected: "select a from t join u on t.id = u.id" } },
+        { id: "basics", content: "# Basics\n\nКоманда `SELECT` читает данные." },
+        {
+          id: "practice",
+          content: "# Практика\n\nСоберите данные.",
+          practice: { type: "sql", prompt: "Join.", sandbox: "main", expected: "select a from t join u on t.id = u.id" },
+        },
       ],
     }),
     {
@@ -718,7 +770,6 @@ lessons:
   - id: practice
     verify: sql-result
 `),
-      lessonTexts: texts({ basics: "# Basics\n\nКоманда `SELECT` читает данные.", practice: "# Практика\n\nСоберите данные." }),
     },
   );
 
@@ -730,20 +781,18 @@ lessons:
 // --- Empty and guessable content ----------------------------------------
 
 void test("a placeholder lesson is an error once the course stops calling itself a skeleton", () => {
-  const lessonTexts = texts({ one: "# One\n\n> ЗАГЛУШКА — текст урока не написан.\n" });
+  const placeholder: LessonSpec = { id: "one", content: "# One\n\n> ЗАГЛУШКА — текст урока не написан.\n" };
 
-  const shipped = lintCourse(course({ m: ["one"] }, "1.0.0"), { lessonTexts });
+  const shipped = lintCourse(course({ m: [placeholder] }, "1.0.0"));
   assert.equal(of(shipped, "lesson-is-placeholder").length, 1);
 
   // While the version says skeleton, placeholders are the point.
-  const skeleton = lintCourse(course({ m: ["one"] }, "0.1.0-skeleton"), { lessonTexts });
+  const skeleton = lintCourse(course({ m: [placeholder] }, "0.1.0-skeleton"));
   assert.deepEqual(of(skeleton, "lesson-is-placeholder"), []);
 });
 
 void test("a lesson too short to explain anything is a warning", () => {
-  const findings = lintCourse(course({ m: ["one"] }), {
-    lessonTexts: texts({ one: "# One\n\nКороткий урок." }),
-  });
+  const findings = lintCourse(course({ m: [{ id: "one", content: "# One\n\nКороткий урок." }] }));
 
   assert.equal(of(findings, "lesson-too-short").length, 1);
 });
