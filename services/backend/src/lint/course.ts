@@ -25,7 +25,7 @@ import { CAPABILITIES, type EngineCapabilities } from "../capabilities.js";
 import type { Course, CourseLesson, CourseModule } from "../courses/types.js";
 import type { SkillsDocument, SkillsLessonEntry, TermEntry, VerifyKind } from "./skills.js";
 import { mentions, phrasesOf, stemsOf } from "./terms.js";
-import { SQL_FEATURES, sqlFeaturesOf } from "./sqlFeatures.js";
+import { analyzerFor, grantId, isKnownGrant, knownGrants } from "./features.js";
 import { gradeAnswers } from "../practice/answer.js";
 
 export type LintSeverity = "error" | "warning";
@@ -132,7 +132,7 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   checkVerify(planned, byId, skeleton, options.capabilities ?? CAPABILITIES, findings);
   checkBudgets(skills, planned, course, findings);
   checkTerms(skills, lessons, byId, skeleton, options.lessonTexts, findings);
-  checkTaughtSql(skills, planned, byId, skeleton, findings);
+  checkGrants(skills, planned, byId, skeleton, findings);
 
   return findings;
 }
@@ -864,23 +864,27 @@ function checkTerms(
   });
 }
 
-/** E/W: an exercise must be solvable with the SQL the course has taught.
+/** E/W: an exercise must be solvable with what the course has taught.
  *
  * The same question as checkTerms, asked of a different witness. A term
  * catches what the text SAYS; this catches what an exercise REQUIRES —
- * and the gap between the two is exactly where the worst case lives. Our
- * own pilot had it: an exercise asking the learner to filter rows, one
- * lesson before WHERE is explained, and never using the word "WHERE"
- * anywhere in the text. No prose rule can see that. The author's own
- * reference statement can: if solving it needed WHERE, so does the
- * learner.
+ * and the gap between the two is where the worst case lives. Our own
+ * pilot had it: an exercise asking the learner to filter rows, one lesson
+ * before WHERE is explained, and never using the word "WHERE" in its
+ * text. No prose rule can see that. The author's own reference answer
+ * can: if solving it needed WHERE, so does the learner.
  *
- * Availability is taken from the TERM that explains a construct, not from
+ * Nothing here knows what SQL is. A plan grants `sql:where`; which kinds
+ * exist and what they mean belongs to the analyzer registry
+ * (lint/features.ts), so a course in another language needs an analyzer
+ * and not an edit to this rule or to the plan's schema.
+ *
+ * Availability is taken from the TERM that explains a feature, not from
  * the skill a plan says a lesson teaches. A practice lesson can be
  * planned as `teaches: [filter-rows]` while explaining nothing at all —
  * which is precisely the defect, so it cannot also be the evidence.
  */
-function checkTaughtSql(
+function checkGrants(
   skills: SkillsDocument,
   planned: readonly PlannedLesson[],
   byId: ReadonlyMap<string, PositionedLesson>,
@@ -888,39 +892,40 @@ function checkTaughtSql(
   findings: LintFinding[],
 ): void {
   const terms = skills.terms ?? [];
-  const granting = terms.filter((term) => (term.grants_sql ?? []).length > 0);
-  const hasSqlPractice = planned.some(
-    (entry) => entry.at.lesson.practice !== undefined && entry.at.lesson.practice.type !== "answer",
-  );
+  const granting = terms.filter((term) => (term.grants ?? []).length > 0);
+  const analyzable = planned.filter((entry) => {
+    const practice = entry.at.lesson.practice;
+    return practice !== undefined && analyzerFor(practice) !== undefined;
+  });
 
   if (granting.length === 0) {
     // A course with no glossary at all is already told so once, by
     // course-without-glossary. Saying it twice for the same omission
     // teaches authors to read lint findings diagonally.
-    if (terms.length > 0 && hasSqlPractice && !skeleton) {
+    if (terms.length > 0 && analyzable.length > 0 && !skeleton) {
       findings.push({
         severity: "warning",
-        rule: "course-without-sql-grants",
+        rule: "course-without-grants",
         path: "skills.terms",
         message:
-          "No term declares grants_sql, so nothing stops an exercise from needing SQL the course has not explained yet.",
+          "No term grants anything, so nothing stops an exercise from needing what the course has not explained yet.",
       });
     }
     return;
   }
 
-  // Where each construct becomes available: the position of the lesson
-  // that introduces the earliest term granting it.
+  // Where each feature becomes available: the position of the lesson that
+  // introduces the earliest term granting it.
   const availableFrom = new Map<string, number>();
   granting.forEach((term, index) => {
     const home = byId.get(term.introduced_in);
-    for (const feature of term.grants_sql ?? []) {
-      if (!SQL_FEATURES.includes(feature)) {
+    for (const grant of term.grants ?? []) {
+      if (!isKnownGrant(grant)) {
         findings.push({
           severity: "error",
-          rule: "sql-feature-unknown",
-          path: `skills.terms[${index}].grants_sql`,
-          message: `Term "${term.term}" grants "${feature}", which is not a construct the lint knows (see lint/sqlFeatures.ts).`,
+          rule: "grant-unknown",
+          path: `skills.terms[${index}].grants`,
+          message: `Term "${term.term}" grants "${grant}", which no analyzer registers. Known: ${knownGrants().join(", ")}.`,
         });
         continue;
       }
@@ -928,36 +933,34 @@ function checkTaughtSql(
         // Already reported by checkTerms as term-introduced-unknown.
         continue;
       }
-      const current = availableFrom.get(feature);
+      const current = availableFrom.get(grant);
       if (current === undefined || home.order < current) {
-        availableFrom.set(feature, home.order);
+        availableFrom.set(grant, home.order);
       }
     }
   });
 
-  for (const lesson of planned) {
-    const practice = byId.get(lesson.entry.id)?.lesson.practice;
-    if (practice === undefined || practice.type === "answer") {
+  for (const lesson of analyzable) {
+    const practice = lesson.at.lesson.practice;
+    if (practice === undefined) {
       continue;
     }
-    const statements = [practice.solution, practice.expected, practice.check].filter(
-      (sql): sql is string => typeof sql === "string",
-    );
-    const used = new Set(statements.flatMap((sql) => sqlFeaturesOf(sql)));
-    for (const feature of SQL_FEATURES) {
-      if (!used.has(feature)) {
-        continue;
-      }
-      const from = availableFrom.get(feature);
+    const analyzer = analyzerFor(practice);
+    if (analyzer === undefined) {
+      continue;
+    }
+    for (const feature of analyzer.extract(practice)) {
+      const grant = grantId(analyzer.kind, feature);
+      const from = availableFrom.get(grant);
       if (from === undefined || from > lesson.at.order) {
         findings.push({
           severity: "error",
-          rule: "practice-uses-untaught-sql",
+          rule: "practice-uses-untaught",
           path: `${lesson.at.path}.practice`,
           message:
             from === undefined
-              ? `Solving this needs ${feature.toUpperCase()}, which no term of this course explains.`
-              : `Solving this needs ${feature.toUpperCase()}, explained later in the course.`,
+              ? `Solving this needs ${grant}, which no term of this course explains.`
+              : `Solving this needs ${grant}, explained later in the course.`,
         });
       }
     }
@@ -996,7 +999,7 @@ export const LINT_RULES: readonly string[] = [
   "term-not-introduced",
   "term-used-before-introduced",
   "course-without-glossary",
-  "sql-feature-unknown",
-  "practice-uses-untaught-sql",
-  "course-without-sql-grants",
+  "grant-unknown",
+  "practice-uses-untaught",
+  "course-without-grants",
 ];

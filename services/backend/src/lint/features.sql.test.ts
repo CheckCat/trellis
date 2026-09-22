@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sqlFeaturesOf, SQL_FEATURES } from "./sqlFeatures.js";
+import { sqlFeaturesOf, SQL_FEATURES } from "./features.sql.js";
 
 void test("a plain SELECT uses only SELECT", () => {
   assert.deepEqual(sqlFeaturesOf("select title, author from books"), ["select"]);

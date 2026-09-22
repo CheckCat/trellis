@@ -73,10 +73,10 @@
           "$ref": "#/$defs/id",
           "description": "Id of the lesson that explains this term. Must name a lesson of manifest.yaml, and that lesson's text must actually contain the term."
         },
-        "grants_sql": {
+        "grants": {
           "type": "array",
-          "description": "SQL constructs this term makes available — the closed list lives in lint/sqlFeatures.ts (where, order-by, join, aggregate, ...). A term explaining WHERE grants \"where\", and from then on exercises may need it. An exercise whose reference statement uses a construct granted later is an error, even when the lesson text never says the word.",
-          "items": { "type": "string", "minLength": 1 }
+          "description": "What a learner may use once this term is explained, as \"kind:feature\" (sql:where, sql:order-by). The kinds and their features come from the lint's analyzer registry (lint/features.ts), never from this schema: a new language is a new analyzer, not a new field here. An exercise whose reference answer needs a feature granted later is an error — even when the lesson text never says the word.",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$" }
         },
         "mentioned_before": {
           "type": "array",

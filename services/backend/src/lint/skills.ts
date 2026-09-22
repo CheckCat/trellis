@@ -42,8 +42,9 @@ export interface TermEntry {
   readonly term: string;
   readonly forms?: readonly string[];
   readonly introduced_in: string;
-  /** SQL constructs this term makes available — see lint/sqlFeatures.ts. */
-  readonly grants_sql?: readonly string[];
+  /** What this term makes available, as `kind:feature` — see
+   * lint/features.ts for the registry the values come from. */
+  readonly grants?: readonly string[];
   readonly mentioned_before?: readonly string[];
 }
 

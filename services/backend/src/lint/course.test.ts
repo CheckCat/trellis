@@ -614,7 +614,7 @@ lessons:
 
 // --- Untaught SQL --------------------------------------------------------
 
-void test("an exercise needing SQL the course has not explained is an error", () => {
+void test("an exercise needing what the course has not explained is an error", () => {
   // This is the pilot's own defect, reduced: an exercise that filters
   // rows, standing before the lesson that explains WHERE — and never
   // using the word "WHERE" in its text, so no prose rule could see it.
@@ -632,10 +632,10 @@ version: 1
 terms:
   - term: SELECT
     introduced_in: select-basics
-    grants_sql: [select]
+    grants: [sql:select]
   - term: WHERE
     introduced_in: where-clause
-    grants_sql: [where]
+    grants: [sql:where]
 lessons:
   - id: select-basics
     verify: self
@@ -652,9 +652,11 @@ lessons:
     },
   );
 
-  const found = of(findings, "practice-uses-untaught-sql");
+  const found = of(findings, "practice-uses-untaught");
   assert.equal(found.length, 1);
-  assert.match(found[0]?.message ?? "", /WHERE/);
+  // The message names the grant exactly as a plan would write it, so the
+  // fix is a copy-paste rather than a translation.
+  assert.match(found[0]?.message ?? "", /sql:where/);
 });
 
 void test("the same exercise after the explanation is fine", () => {
@@ -672,10 +674,10 @@ version: 1
 terms:
   - term: SELECT
     introduced_in: select-basics
-    grants_sql: [select]
+    grants: [sql:select]
   - term: WHERE
     introduced_in: where-clause
-    grants_sql: [where]
+    grants: [sql:where]
 lessons:
   - id: select-basics
     verify: self
@@ -692,7 +694,7 @@ lessons:
     },
   );
 
-  assert.deepEqual(of(findings, "practice-uses-untaught-sql"), []);
+  assert.deepEqual(of(findings, "practice-uses-untaught"), []);
 });
 
 void test("a construct no term explains at all is reported differently", () => {
@@ -709,7 +711,7 @@ version: 1
 terms:
   - term: SELECT
     introduced_in: basics
-    grants_sql: [select]
+    grants: [sql:select]
 lessons:
   - id: basics
     verify: self
@@ -720,7 +722,7 @@ lessons:
     },
   );
 
-  const found = of(findings, "practice-uses-untaught-sql");
+  const found = of(findings, "practice-uses-untaught");
   assert.equal(found.length, 1);
   assert.match(found[0]?.message ?? "", /no term of this course explains/);
 });

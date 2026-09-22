@@ -29,7 +29,7 @@ skills:
     requires: [filter-rows, order-rows]
 
 # Словарь курса: какое слово вводит какой урок. Линт читает тексты уроков
-# и не даёт употребить термин раньше, чем курс его объяснил; `grants_sql`
+# и не даёт употребить термин раньше, чем курс его объяснил; `grants`
 # добавляет к этому проверку заданий — если эталонное решение опирается на
 # конструкцию, объяснённую позже, задание нерешаемо тем, что курс уже дал.
 terms:
@@ -41,20 +41,20 @@ terms:
     introduced_in: what-is-sql
   - term: SELECT
     introduced_in: select-basics
-    grants_sql: [select]
+    grants: [sql:select]
   - term: WHERE
     introduced_in: where-clause
-    grants_sql: [where]
+    grants: [sql:where]
   - term: INSERT
     forms: ["INSERT INTO"]
     introduced_in: practice-add-book
-    grants_sql: [insert]
+    grants: [sql:insert]
   - term: UPDATE
     introduced_in: practice-update-stock
-    grants_sql: [update]
+    grants: [sql:update]
   - term: ORDER BY
     introduced_in: practice-by-year
-    grants_sql: [order-by]
+    grants: [sql:order-by]
 
 lessons:
   - id: what-is-sql
