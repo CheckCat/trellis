@@ -9,7 +9,9 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node scripts/start.mjs",
+    "start": "node scripts/stack/stack.mjs start",
+    "stack:rebuild": "node scripts/stack/stack.mjs rebuild",
+    "stack:down": "node scripts/stack/stack.mjs down",
     "lint": "npm run lint --workspaces --if-present && eslint tests scripts",
     "build": "npm run build --workspaces --if-present && tsc -p tests/e2e/tsconfig.json",
     "capabilities:write": "npm run capabilities:write --workspace @trellis/backend",

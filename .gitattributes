@@ -7,3 +7,10 @@
 # commit) — only the checkout is CRLF.
 *.bat text eol=crlf
 *.ps1 text eol=crlf
+
+# Shell scripts must stay LF everywhere, including a checkout on Windows with
+# core.autocrlf=true: `docker/postgres/init/00-init.sh` is mounted straight
+# into a Linux container (a CRLF shebang there is a broken container), and
+# `scripts/stack/*.sh` are run by sh on macOS/Linux and by WSL/Git Bash on a
+# developer's Windows machine.
+*.sh text eol=lf

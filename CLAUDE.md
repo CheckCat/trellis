@@ -7,7 +7,7 @@
 - backend: Fastify (Node.js, TypeScript) — `services/backend`
 - frontend: React SPA + CodeMirror (SQL-редактор практики) — `services/frontend`
 - db: PostgreSQL (именованный volume; песочница практики — отдельная схема/роль в том же инстансе)
-- deploy: docker-compose, только `localhost`; пользовательский запуск — `scripts/start.ps1`+`.bat` (Windows) и `scripts/start.sh` (macOS/Linux), кроссплатформенный диспетчер — `npm start`
+- deploy: docker-compose, только `localhost`; пользовательские команды живут в `scripts/stack/` — `start`, `rebuild` (пересборка без кеша), `down` (остановка); у каждой три файла: `.ps1` (Windows), `.sh` (macOS/Linux) и `.bat` для двойного щелчка. Кроссплатформенный диспетчер — `scripts/stack/stack.mjs` (`npm start`, `npm run stack:rebuild`, `npm run stack:down`)
 - layout: npm workspaces в корне; root-скрипты гоняют все workspace-пакеты
 
 ## Команды
@@ -34,9 +34,20 @@ npm run capabilities:write      # -> docs/contracts/capabilities.json (комм�
 npm run course:lint -- courses/pilot-sql
 ```
 
-Запуск стека: `npm start` (диспетчер, выбирает лаунчер по системе) или напрямую `docker compose up`.
+Управление стеком (диспетчер сам выбирает лаунчер по системе):
 
-Лаунчеров два и это осознанно: скрипт запуска работает до того, как поднято хоть что-то, и не может полагаться ни на что, кроме встроенного в систему (PowerShell на Windows, sh на остальных). Node ради него требовать нельзя — пользователю ставится только Docker Desktop, платформе Node не нужен (он внутри образов). Правишь один — правь и второй; совпадение таймаутов, шагов, имён сервисов и ключей `.env` сторожит `scripts/launcher-parity.test.mjs` в обычном `npm test`.
+```bash
+npm start                          # поднять; = ./scripts/stack/start.sh
+npm run stack:rebuild              # пересобрать образы без кеша и поднять; данные сохраняются
+npm run stack:down                 # остановить и удалить контейнеры; данные сохраняются
+npm run stack:down -- --with-data  # то же плюс удалить том trellis_pgdata (спросит подтверждение)
+```
+
+Напрямую стек поднимается и через `docker compose up`.
+
+Реализаций лаунчера две и это осознанно: скрипт запуска работает до того, как поднято хоть что-то, и не может полагаться ни на что, кроме встроенного в систему (PowerShell на Windows, sh на остальных). Node ради него требовать нельзя — пользователю ставится только Docker Desktop, платформе Node не нужен (он внутри образов). Общая часть обеих — `scripts/stack/common.sh` и `scripts/stack/common.ps1`; сами команды поверх неё короткие и читаются как список шагов. Правишь одну — правь и вторую; совпадение таймаутов, состава и заголовков шагов каждой команды, имён сервисов, ключей `.env` и запрета на `down -v` сторожит `scripts/stack-parity.test.mjs` в обычном `npm test`.
+
+Прогресс ученика живёт только в томе `trellis_pgdata`, копии его нет. Поэтому `down -v` в лаунчерах запрещён совсем (это проверяет паритет-тест): удаление данных — отдельное действие с явным ключом `--with-data`/`-WithData` и подтверждением словом.
 
 Сквозной smoke-тест собранного стека — отдельной командой, в `npm run test` и в CI он не входит (поднимает docker-compose-стек, нужен Docker Compose >= 2.24):
 
