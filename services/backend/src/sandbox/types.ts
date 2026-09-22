@@ -117,16 +117,33 @@ export interface SandboxDriverRegistry {
  */
 export interface SandboxProvisioner {
   readonly drivers: SandboxDriverRegistry;
-  /**
-   * Makes this course's sandbox live, doing nothing if it already is. This
-   * is the "подключение курса" path: the first practice run of a course
-   * pays for the seed, later runs don't (and must not — a reset on every
-   * query would wipe the user's own tables mid-lesson).
-   */
-  ensure(courseId: string, sandboxId?: string): Promise<SandboxState>;
-  /** "Сбросить песочницу": rebuild unconditionally, even if this course's
-   * sandbox is already live. */
+  /** Rebuild from the course's seed, unconditionally. */
   reset(courseId: string, sandboxId?: string): Promise<SandboxState>;
+  /**
+   * Rebuilds the sandbox and runs `work` against it, with the guarantee
+   * that nothing else re-seeds or switches the sandbox until `work`
+   * settles. This is how practice runs: every attempt starts from the
+   * course's seed and nothing else.
+   *
+   * There used to be an `ensure()` here instead — "the first practice run
+   * of a course pays for the seed, later ones don't". It was the right
+   * shape for a sandbox that ACCUMULATED: cheaper, and it let a learner
+   * build something across several runs. What it also did was let lesson 3
+   * decide whether lesson 11 passes, and let a `delete` inside one attempt
+   * make that attempt's own grading compare two empty sets. State that
+   * carries over cannot be graded, so it no longer carries over.
+   *
+   * `work` receives `reseed` because grading by the course's SOLUTION
+   * needs the seeded state more than once per attempt (run the solution,
+   * read the state, put the sandbox back, run the learner's SQL). Calling
+   * the provisioner's own `reset` from inside `work` would deadlock on
+   * this same queue — hence the handle rather than a re-entrant call.
+   */
+  withFreshSandbox<T>(
+    courseId: string,
+    sandboxId: string | undefined,
+    work: (context: FreshSandboxContext) => Promise<T>,
+  ): Promise<T>;
   /**
    * The live sandbox, or `undefined` if none is. With `courseId`, answers
    * "is THIS course's sandbox live" — a different course's live sandbox
@@ -135,6 +152,14 @@ export interface SandboxProvisioner {
    */
   status(courseId?: string): SandboxState | undefined;
   close(): Promise<void>;
+}
+
+/** What `withFreshSandbox` hands its caller: the sandbox as just seeded,
+ * and the ability to return it to exactly that state again without leaving
+ * the exclusive window. */
+export interface FreshSandboxContext {
+  readonly state: SandboxState;
+  reseed(): Promise<SandboxState>;
 }
 
 /**

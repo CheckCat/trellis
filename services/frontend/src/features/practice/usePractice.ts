@@ -3,60 +3,45 @@ import { api } from "../../api/client";
 
 /**
  * Drives one lesson's practice exercise for `PracticeView`: running the
- * learner's SQL against the course's sandbox, and resetting that sandbox
- * back to its seeded state.
+ * learner's SQL against the course's sandbox.
  *
- * `sandboxId` is the lesson's own `practice.sandbox` (`PublicPractice`) —
- * passed explicitly rather than left for the backend to infer, matching
- * `POST /courses/:courseId/sandbox/reset`'s contract that an unspecified
- * `sandboxId` only resolves when a course declares exactly one sandbox
- * (task-008's report: an omitted id on an ambiguous course 400s). The
- * lesson already names the sandbox it needs, so there is nothing to guess.
+ * There used to be a second mutation here — resetting the sandbox back to
+ * its seeded state, behind a button in the toolbar. Both are gone: the
+ * backend now re-seeds before every attempt, so "restore the starting
+ * state" is not something a learner can ask for at a moment when it isn't
+ * already true. What the control used to be FOR — undoing a mess made two
+ * lessons ago — stopped existing along with the mess.
  */
-export function usePractice(courseId: string, lessonId: string, sandboxId: string) {
+export function usePractice(courseId: string, lessonId: string) {
   const queryClient = useQueryClient();
 
   const runMutation = useMutation({
     mutationFn: (sql: string) => api.runPractice(courseId, lessonId, sql),
     onSuccess: (data) => {
       // Only a run where every grading mechanic the lesson declares passed
-      // can have completed it (routes/practice.ts never marks it complete
-      // otherwise — with both `check` and `expected`, both must pass) —
+      // can have completed it (routes/practice/sql.ts never marks it
+      // complete otherwise — declare two mechanics and both must pass) —
       // re-fetch the progress tree the same way LessonView's
       // manual-complete mutation and useQuiz's correct-answer path already
       // do, rather than hand-patching the cache from this response's own
       // `lesson`/`course` fields.
-      const graded = data.check.present || data.expected.present;
+      const graded = data.check.present || data.expected.present || data.solution.present;
       const allPassed =
         (!data.check.present || data.check.passed === true) &&
-        (!data.expected.present || data.expected.passed === true);
+        (!data.expected.present || data.expected.passed === true) &&
+        (!data.solution.present || data.solution.passed === true);
       if (graded && allPassed) {
         void queryClient.invalidateQueries({ queryKey: ["courseProgress", courseId] });
       }
     },
   });
 
-  const resetMutation = useMutation({
-    mutationFn: () => api.resetSandbox(courseId, sandboxId),
-    onSuccess: () => {
-      // A reset wipes whatever the learner's prior attempts created —
-      // the last run's result/verdict no longer describes the sandbox's
-      // current state, so it must not keep being shown as if it still
-      // applies to what's there now.
-      runMutation.reset();
-    },
-  });
-
   return {
     /** The most recently completed run's response, or `undefined` before
-     * any run (or after a reset clears it). */
+     * any run. */
     execution: runMutation.data,
     isRunning: runMutation.isPending,
     runError: runMutation.error,
     run: (sql: string) => runMutation.mutate(sql),
-    isResetting: resetMutation.isPending,
-    resetError: resetMutation.error,
-    resetSucceeded: resetMutation.isSuccess,
-    reset: () => resetMutation.mutate(),
   };
 }

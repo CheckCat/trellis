@@ -61,7 +61,7 @@ export function TransferPage() {
         </p>
         <button
           type="button"
-          className="mark-done-button"
+          className="button button--primary"
           onClick={() => exportMutation.mutate()}
           disabled={exportMutation.isPending}
         >

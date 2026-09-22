@@ -101,6 +101,8 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   // them for a package without skills.yaml is what makes the lint useful
   // before a plan exists.
   checkPacing(lessons, course, findings);
+  checkQuizExplanations(lessons, findings);
+  checkStrictGrading(lessons, findings);
 
   const skills = options.skills;
   if (skills === undefined) {
@@ -447,7 +449,11 @@ function describeActualVerification(lesson: CourseLesson): readonly VerifyKind[]
     if (practice.type === "answer") {
       kinds.push("answer");
     } else {
-      if (practice.check !== undefined) {
+      if (practice.check !== undefined || practice.solution !== undefined) {
+        // Both mechanics answer "did the database end up right": `check`
+        // by a predicate the author wrote, `solution` by comparing the
+        // whole state. A plan that says "sql-state" is satisfied by
+        // either, and the plan is not the place to pick between them.
         kinds.push("sql-state");
       }
       if (practice.expected !== undefined) {
@@ -465,6 +471,84 @@ function describeActualVerification(lesson: CourseLesson): readonly VerifyKind[]
 /** W: pacing. Neither of these makes a course wrong; both make it worse to
  * sit through, and neither is visible by reading one lesson at a time —
  * which is why a tool is the right place for them. */
+/**
+ * W: a wrong quiz option should say WHY it is wrong.
+ *
+ * The engine cannot require this — `explanation` is optional in the
+ * manifest schema and a course without it is perfectly runnable, which is
+ * why this is a warning and not an error. But a quiz that answers "Неверно"
+ * and nothing else teaches nothing: the learner who picked that option did
+ * so for a reason, and the one sentence explaining the reason is the only
+ * part of the quiz that does any teaching. This rule is where that rule of
+ * authorship lives, since it cannot live in the type system.
+ *
+ * Correct options are not checked: an explanation there is welcome but
+ * optional — being right is already the feedback.
+ */
+function checkQuizExplanations(lessons: readonly PositionedLesson[], findings: LintFinding[]): void {
+  for (const at of lessons) {
+    const quiz = at.lesson.quiz;
+    if (quiz === undefined) {
+      continue;
+    }
+    quiz.options.forEach((option, optionIndex) => {
+      if (option.correct || option.explanation !== undefined) {
+        return;
+      }
+      findings.push({
+        severity: "warning",
+        rule: "quiz-wrong-option-without-explanation",
+        path: `${at.path}.quiz.options[${optionIndex}]`,
+        message:
+          `Wrong option "${option.id}" of lesson "${at.lesson.id}" has no explanation — a learner who picks it ` +
+          `is told only that they are wrong.`,
+      });
+    });
+  }
+}
+
+/**
+ * W: an exercise that changes data should be graded by its SOLUTION.
+ *
+ * `check` grades a predicate, and a predicate grades only what its author
+ * thought to ask. The classic hole: an assignment says "mark book 1 as out
+ * of stock", the check asks whether book 1 is out of stock, and
+ * `update books set in_stock = false` — every row ruined — passes it.
+ * Writing a check strict enough to catch that means spelling out "and
+ * nothing else changed" against exact seed counts, table by table; on a
+ * real course nobody does, which is why this is a rule of authorship
+ * rather than a hope.
+ *
+ * `solution` closes it without the author thinking about it at all: the
+ * engine compares the whole sandbox state. So a `check`-only assignment is
+ * worth a warning — not an error, because a check-only exercise is still
+ * valid and still runs, and because some conditions genuinely are
+ * predicates ("no salary went negative") with no single right state.
+ *
+ * Assignments carrying `expected` are left alone: a SELECT exercise leaves
+ * no state to compare, and `expected` is already its strict mechanic.
+ */
+function checkStrictGrading(lessons: readonly PositionedLesson[], findings: LintFinding[]): void {
+  for (const at of lessons) {
+    const practice = at.lesson.practice;
+    if (practice === undefined || practice.type !== "sql") {
+      continue;
+    }
+    if (practice.check === undefined || practice.solution !== undefined || practice.expected !== undefined) {
+      continue;
+    }
+    findings.push({
+      severity: "warning",
+      rule: "practice-check-without-solution",
+      path: `${at.path}.practice.check`,
+      message:
+        `Lesson "${at.lesson.id}" is graded by "check" alone — a predicate passes any attempt that satisfies ` +
+        `it, including one that changed rows the assignment never mentioned. Add "solution" (the author's own ` +
+        `SQL) to have the engine compare the whole resulting state instead.`,
+    });
+  }
+}
+
 function checkPacing(lessons: readonly PositionedLesson[], course: Course, findings: LintFinding[]): void {
   let runStart: PositionedLesson | undefined;
   let run = 0;

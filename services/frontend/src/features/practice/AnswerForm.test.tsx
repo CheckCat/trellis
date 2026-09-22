@@ -161,4 +161,65 @@ describe("PracticeView with a type: answer practice", () => {
 
     await waitFor(() => expect(screen.getByText("Это задание отправляется в другой обработчик.")).toBeTruthy());
   });
+
+  it("offers the reference answer only after a wrong attempt, and only on request", async () => {
+    const calls: string[] = [];
+    renderView(async (url) => {
+      calls.push(url);
+      if (url.endsWith("/solution")) {
+        return jsonResponse({
+          fields: [
+            { id: "headcount", label: "Сколько сотрудников работает сейчас?", expected: "112" },
+            { id: "reason", label: "Самая частая причина увольнения", expected: "По собственному желанию" },
+          ],
+        });
+      }
+      return jsonResponse({ ok: false, fields: { headcount: { correct: false }, reason: { correct: true } }, ...lessonCourse(false) });
+    });
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByLabelText("Сколько сотрудников работает сейчас?")).toBeTruthy());
+
+    // Пока ученик не пробовал — кнопки нет: иначе это спойлер к заданию,
+    // которое ещё не решали.
+    expect(screen.queryByRole("button", { name: /Показать ответ/ })).toBeNull();
+
+    await user.type(screen.getByLabelText("Сколько сотрудников работает сейчас?"), "50");
+    await user.click(screen.getByRole("button", { name: "Проверить" }));
+
+    const reveal = await screen.findByRole("button", { name: /Показать ответ/ });
+    // Кнопка появилась, но эталон ещё не запрашивался — он не «спрятан»
+    // в странице, его в ней нет.
+    expect(calls.some((url) => url.endsWith("/solution"))).toBe(false);
+
+    await user.click(reveal);
+
+    await waitFor(() => expect(screen.getByText("112")).toBeTruthy());
+    expect(screen.getByText("По собственному желанию")).toBeTruthy();
+    expect(calls.filter((url) => url.endsWith("/solution"))).toHaveLength(1);
+  });
+
+  it("shows a numeric field's tolerance with the answer, and nothing when it is exact", async () => {
+    renderView(async (url) => {
+      if (url.endsWith("/solution")) {
+        return jsonResponse({
+          fields: [
+            { id: "headcount", label: "Сколько сотрудников работает сейчас?", expected: "18.5", tolerance: 0.2 },
+            { id: "reason", label: "Самая частая причина увольнения", expected: "Переезд" },
+          ],
+        });
+      }
+      return jsonResponse({ ok: false, fields: { headcount: { correct: false }, reason: { correct: false } }, ...lessonCourse(false) });
+    });
+
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByLabelText("Сколько сотрудников работает сейчас?")).toBeTruthy());
+    await user.type(screen.getByLabelText("Сколько сотрудников работает сейчас?"), "1");
+    await user.click(screen.getByRole("button", { name: "Проверить" }));
+    await user.click(await screen.findByRole("button", { name: /Показать ответ/ }));
+
+    const shown = await screen.findByText(/18\.5/);
+    expect(shown.parentElement?.textContent).toContain("(±0.2)");
+    expect(screen.getByText("Переезд").parentElement?.textContent).not.toContain("±");
+  });
 });

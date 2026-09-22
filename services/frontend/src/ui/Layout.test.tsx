@@ -27,7 +27,7 @@ function statusText(): string {
 }
 
 describe("HealthIndicator", () => {
-  it("shows a loading state before the health check settles", () => {
+  it("says nothing at all while the health check is still in flight", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise(() => {})), // never resolves during this assertion
@@ -35,10 +35,12 @@ describe("HealthIndicator", () => {
 
     renderIndicator();
 
-    expect(statusText()).toContain("Проверяем связь с ядром");
+    // A "проверяем…" flash on every page load is noise in a shorter
+    // costume — the widget stays silent until there is bad news.
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("shows connected once GET /api/health reports ok", async () => {
+  it("stays silent once GET /api/health reports ok (the normal case)", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       expect(String(input)).toBe("/api/health");
       return new Response(JSON.stringify({ status: "ok", db: "ok" }), { status: 200 });
@@ -47,8 +49,11 @@ describe("HealthIndicator", () => {
 
     renderIndicator();
 
-    await waitFor(() => expect(statusText()).toContain("Связь с ядром есть"));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    // The indicator used to announce «Связь с ядром есть» permanently. A
+    // status that is green 100% of the time trains people to stop looking
+    // at it, which is the one job it has.
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("shows disconnected when the health check request fails (error path)", async () => {

@@ -75,6 +75,7 @@ interface RawPractice {
    * `dependentRequired`), and normalized to a present boolean by
    * `validatePractice` below. */
   readonly ordered?: boolean;
+  readonly solution?: string;
   readonly fields?: readonly RawAnswerField[];
 }
 
@@ -314,7 +315,7 @@ function validatePractice(
   const type: CoursePracticeType = practice.type ?? "sql";
 
   if (type === "answer") {
-    for (const forbidden of ["sandbox", "check", "expected", "ordered"] as const) {
+    for (const forbidden of ["sandbox", "check", "expected", "ordered", "solution"] as const) {
       if (practice[forbidden] !== undefined) {
         errors.push({
           path: `${practicePath}.${forbidden}`,
@@ -363,6 +364,7 @@ function validatePractice(
     sandbox: practice.sandbox ?? "",
     check: practice.check,
     expected: practice.expected,
+    solution: practice.solution,
     // "по умолчанию false" is resolved here, once, rather than at every
     // read site: `ordered` exists in the domain model exactly when
     // `expected` does (types.ts). The schema's `dependentRequired`

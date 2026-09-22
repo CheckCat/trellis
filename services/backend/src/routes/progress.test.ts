@@ -253,3 +253,70 @@ void test("a course update keeps progress: same ids stay completed, new ids star
     },
   );
 });
+
+void test("DELETE /courses/:courseId/progress erases that course's progress and reports how much", async () => {
+  await withProgressApp(
+    async (app, progress) => {
+      const response = await app.inject({ method: "DELETE", url: `/courses/${FIXTURE_COURSE_ID}/progress` });
+      assert.equal(response.statusCode, 200);
+      const body = response.json();
+
+      assert.equal(body.deletedLessons, 2);
+      // The counters answer with the state AFTER the reset — a client that
+      // redraws from this response must not show the pre-reset numbers.
+      assert.equal(body.course.completedLessons, 0);
+      assert.equal(body.course.totalLessons, 4);
+      assert.equal(body.course.completed, false);
+      assert.deepEqual(progress.records(), []);
+    },
+    { seed: [completedRecord(FIXTURE_TEXT_LESSON_ID), completedRecord(FIXTURE_QUIZ_LESSON_ID)] },
+  );
+});
+
+void test("DELETE /courses/:courseId/progress leaves other courses alone", async () => {
+  await withProgressApp(
+    async (app, progress) => {
+      await app.inject({ method: "DELETE", url: `/courses/${FIXTURE_COURSE_ID}/progress` });
+      assert.deepEqual(
+        progress.records().map((record) => [record.courseId, record.lessonId]),
+        [["some-other-course", FIXTURE_TEXT_LESSON_ID]],
+      );
+    },
+    {
+      seed: [
+        completedRecord(FIXTURE_TEXT_LESSON_ID),
+        completedRecord(FIXTURE_TEXT_LESSON_ID, { courseId: "some-other-course" }),
+      ],
+    },
+  );
+});
+
+void test("DELETE /courses/:courseId/progress also drops completions orphaned by a course update", async () => {
+  await withProgressApp(
+    async (app, progress) => {
+      // `gone-lesson` is not in the fixture manifest, so it never shows up in
+      // the tree's counters — but it is still this course's progress, and
+      // «перепройти» means all of it.
+      const body = (await app.inject({ method: "DELETE", url: `/courses/${FIXTURE_COURSE_ID}/progress` })).json();
+      assert.equal(body.deletedLessons, 2);
+      assert.deepEqual(progress.records(), []);
+    },
+    { seed: [completedRecord(FIXTURE_TEXT_LESSON_ID), completedRecord("gone-lesson")] },
+  );
+});
+
+void test("DELETE /courses/:courseId/progress on a course with no progress is a success, not an error", async () => {
+  await withProgressApp(async (app) => {
+    const response = await app.inject({ method: "DELETE", url: `/courses/${FIXTURE_COURSE_ID}/progress` });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().deletedLessons, 0);
+  });
+});
+
+void test("DELETE /courses/:courseId/progress 404s for a course that does not exist", async () => {
+  await withProgressApp(async (app) => {
+    const response = await app.inject({ method: "DELETE", url: "/courses/no-such-course/progress" });
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().error, "course_not_found");
+  });
+});

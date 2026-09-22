@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
 import type { ImportRejection, ImportResult, ProgressExportFile } from "../../api/types";
+import { FileIcon } from "../../ui/icons";
 
 /** Narrows an `ApiError`'s `unknown` body to `ImportResult` — true for both
  * of `POST /progress/import`'s outcomes that carry counters: the 200 body
@@ -118,10 +119,32 @@ export function ImportDialog() {
   return (
     <div className="import-dialog">
       <p className="muted-note">Выберите ранее сохранённый файл прогресса, чтобы восстановить его на этом компьютере.</p>
-      <label className="import-file-label">
-        Файл прогресса
-        <input type="file" accept="application/json,.json" onChange={(event) => void handleFileChange(event)} />
-      </label>
+      {/* Нативный `<input type="file">` выглядит в каждом браузере по-своему
+       * и ни в одном — как остальная платформа. Поэтому он растянут поверх
+       * своей кнопки и сделан прозрачным: кликабельность, фокус с клавиатуры
+       * и выбор файла остаются нативными, видно при этом нашу кнопку.
+       *
+       * Подпись кнопки скрыта от ассистивных технологий, иначе доступное имя
+       * поля склеилось бы из двух текстов («Файл прогресса Выбрать файл…») —
+       * имя должно называть поле, а не повторять то, что на кнопке. */}
+      <div className="file-picker">
+        <label className="file-picker-label" htmlFor="progress-file">
+          Файл прогресса
+        </label>
+        <div className="file-picker-control">
+          <input
+            id="progress-file"
+            className="file-picker-input"
+            type="file"
+            accept="application/json,.json"
+            onChange={(event) => void handleFileChange(event)}
+          />
+          <span className="file-picker-button" aria-hidden="true">
+            <FileIcon />
+            Выбрать файл…
+          </span>
+        </div>
+      </div>
 
       {readError !== undefined && <p className="muted-note">{readError}</p>}
 
@@ -138,10 +161,10 @@ export function ImportDialog() {
         <div className="import-warning">
           <p>{error instanceof ApiError ? error.message : ""}</p>
           <ImportSummary result={staleWarning} />
-          <button type="button" className="import-confirm-button" onClick={confirmStaleImport}>
+          <button type="button" className="button button--primary" onClick={confirmStaleImport}>
             Импортировать всё равно
           </button>
-          <button type="button" className="import-cancel-button" onClick={() => importMutation.reset()}>
+          <button type="button" className="button button--quiet" onClick={() => importMutation.reset()}>
             Отмена
           </button>
         </div>

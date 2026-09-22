@@ -100,7 +100,7 @@ void test("a sandbox driver for an unregistered-in-code type runs without provis
     const stub = createStubSandboxDriver();
     const provisioner = createSandboxProvisioner({ courses: registryWithFutureSandbox(dir), drivers: [stub.driver] });
 
-    const state = await provisioner.ensure("future-course", "main");
+    const state = await provisioner.withFreshSandbox("future-course", "main", async ({ state: ready }) => ready);
 
     // The provisioner picked the driver by the type the COURSE declared and
     // handed it a fully resolved spec — exactly what it does for Postgres.
@@ -128,7 +128,7 @@ void test("a course whose sandbox type has no registered driver fails as unavail
 
   try {
     await assert.rejects(
-      () => provisioner.ensure("future-course", "main"),
+      () => provisioner.withFreshSandbox("future-course", "main", async ({ state }) => state),
       (err: unknown) => {
         assert.ok(err instanceof SandboxError);
         assert.equal(err.kind, "unavailable");

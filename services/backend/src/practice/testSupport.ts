@@ -303,6 +303,44 @@ export function expectedManifestYaml(courseId = "progress-fixture"): string {
   ].join("\n");
 }
 
+// --- The `solution` mechanic (practice/state.ts) -------------------------
+
+/** A lesson graded by comparing the state it leaves with the state the
+ * author's own solution leaves — the strict mechanic for exercises that
+ * change data. */
+export const SOLUTION_LESSON_ID = "solution-lesson";
+
+/** The solution that fixture declares — the text that must never appear in
+ * any response. */
+export const FIXTURE_SOLUTION_SQL = "update fixture_books set in_stock = false where id = 1";
+
+/** A fixture manifest whose only graded lesson carries a `solution` and
+ * nothing else: the mechanic has to stand on its own, without a `check`
+ * quietly doing the work. */
+export function solutionManifestYaml(courseId = "progress-fixture"): string {
+  return [
+    `id: ${courseId}`,
+    "version: 1.0.0",
+    "title: Progress fixture course",
+    "sandboxes:",
+    "  - id: main",
+    "    type: postgres",
+    "    seed:",
+    "      - sandbox/01-schema.sql",
+    "modules:",
+    "  - id: only-module",
+    "    title: Only module",
+    "    lessons:",
+    `      - id: ${SOLUTION_LESSON_ID}`,
+    "        title: State-compared practice lesson",
+    "        practice:",
+    "          sandbox: main",
+    "          prompt: Mark book 1 as out of stock.",
+    `          solution: "${FIXTURE_SOLUTION_SQL}"`,
+    "",
+  ].join("\n");
+}
+
 // --- The `answer` mechanic (practice/answer.ts) --------------------------
 
 /** A lesson whose practice is done outside the platform: no sandbox, no

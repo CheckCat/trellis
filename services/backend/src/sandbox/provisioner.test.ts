@@ -12,7 +12,7 @@ import {
   FIXTURE_SEED_SCHEMA,
   FIXTURE_SEED_SCHEMA_SQL,
 } from "./testSupport.js";
-import { SandboxError, type SandboxDriver, type SandboxSpec } from "./types.js";
+import { SandboxError, type SandboxDriver, type SandboxProvisioner, type SandboxSpec } from "./types.js";
 
 /** A driver that records the specs it was handed instead of touching a
  * database — the provisioner's whole job is producing those specs and
@@ -40,17 +40,29 @@ function recordingDriver(options: { failOnce?: Error; onProvision?: () => Promis
 
 const FIXED_CLOCK = () => new Date("2026-03-01T10:00:00.000Z");
 
-void test("ensure provisions the course's sandbox once and does nothing on the next call", async () => {
+/** The practice path in miniature: take the sandbox, freshly seeded, and do
+ * nothing else with it. Every caller below used to be `ensure()`; the
+ * difference the rewrite is about is that this one always re-seeds. */
+function seedOnce(provisioner: SandboxProvisioner, courseId: string, sandboxId?: string) {
+  return provisioner.withFreshSandbox(courseId, sandboxId, async ({ state }) => state);
+}
+
+// Was "ensure provisions once and does nothing on the next call" — the
+// opposite claim, and the reason `ensure` no longer exists. A sandbox that
+// survived the previous attempt is a sandbox the previous attempt can have
+// broken, which made both grading mechanics answerable by the learner's own
+// earlier statements.
+void test("every attempt gets the sandbox rebuilt from seed, not the one the last attempt left", async () => {
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver();
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver], now: FIXED_CLOCK });
 
-    const first = await provisioner.ensure(FIXTURE_COURSE_ID);
-    const second = await provisioner.ensure(FIXTURE_COURSE_ID);
+    const first = await seedOnce(provisioner, FIXTURE_COURSE_ID);
+    const second = await seedOnce(provisioner, FIXTURE_COURSE_ID);
 
-    assert.equal(specs.length, 1, "a live sandbox must not be rebuilt under the user's feet");
-    assert.deepEqual(second, first);
+    assert.equal(specs.length, 2, "state must not carry over between attempts");
+    assert.deepEqual(second, first, "and each rebuild must produce the same starting state");
     assert.deepEqual(first, {
       courseId: FIXTURE_COURSE_ID,
       sandboxId: "main",
@@ -69,7 +81,7 @@ void test("the spec handed to the driver carries every seed, in manifest order, 
     const { driver, specs } = recordingDriver();
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
-    await provisioner.ensure(FIXTURE_COURSE_ID);
+    await seedOnce(provisioner, FIXTURE_COURSE_ID);
 
     const spec = specs[0];
     assert.ok(spec);
@@ -101,7 +113,7 @@ void test("reset rebuilds even when this course's sandbox is already live", asyn
     const { driver, specs } = recordingDriver();
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
-    await provisioner.ensure(FIXTURE_COURSE_ID);
+    await seedOnce(provisioner, FIXTURE_COURSE_ID);
     await provisioner.reset(FIXTURE_COURSE_ID);
 
     assert.equal(specs.length, 2);
@@ -123,10 +135,10 @@ void test("switching courses rebuilds, and the previous course stops reporting a
       const { driver, specs } = recordingDriver();
       const provisioner = createSandboxProvisioner({ courses: registry, drivers: [driver] });
 
-      await provisioner.ensure("course-one");
+      await seedOnce(provisioner, "course-one");
       assert.ok(provisioner.status("course-one"));
 
-      await provisioner.ensure("course-two");
+      await seedOnce(provisioner, "course-two");
 
       assert.equal(specs.length, 2);
       assert.equal(specs[1]?.courseId, "course-two");
@@ -151,11 +163,11 @@ void test("an unknown course, a course without a sandbox, and an unknown sandbox
     const { driver, specs } = recordingDriver();
     const provisioner = createSandboxProvisioner({ courses: withSandbox.registry, drivers: [driver] });
 
-    const unknownCourse = await provisioner.ensure("no-such-course").catch((err: unknown) => err);
+    const unknownCourse = await seedOnce(provisioner, "no-such-course").catch((err: unknown) => err);
     assert.ok(unknownCourse instanceof SandboxError);
     assert.equal(unknownCourse.kind, "course_not_found");
 
-    const unknownSandbox = await provisioner.ensure(FIXTURE_COURSE_ID, "no-such-sandbox").catch((err: unknown) => err);
+    const unknownSandbox = await seedOnce(provisioner, FIXTURE_COURSE_ID, "no-such-sandbox").catch((err: unknown) => err);
     assert.ok(unknownSandbox instanceof SandboxError);
     assert.equal(unknownSandbox.kind, "sandbox_not_found");
     assert.match(unknownSandbox.message, /"no-such-sandbox"/);
@@ -186,7 +198,7 @@ void test("a course declaring several sandboxes requires the caller to say which
     const { driver, specs } = recordingDriver();
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
-    const err = await provisioner.ensure(FIXTURE_COURSE_ID).catch((thrown: unknown) => thrown);
+    const err = await seedOnce(provisioner, FIXTURE_COURSE_ID).catch((thrown: unknown) => thrown);
     assert.ok(err instanceof SandboxError);
     assert.equal(err.kind, "ambiguous_sandbox");
     assert.match(err.message, /"main"/);
@@ -194,7 +206,7 @@ void test("a course declaring several sandboxes requires the caller to say which
 
     // Naming one is enough — and the second sandbox declares no seeds at
     // all, which is a legitimate "give me an empty schema" case.
-    const state = await provisioner.ensure(FIXTURE_COURSE_ID, "reporting");
+    const state = await seedOnce(provisioner, FIXTURE_COURSE_ID, "reporting");
     assert.equal(state.sandboxId, "reporting");
     assert.deepEqual(state.seedFiles, []);
     assert.equal(specs.length, 1);
@@ -225,16 +237,16 @@ void test("a seed file deleted after the scan is reported before anything is dro
   }
 });
 
-void test("a failed rebuild leaves nothing claiming to be live, and the next ensure retries it", async () => {
+void test("a failed rebuild leaves nothing claiming to be live, and the next attempt retries it", async () => {
   const fixture = createSandboxFixture();
   try {
     const { driver, specs } = recordingDriver({ failOnce: new Error("simulated seed failure") });
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
-    await assert.rejects(provisioner.ensure(FIXTURE_COURSE_ID), /simulated seed failure/);
+    await assert.rejects(seedOnce(provisioner, FIXTURE_COURSE_ID), /simulated seed failure/);
     assert.equal(provisioner.status(), undefined, "a half-wiped sandbox is not a live one");
 
-    const state = await provisioner.ensure(FIXTURE_COURSE_ID);
+    const state = await seedOnce(provisioner, FIXTURE_COURSE_ID);
 
     assert.equal(specs.length, 2, "the failed attempt must not be remembered as success");
     assert.equal(state.courseId, FIXTURE_COURSE_ID);
@@ -244,7 +256,7 @@ void test("a failed rebuild leaves nothing claiming to be live, and the next ens
   }
 });
 
-void test("concurrent ensure calls serialize: the sandbox is rebuilt once, not raced (edge case)", async () => {
+void test("concurrent attempts serialize: rebuilds queue up, they never overlap (edge case)", async () => {
   const fixture = createSandboxFixture();
   try {
     let releaseProvision: (() => void) | undefined;
@@ -267,14 +279,16 @@ void test("concurrent ensure calls serialize: the sandbox is rebuilt once, not r
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
     const [a, b] = await Promise.all([
-      provisioner.ensure(FIXTURE_COURSE_ID),
-      provisioner.ensure(FIXTURE_COURSE_ID),
+      seedOnce(provisioner, FIXTURE_COURSE_ID),
+      seedOnce(provisioner, FIXTURE_COURSE_ID),
     ]);
     await firstProvisionStarted;
 
     assert.equal(maxInFlight, 1, "two rebuilds must never run against the same schema at once");
-    assert.equal(specs.length, 1, "the second caller must see the first caller's freshly built sandbox");
-    assert.deepEqual(a, b);
+    assert.equal(specs.length, 2, "each attempt seeds for itself — the queue orders them, it does not skip one");
+    // Everything but the timestamp: two rebuilds are two moments, and that
+    // is the only thing about them that may legitimately differ.
+    assert.deepEqual({ ...a, readyAt: "" }, { ...b, readyAt: "" });
   } finally {
     fixture.cleanup();
   }
@@ -286,12 +300,34 @@ void test("a rejected operation does not poison the queue for the next caller (e
     const { driver, specs } = recordingDriver();
     const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
 
-    const failed = provisioner.ensure("no-such-course");
-    const succeeded = provisioner.ensure(FIXTURE_COURSE_ID);
+    const failed = seedOnce(provisioner, "no-such-course");
+    const succeeded = seedOnce(provisioner, FIXTURE_COURSE_ID);
 
     await assert.rejects(failed);
     assert.equal((await succeeded).courseId, FIXTURE_COURSE_ID);
     assert.equal(specs.length, 1);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+void test("reseed inside the exclusive window rebuilds without waiting on the queue (edge case)", async () => {
+  const fixture = createSandboxFixture();
+  try {
+    const { driver, specs } = recordingDriver();
+    const provisioner = createSandboxProvisioner({ courses: fixture.registry, drivers: [driver] });
+
+    // Grading by the course's solution needs the seeded state twice inside
+    // one attempt. Calling the provisioner's own `reset` there would wait
+    // for the queue slot this very call is holding — forever. The handle
+    // exists so that cannot be written by accident.
+    const seen = await provisioner.withFreshSandbox(FIXTURE_COURSE_ID, undefined, async ({ state, reseed }) => {
+      const again = await reseed();
+      return [state.readyAt !== undefined, again.courseId];
+    });
+
+    assert.deepEqual(seen, [true, FIXTURE_COURSE_ID]);
+    assert.equal(specs.length, 2, "reseed must actually rebuild, not hand back the same schema");
   } finally {
     fixture.cleanup();
   }

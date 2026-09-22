@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { ApiError } from "../../api/client";
+import { useQuery } from "@tanstack/react-query";
+import { ApiError, api } from "../../api/client";
 import type { PublicAnswerPractice } from "../../api/types";
+import { EyeIcon } from "../../ui/icons";
 import { useAnswerPractice } from "./useAnswerPractice";
 
 /**
@@ -32,6 +34,21 @@ export function AnswerForm({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const { verdict, isSubmitting, submitError, submit } = useAnswerPractice(courseId, lessonId);
 
+  // «Показать ответ». The reference values are never part of the lesson —
+  // they come from their own endpoint, on their own request, and only once
+  // the learner asks (routes/practice/answer.ts explains why that door
+  // exists at all). `enabled` is what keeps this honest: until the button
+  // is pressed, the request is not made and the answers are not in the
+  // page at all, not merely hidden by CSS.
+  const [revealed, setRevealed] = useState(false);
+  const solutionQuery = useQuery({
+    queryKey: ["answerSolution", courseId, lessonId],
+    queryFn: () => api.getAnswerSolution(courseId, lessonId),
+    enabled: revealed,
+    staleTime: Infinity,
+  });
+  const solutionByField = new Map(solutionQuery.data?.fields.map((field) => [field.id, field]) ?? []);
+
   // The verdict describes the values that were submitted. Once the learner
   // starts editing, it no longer describes what is on screen — so an edit
   // clears the marks rather than leaving a stale "неверно" next to a field
@@ -43,6 +60,9 @@ export function AnswerForm({
   };
 
   const marks = showVerdict ? verdict : undefined;
+  // Once shown, the button stays — hiding it again on the next edit would
+  // make "I pressed it a second ago" a thing the learner has to re-earn.
+  const showReveal = revealed || (verdict !== undefined && !verdict.ok);
 
   return (
     <section className="practice-view">
@@ -58,6 +78,7 @@ export function AnswerForm({
       >
         {practice.fields.map((field) => {
           const mark = marks?.fields[field.id];
+          const solution = solutionByField.get(field.id);
           return (
             <div className="answer-field" key={field.id}>
               <label className="answer-field-label" htmlFor={`answer-${field.id}`}>
@@ -85,14 +106,43 @@ export function AnswerForm({
                   {mark.correct ? "верно" : "неверно"}
                 </span>
               )}
+              {solution !== undefined && (
+                // Эталон показывается рядом с полем, а не вместо него: то,
+                // что ученик написал сам, остаётся на экране — иначе
+                // непонятно, в чём именно была ошибка.
+                <span className="answer-field-solution">
+                  Ответ: <b>{solution.expected}</b>
+                  {solution.tolerance !== undefined && ` (±${solution.tolerance})`}
+                </span>
+              )}
             </div>
           );
         })}
 
-        <button type="submit" className="run-button" disabled={isSubmitting}>
-          {isSubmitting ? "Проверяем…" : "Проверить"}
-        </button>
+        <div className="answer-actions">
+          <button type="submit" className="button button--primary" disabled={isSubmitting}>
+            {isSubmitting ? "Проверяем…" : "Проверить"}
+          </button>
+          {/* Появляется только после неудачной попытки: до неё это был бы
+           * спойлер к заданию, которое ученик ещё не пробовал решать.
+           * Гарантии в этом нет и быть не может — эндпоинт открыт, и
+           * серверная «защита» здесь была бы декорацией (см. маршрут), —
+           * но по умолчанию задание остаётся заданием. */}
+          {showReveal && (
+            <button
+              type="button"
+              className="button button--quiet"
+              onClick={() => setRevealed(true)}
+              disabled={solutionQuery.isFetching}
+            >
+              <EyeIcon />
+              {solutionQuery.isFetching ? "Показываем…" : "Показать ответ"}
+            </button>
+          )}
+        </div>
       </form>
+
+      {solutionQuery.isError && <p className="muted-note">Не удалось показать ответ. Попробуйте ещё раз.</p>}
 
       {submitError !== null && (
         <p className="muted-note">

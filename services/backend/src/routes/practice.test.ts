@@ -13,6 +13,9 @@ import {
   DUAL_GATE_LESSON_ID,
   expectedManifestYaml,
   EXPECTED_LESSON_ID,
+  FIXTURE_SOLUTION_SQL,
+  solutionManifestYaml,
+  SOLUTION_LESSON_ID,
   FIXTURE_BOTH_CHECK_SQL,
   FIXTURE_EXPECTED_SQL,
   FIXTURE_ORDERED_EXPECTED_SQL,
@@ -301,7 +304,7 @@ void test("POST practice/run reports a passing check but does not complete a les
   );
 });
 
-void test("POST practice/run prepares the sandbox once and keeps a repeat pass idempotent", async () => {
+void test("POST practice/run re-seeds for every attempt and keeps a repeat pass idempotent", async () => {
   await withPracticeApp(
     async ({ app, progress, sandbox }) => {
       const first = await app.inject({ method: "POST", url: RUN_URL, payload: { sql: "select 1" } });
@@ -309,9 +312,10 @@ void test("POST practice/run prepares the sandbox once and keeps a repeat pass i
       const second = await app.inject({ method: "POST", url: RUN_URL, payload: { sql: "select 1" } });
 
       assert.equal(second.statusCode, 200);
-      // `ensure()` is idempotent: re-seeding on every run would wipe the
-      // tables the learner just created.
-      assert.equal(sandbox.provisionCalls(), 1);
+      // One seed per attempt. The old contract was the opposite ("the
+      // first run pays for the seed, later ones don't") and it is what let
+      // an earlier lesson decide whether a later one passes.
+      assert.equal(sandbox.provisionCalls(), 2);
       assert.equal(second.json().lesson.completedAt, firstCompletedAt);
       assert.equal(progress.records().length, 1);
       assert.equal(sandbox.clientsOpen(), 0);
@@ -474,14 +478,18 @@ void test("POST practice/run grades a SELECT by comparing it with the course's e
       assert.equal(body.lesson.status, "completed");
       assert.equal(progress.records().length, 1);
 
-      // The reference query runs on the same connection, after the
-      // attempt's transaction is rolled back, and inside a read-only one of
-      // its own.
+      // The reference runs FIRST, on its own connection, against the
+      // freshly seeded sandbox — before the learner's statement exists to
+      // influence it. Run afterwards (as it was until the sandbox began
+      // re-seeding per attempt), `delete from books; select * from books;`
+      // compared two empty results and passed.
       assert.deepEqual(sandbox.texts(), [
-        "select title, author from books",
-        "rollback",
         "begin transaction read only",
         FIXTURE_EXPECTED_SQL,
+        "rollback",
+        "rollback",
+        "discard all",
+        "select title, author from books",
         "rollback",
         "rollback",
         "discard all",
@@ -622,7 +630,7 @@ void test("POST practice/run requires BOTH mechanics to pass when the lesson dec
   }
 });
 
-void test("POST practice/run does not run the expected query when the learner's own SQL failed", async () => {
+void test("POST practice/run does not COMPARE against the expected result when the learner's own SQL failed", async () => {
   await withPracticeApp(
     async ({ app, progress, sandbox }) => {
       const response = await app.inject({
@@ -641,7 +649,14 @@ void test("POST practice/run does not run the expected query when the learner's 
       // The check still runs — it grades the sandbox's state, not the
       // statement that failed.
       assert.deepEqual(body.check, { present: true, passed: false });
+      // The reference was READ (it always is, before the attempt) — what
+      // did not happen is the comparison.
       assert.deepEqual(sandbox.texts(), [
+        "begin transaction read only",
+        FIXTURE_EXPECTED_SQL,
+        "rollback",
+        "rollback",
+        "discard all",
         "select * from bookz",
         "rollback",
         FIXTURE_BOTH_CHECK_SQL,
@@ -658,6 +673,149 @@ void test("POST practice/run does not run the expected query when the learner's 
         checkResult(false),
       ),
     },
+  );
+});
+
+
+// --- the `solution` mechanic (practice/state.ts) -------------------------
+
+const SOLUTION_RUN_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${SOLUTION_LESSON_ID}/practice/run`;
+/** A right answer written differently from the course's own solution —
+ * deliberately not the same string, so "did the solution run" and "did the
+ * learner's statement run" stay distinguishable in the recorded texts. */
+const CORRECT_ATTEMPT_SQL = "update fixture_books set in_stock = false where id in (1)";
+
+/** Answers the snapshot queries with `state` for whichever run is in
+ * progress, and everything else (the solution, the learner's statement,
+ * transaction control) with an empty result. `states` is consumed one
+ * snapshot at a time, in the order the route takes them: the solution's
+ * first, the learner's second, and — only when those two disagreed — the
+ * solution's again. */
+function solutionScript(...states: string[]): (text: string) => ScriptedAnswer {
+  let taken = 0;
+  return (text: string) => {
+    if (text.includes("pg_catalog.pg_class")) {
+      return { rows: [{ relname: "fixture_books" }] };
+    }
+    if (text.includes("md5(")) {
+      const digest = states[Math.min(taken, states.length - 1)] ?? "";
+      taken += 1;
+      return { rows: [{ rows: "5", digest }] };
+    }
+    return resultSet({ command: "UPDATE", columns: [], rows: [], rowCount: 1 });
+  };
+}
+
+void test("POST practice/run grades a data change by comparing states, and completes the lesson", async () => {
+  await withPracticeApp(
+    async ({ app, progress, sandbox }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: SOLUTION_RUN_URL,
+        payload: { sql: CORRECT_ATTEMPT_SQL },
+      });
+
+      assert.equal(response.statusCode, 200);
+      const body = response.json();
+      assert.deepEqual(body.solution, { present: true, passed: true });
+      assert.deepEqual(body.check, { present: false });
+      assert.deepEqual(body.expected, { present: false });
+      assert.equal(body.lesson.status, "completed");
+      assert.equal(progress.records().length, 1);
+
+      // The order is the mechanic. The solution runs on the seeded sandbox
+      // and its state is read; the sandbox is seeded AGAIN so the learner
+      // inherits none of it; only then does the learner's statement run.
+      const texts = sandbox.texts();
+      assert.equal(texts[0], FIXTURE_SOLUTION_SQL);
+      assert.ok(texts[1]?.includes("pg_catalog.pg_class"), texts.join(" | "));
+      assert.ok(
+        texts.indexOf(CORRECT_ATTEMPT_SQL) > texts.indexOf(FIXTURE_SOLUTION_SQL),
+        "the learner's statement must run after the reference state was taken",
+      );
+      assert.equal(sandbox.provisionCalls(), 2, "the solution's changes must not be handed to the learner");
+      assert.equal(sandbox.clientsOpen(), 0);
+    },
+    { manifestYaml: solutionManifestYaml(), respond: solutionScript("same-state") },
+  );
+});
+
+void test("POST practice/run refuses an attempt that also changed what the assignment never mentioned", async () => {
+  await withPracticeApp(
+    async ({ app, progress }) => {
+      // `update fixture_books set in_stock = false` — no WHERE. The old
+      // `check`-based grading passed this: book 1 really is out of stock.
+      const response = await app.inject({
+        method: "POST",
+        url: SOLUTION_RUN_URL,
+        payload: { sql: "update fixture_books set in_stock = false" },
+      });
+
+      assert.equal(response.statusCode, 200);
+      const body = response.json();
+      assert.equal(body.solution.present, true);
+      assert.equal(body.solution.passed, false);
+      assert.match(body.solution.reason, /fixture_books/);
+      assert.equal(body.lesson.status, "not_started");
+      assert.deepEqual(progress.records(), []);
+      // The solution's text is not in the answer, and neither is a cell of
+      // the state it produced.
+      assert.doesNotMatch(response.body, /in_stock|where id = 1/);
+    },
+    {
+      manifestYaml: solutionManifestYaml(),
+      // Reference state, then the learner's (different), then the
+      // reference again — the re-verification a failed attempt triggers.
+      respond: solutionScript("reference", "sledgehammer", "reference"),
+    },
+  );
+});
+
+void test("POST practice/run answers 422, not a wrong-answer verdict, when the solution is not deterministic", async () => {
+  await withPracticeApp(
+    async ({ app, progress }) => {
+      const response = await app.inject({
+        method: "POST",
+        url: SOLUTION_RUN_URL,
+        payload: { sql: CORRECT_ATTEMPT_SQL },
+      });
+
+      // The learner's attempt may well have been correct — nobody can tell,
+      // because the thing it is compared against moves. Telling them "не
+      // зачтено" would be blaming them for the author's bug.
+      assert.equal(response.statusCode, 422);
+      const body = response.json<{ error: string; message: string }>();
+      assert.equal(body.error, "solution_nondeterministic");
+      assert.match(body.message, /now\(\)\/random\(\)|DEFAULT/);
+      assert.doesNotMatch(response.body, /where id = 1/);
+      assert.deepEqual(progress.records(), []);
+    },
+    {
+      manifestYaml: solutionManifestYaml(),
+      // Every snapshot differs: the first reference, the learner's, and
+      // the reference re-taken — which is exactly what a `now()` in the
+      // solution (or in the seed's DEFAULT) looks like from here.
+      respond: solutionScript("first", "learner", "third"),
+    },
+  );
+});
+
+void test("POST practice/run does not re-verify a solution the learner matched (edge case)", async () => {
+  await withPracticeApp(
+    async ({ app, sandbox }) => {
+      await app.inject({
+        method: "POST",
+        url: SOLUTION_RUN_URL,
+        payload: { sql: CORRECT_ATTEMPT_SQL },
+      });
+
+      // Two seeds, not three: an attempt that MATCHED cannot have been
+      // graded against a moving target, so the third re-seed (and the
+      // second run of the solution) would be spent on nothing.
+      assert.equal(sandbox.provisionCalls(), 2);
+      assert.equal(sandbox.texts().filter((text) => text === FIXTURE_SOLUTION_SQL).length, 1);
+    },
+    { manifestYaml: solutionManifestYaml(), respond: solutionScript("stable") },
   );
 });
 
@@ -927,5 +1085,52 @@ void test("POST practice/answer validates the body before grading anything", asy
     });
     assert.equal(coerced.statusCode, 200);
     assert.equal(coerced.json().ok, true);
+  });
+});
+
+void test("GET practice/answer/solution hands back the course's own reference values", async () => {
+  await withAnswerApp(async ({ app, progress }) => {
+    const response = await app.inject({ method: "GET", url: `${ANSWER_URL}/solution` });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      fields: [
+        { id: "headcount", label: "Сколько сотрудников?", expected: "112" },
+        // Only this field widens the answer, so only this one says so.
+        { id: "turnover", label: "Текучесть, %", expected: "18.5", tolerance: 0.2 },
+        { id: "reason", label: "Самая частая причина", expected: "По собственному желанию" },
+      ],
+    });
+
+    // Looking at the answer is not passing the exercise.
+    assert.deepEqual(progress.records(), []);
+  });
+});
+
+void test("GET practice/answer/solution is the ONLY route that reveals an answer field's value", async () => {
+  await withAnswerApp(async ({ app }) => {
+    // The lesson as the learner receives it carries the task and nothing
+    // else — this is the half of the invariant that did not move.
+    const lesson = await app.inject({
+      method: "GET",
+      url: `/courses/${FIXTURE_COURSE_ID}/lessons/${ANSWER_LESSON_ID}`,
+    });
+    assert.equal(lesson.statusCode, 200);
+    assert.doesNotMatch(lesson.body, /"expected"|"tolerance"|112|18\.5|По собственному желанию/);
+  });
+});
+
+void test("GET practice/answer/solution refuses a lesson whose practice is not of the answer kind", async () => {
+  await withAnswerApp(async ({ app }) => {
+    const wrongKind = await app.inject({ method: "GET", url: `${SQL_LESSON_ANSWER_URL}/solution` });
+    assert.equal(wrongKind.statusCode, 409);
+    assert.equal(wrongKind.json().error, "practice_type_mismatch");
+
+    const unknownLesson = await app.inject({
+      method: "GET",
+      url: `/courses/${FIXTURE_COURSE_ID}/lessons/nope/practice/answer/solution`,
+    });
+    assert.equal(unknownLesson.statusCode, 404);
+    assert.equal(unknownLesson.json().error, "lesson_not_found");
   });
 });

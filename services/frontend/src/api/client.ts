@@ -1,6 +1,8 @@
 import type {
+  AnswerSolutionResponse,
   ApiErrorResponse,
   CourseDetailResponse,
+  CourseProgressResetResponse,
   CourseProgressResponse,
   CoursesListResponse,
   HealthResponse,
@@ -11,7 +13,6 @@ import type {
   PracticeRunResponse,
   ProgressExportFile,
   QuizAnswerResponse,
-  SandboxStatus,
 } from "./types";
 
 /**
@@ -125,11 +126,24 @@ export const api = {
       },
     ),
 
-  resetSandbox: (courseId: string, sandboxId: string): Promise<SandboxStatus> =>
-    apiFetch<SandboxStatus>(`/courses/${encodeURIComponent(courseId)}/sandbox/reset`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sandboxId }),
+  /**
+   * `GET .../practice/answer/solution` — the course's own reference values
+   * for an `answer` assignment. Its own method rather than a flag on
+   * `getLesson`: revealing the answer is a separate act, and the call site
+   * should look like one.
+   */
+  getAnswerSolution: (courseId: string, lessonId: string): Promise<AnswerSolutionResponse> =>
+    apiFetch<AnswerSolutionResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/practice/answer/solution`,
+    ),
+
+  /** `DELETE /courses/:courseId/progress` — «Перепройти курс». Erases every
+   * stored completion of one course; the caller is responsible for having
+   * asked the learner first (the backend deliberately does not ask — see
+   * the route's own comment). */
+  resetCourseProgress: (courseId: string): Promise<CourseProgressResetResponse> =>
+    apiFetch<CourseProgressResetResponse>(`/courses/${encodeURIComponent(courseId)}/progress`, {
+      method: "DELETE",
     }),
 
   exportProgress: (): Promise<ProgressExportFile> => apiFetch<ProgressExportFile>("/progress/export"),

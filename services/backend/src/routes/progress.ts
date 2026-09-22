@@ -76,6 +76,49 @@ export default async function progressRoutes(fastify: FastifyInstance): Promise<
       return toLessonCompletionPayload(await buildTree(fastify, course), location.lesson.id);
     },
   );
+
+  // «Перепройти курс» — the deliberate erase. DELETE on the progress
+  // resource itself, not a POST to `.../reset`: this removes a resource's
+  // contents and nothing else, and saying so in the method keeps it from
+  // being mistaken for one more way to write progress.
+  //
+  // No confirmation flag in the request: unlike `POST /progress/import`,
+  // where the server knows something the client cannot (the file is older
+  // than local progress) and therefore has to ask, here the server knows
+  // nothing the learner doesn't. Confirming is the UI's job, and putting a
+  // `?confirm=true` here would only pretend the backend was guarding
+  // something.
+  fastify.delete<{ Params: { courseId: string } }>(
+    "/courses/:courseId/progress",
+    {
+      schema: {
+        params: courseParamsSchema,
+        response: { 200: courseProgressResetResponseSchema, 404: errorResponseSchema },
+      },
+    },
+    async (request, reply) => {
+      const course = fastify.courses.get(request.params.courseId);
+      if (course === undefined) {
+        return sendCourseNotFound(reply, request.params.courseId);
+      }
+
+      const deletedLessons = await fastify.progress.resetCourseProgress(course.id);
+      // The tree is read back AFTER the delete, so the counters the client
+      // redraws from are the post-reset ones — same "one response is enough
+      // to repaint" contract the completion endpoints hold to.
+      const tree = await buildTree(fastify, course);
+      return {
+        deletedLessons,
+        course: {
+          courseId: tree.courseId,
+          courseVersion: tree.courseVersion,
+          totalLessons: tree.totalLessons,
+          completedLessons: tree.completedLessons,
+          completed: tree.completed,
+        },
+      };
+    },
+  );
 }
 
 /** Reads this course's stored rows and joins them onto the course as
@@ -225,6 +268,19 @@ export const courseProgressSummarySchema = {
     totalLessons: { type: "integer" },
     completedLessons: { type: "integer" },
     completed: { type: "boolean" },
+  },
+} as const;
+
+const courseProgressResetResponseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["deletedLessons", "course"],
+  properties: {
+    // How many completions were actually erased — 0 for a course that had
+    // none, which is a success, not an error. The UI reports the number
+    // back so a reset is never a silent no-op the learner has to verify.
+    deletedLessons: { type: "integer" },
+    course: courseProgressSummarySchema,
   },
 } as const;
 

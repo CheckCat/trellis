@@ -10,8 +10,10 @@
 // Postgres-инстанса"), so "course B's sandbox" and "course A's sandbox" are
 // the same schema with different contents. Making that a visible, single
 // slot of state — rather than pretending each course has its own — is what
-// keeps `ensure()` honest: switching courses rebuilds, staying on one
-// course doesn't.
+// lets `status()` answer honestly about WHICH course is live, and what
+// makes the exclusive window of `withFreshSandbox` meaningful: while one
+// attempt holds it, nobody else can re-seed the one schema out from under
+// it.
 //
 // The state lives in memory only. After a restart nothing is known to be
 // live, so the next `ensure()` rebuilds from seed — which is the correct
@@ -28,6 +30,7 @@ import { describeError } from "../courses/fsErrors.js";
 import { resolveSafePath } from "../courses/validate.js";
 import {
   SandboxError,
+  type FreshSandboxContext,
   type SandboxDriver,
   type SandboxDriverRegistry,
   type SandboxProvisioner,
@@ -113,21 +116,25 @@ export function createSandboxProvisioner(options: CreateSandboxProvisionerOption
   return {
     drivers,
 
-    ensure(courseId: string, sandboxId?: string): Promise<SandboxState> {
-      return serialize(async () => {
-        // Resolved even on the fast path: a caller naming a course that
-        // isn't installed, or a sandbox the course doesn't declare, must get
-        // the same error whether or not something else is live.
-        const target = resolveSandbox(courses, courseId, sandboxId);
-        if (state !== undefined && state.courseId === courseId && state.sandboxId === target.sandbox.id) {
-          return state;
-        }
-        return await provisionNow(courseId, target.sandbox.id);
-      });
-    },
-
     reset(courseId: string, sandboxId?: string): Promise<SandboxState> {
       return serialize(() => provisionNow(courseId, sandboxId));
+    },
+
+    withFreshSandbox<T>(
+      courseId: string,
+      sandboxId: string | undefined,
+      work: (context: FreshSandboxContext) => Promise<T>,
+    ): Promise<T> {
+      return serialize(async () => {
+        // Resolved before the rebuild so that naming a course that isn't
+        // installed, or a sandbox the course doesn't declare, fails the
+        // same way it always did — before anything is dropped.
+        const target = resolveSandbox(courses, courseId, sandboxId);
+        const seeded = await provisionNow(courseId, target.sandbox.id);
+        // `provisionNow`, not `reset`: we are already inside the queue, and
+        // re-entering it would wait for ourselves forever.
+        return await work({ state: seeded, reseed: () => provisionNow(courseId, target.sandbox.id) });
+      });
     },
 
     status(courseId?: string): SandboxState | undefined {

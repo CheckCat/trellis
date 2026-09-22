@@ -176,7 +176,10 @@ export function lessonCompletionMode(lesson: CourseLesson): LessonCompletionMode
   const practice = lesson.practice;
   if (practice !== undefined) {
     const graded =
-      practice.type === "answer" || practice.check !== undefined || practice.expected !== undefined;
+      practice.type === "answer" ||
+      practice.check !== undefined ||
+      practice.expected !== undefined ||
+      practice.solution !== undefined;
     if (graded) {
       return "practice";
     }

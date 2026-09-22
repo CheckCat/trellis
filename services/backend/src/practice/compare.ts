@@ -115,22 +115,26 @@ export interface PracticeExpectedVerdict {
   readonly reason?: string;
 }
 
-export interface RunPracticeExpectedOptions {
+export interface ReadPracticeExpectedOptions {
   /** The course's `practice.expected` SQL. Never echoed anywhere. */
   readonly sql: string;
-  /** `practice.ordered` — does row order matter? */
-  readonly ordered: boolean;
-  /** The learner's own result, as execute.ts retained it for grading. */
-  readonly attempt: ComparableResult;
   readonly courseId: string;
   readonly lessonId: string;
 }
 
 /**
  * Runs the reference query on an already-checked-out sandbox client and
- * compares its rows with the learner's. Throws `PracticeExpectedError` when
- * the ASSIGNMENT is broken rather than unsatisfied — see this file's
- * header.
+ * returns its rows, for `compareResults` to judge the learner's against.
+ * Throws `PracticeExpectedError` when the ASSIGNMENT is broken rather than
+ * unsatisfied — see this file's header.
+ *
+ * Reading and comparing are two functions rather than one because of WHEN
+ * the reading has to happen: the reference runs BEFORE the learner's
+ * statement, on the freshly seeded sandbox (routes/practice/sql.ts). Run
+ * afterwards — as it was until the sandbox began re-seeding per attempt —
+ * `delete from books; select * from books;` compared an empty result with
+ * an equally empty reference and passed. A reference read before the
+ * learner touches anything cannot be bent by what they write.
  *
  * The query runs inside `begin transaction read only`: the reference is a
  * description of the right answer, not a second chance to modify the
@@ -145,10 +149,10 @@ export interface RunPracticeExpectedOptions {
  * by the same 30s the learner's own statement was, on the same connection,
  * without a second source of truth for that limit.
  */
-export async function runPracticeExpected(
+export async function readPracticeExpected(
   client: PoolClient,
-  options: RunPracticeExpectedOptions,
-): Promise<PracticeExpectedVerdict> {
+  options: ReadPracticeExpectedOptions,
+): Promise<ComparableResult> {
   const subject = `The expected query of lesson "${options.lessonId}" in course "${options.courseId}"`;
 
   let raw: unknown;
@@ -199,7 +203,7 @@ export async function runPracticeExpected(
     );
   }
 
-  return compareResults(options.attempt, reference, options.ordered);
+  return reference;
 }
 
 /**

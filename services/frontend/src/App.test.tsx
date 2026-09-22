@@ -98,6 +98,46 @@ describe("App routing", () => {
     expect(screen.getByText("Module One")).toBeTruthy();
   });
 
+  it("marks a finished course on the list, counts a started one, and leaves an untouched one bare", async () => {
+    const progress = (id: string, done: number, total: number) => () =>
+      jsonResponse({
+        courseId: id,
+        courseVersion: "1.0.0",
+        title: id,
+        totalLessons: total,
+        completedLessons: done,
+        completed: done === total,
+        orphanedLessons: [],
+        recordedVersions: [],
+        modules: [],
+      });
+
+    mockApi({
+      "/api/health": healthOk,
+      "/api/courses": () =>
+        jsonResponse({
+          courses: [
+            { id: "done", version: "1.0.0", title: "Finished course" },
+            { id: "midway", version: "1.0.0", title: "Halfway course" },
+            { id: "fresh", version: "1.0.0", title: "Untouched course" },
+          ],
+        }),
+      // `GET /courses` carries no progress on purpose (content and progress
+      // are separate entities), so the list asks per course.
+      "/api/courses/done/progress": progress("done", 4, 4),
+      "/api/courses/midway/progress": progress("midway", 3, 8),
+      "/api/courses/fresh/progress": progress("fresh", 0, 5),
+    });
+
+    renderApp("/");
+
+    await waitFor(() => expect(screen.getByText("Курс пройден")).toBeTruthy());
+    expect(screen.getByText("3 / 8")).toBeTruthy();
+    // Нетронутый курс не получает значка вовсе: «0 / 5» на каждой карточке
+    // говорит меньше, чем отсутствие отметки.
+    expect(screen.queryByText("0 / 5")).toBeNull();
+  });
+
   it("shows a not-found page for an unknown route (edge case)", async () => {
     mockApi({ "/api/health": healthOk });
 

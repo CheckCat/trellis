@@ -22,8 +22,8 @@ import type { ImportProgressRecord, MarkLessonCompletedInput, ProgressRepository
 /**
  * An in-memory `ProgressRepository` with the same observable contract as the
  * Postgres one: completion is idempotent, a repeat pass keeps the original
- * `completedAt` and refreshes `updatedAt`/`courseVersion`, and there is no
- * way to un-complete. Route tests use this so they exercise real routing,
+ * `completedAt` and refreshes `updatedAt`/`courseVersion`, and the only way
+ * rows ever disappear is a whole-course `resetCourseProgress`. Route tests use this so they exercise real routing,
  * real schemas and real reconciliation without a database.
  *
  * `seed` pre-loads rows (e.g. progress for a lesson the course no longer
@@ -117,6 +117,19 @@ export function createInMemoryProgressRepository(seed: readonly ProgressRecord[]
         rows.set(progressKey(record.courseId, record.lessonId), record);
         return record;
       });
+    },
+
+    // Mirrors repository.ts: a whole course at a time, orphaned rows of that
+    // course included, other courses untouched.
+    async resetCourseProgress(courseId: string): Promise<number> {
+      let deleted = 0;
+      for (const [key, record] of [...rows.entries()]) {
+        if (record.courseId === courseId) {
+          rows.delete(key);
+          deleted += 1;
+        }
+      }
+      return deleted;
     },
 
     records(): ProgressRecord[] {

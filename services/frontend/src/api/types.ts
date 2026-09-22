@@ -195,6 +195,38 @@ export interface QuizAnswerResponse {
   course: LessonCompletionResponse["course"];
 }
 
+/**
+ * `GET /courses/:courseId/lessons/:lessonId/practice/answer/solution` —
+ * routes/practice/answer.ts's `practiceAnswerSolutionResponseSchema`.
+ *
+ * The ONE response in this file that carries a reference answer, and it is
+ * reached only by an explicit "показать ответ" request the learner makes —
+ * never as part of loading a lesson (`LessonDetailResponse.practice` still
+ * carries the task and nothing else). `expected` is always a string, even
+ * for a numeric field: the backend stringifies it so JSON's number type
+ * can't round the course's own value.
+ */
+export interface AnswerSolutionField {
+  id: string;
+  label: string;
+  expected: string;
+  /** Present only when the field accepts a range (`tolerance > 0`). */
+  tolerance?: number;
+}
+
+export interface AnswerSolutionResponse {
+  fields: AnswerSolutionField[];
+}
+
+/** `DELETE /courses/:courseId/progress` — routes/progress.ts's
+ * `courseProgressResetResponseSchema`. `deletedLessons` is how many stored
+ * completions were actually erased (0 for a course that had none, which is
+ * a success); `course` holds the counters AFTER the reset. */
+export interface CourseProgressResetResponse {
+  deletedLessons: number;
+  course: LessonCompletionResponse["course"];
+}
+
 /** One column of a practice SQL result (`practiceColumnSchema`,
  * routes/practice.ts). `dataTypeId` is Postgres' own OID for the column's
  * type — not rendered directly by this task's UI, kept for a future task
@@ -248,8 +280,8 @@ export interface PracticeSqlError {
 /** Whether the lesson's check query ran and, if so, what it said
  * (`practiceCheckSchema`). `present: false` means the lesson has no check;
  * `passed` is only present when `present` is `true`. A lesson is
- * self-marked (the "mark as done" control) only when neither `check` nor
- * `expected` is present. */
+ * self-marked (the "mark as done" control) only when none of `check`,
+ * `expected` and `solution` is present. */
 export interface PracticeCheckResult {
   present: boolean;
   passed?: boolean;
@@ -272,6 +304,22 @@ export interface PracticeExpectedResult {
   reason?: string;
 }
 
+/**
+ * The third grading mechanic (`practiceSolutionSchema`): the database state
+ * the learner's SQL left, compared with the state the course author's own
+ * solution leaves. `present: false` means the lesson declares no solution.
+ *
+ * The strict mechanic for exercises that change data — it fails an attempt
+ * that did what was asked AND something that wasn't. `reason` names tables
+ * and row counts only («таблица "books": ожидалось строк 5, получено 4»);
+ * the solution itself never reaches the client.
+ */
+export interface PracticeSolutionResult {
+  present: boolean;
+  passed?: boolean;
+  reason?: string;
+}
+
 /** POST /courses/:courseId/lessons/:lessonId/practice/run —
  * routes/practice.ts's `practiceRunResponseSchema`. Always 200 for a bad
  * SQL statement (`ok: false` + `error`, same class of decision as a wrong
@@ -287,6 +335,7 @@ export interface PracticeRunResponse {
   durationMs: number;
   check: PracticeCheckResult;
   expected: PracticeExpectedResult;
+  solution: PracticeSolutionResult;
   lesson: LessonProgress;
   course: LessonCompletionResponse["course"];
 }
@@ -304,9 +353,10 @@ export interface PracticeAnswerResponse {
   course: LessonCompletionResponse["course"];
 }
 
-/** GET /courses/:courseId/sandbox and POST /courses/:courseId/sandbox/reset
- * — routes/sandbox.ts's `sandboxStatusResponseSchema`. Fields beyond
- * `active` are only present when `active` is `true`. */
+/** GET /courses/:courseId/sandbox — routes/sandbox.ts's
+ * `sandboxStatusResponseSchema`. Fields beyond `active` are only present
+ * when `active` is `true`. (There is no reset endpoint any more: every
+ * practice attempt re-seeds the sandbox on its own.) */
 export interface SandboxStatus {
   active: boolean;
   courseId?: string;

@@ -37,7 +37,7 @@ import { repoRoot, startStack } from "./helpers/compose.js";
  */
 const PILOT = {
   courseId: "pilot-sql",
-  courseVersion: "1.2.0",
+  courseVersion: "1.3.0",
   totalLessons: 9,
   /** Урок без квиза и практики — закрывается только самоотметкой. */
   manualLesson: "what-is-sql",
@@ -55,7 +55,8 @@ const PILOT = {
   orderedPracticeSolution: "select title, published_year from books order by published_year",
   /** То же задание без `order by`: набор строк верный, порядок — нет. */
   orderedPracticeWrongSolution: "select title, published_year from books",
-  /** Практика с check — засчитывается по состоянию базы. */
+  /** Практика, засчитываемая сравнением состояния базы с состоянием после
+   * эталонного решения курса (`solution`). */
   checkedPracticeLesson: "practice-add-book",
   checkedPracticeSolution:
     "insert into books (title, author, published_year, in_stock) " +
@@ -147,6 +148,7 @@ interface PracticeRunResponse extends CompletionResponse {
   readonly error?: { readonly message: string; readonly code?: string };
   readonly check: { readonly present: boolean; readonly passed?: boolean };
   readonly expected: { readonly present: boolean; readonly passed?: boolean; readonly reason?: string };
+  readonly solution: { readonly present: boolean; readonly passed?: boolean; readonly reason?: string };
 }
 
 interface PracticeAnswerResponse extends CompletionResponse {
@@ -295,7 +297,7 @@ void test("поднятый стек проходит сквозной поль�
       );
       assert.equal(practice.status, 200);
       assert.ok(practice.body.practice !== undefined);
-      assert.doesNotMatch(practice.raw, /"check"/);
+      assert.doesNotMatch(practice.raw, /"check"|"solution"/);
     });
 
     await t.test("прогресс нового стека пуст", async () => {
@@ -438,15 +440,29 @@ void test("поднятый стек проходит сквозной поль�
       assert.equal(forbidden.body.error?.code, "42501", `неожиданная ошибка: ${forbidden.raw}`);
     });
 
-    await t.test("практика с check засчитывает урок только по успешной проверке", async () => {
+    await t.test("практика с solution засчитывает урок только по совпадению состояния базы", async () => {
       const wrong = await api.post<PracticeRunResponse>(
         `/courses/${PILOT.courseId}/lessons/${PILOT.checkedPracticeLesson}/practice/run`,
         { sql: "select count(*) from books" },
       );
       assert.equal(wrong.status, 200);
       assert.equal(wrong.body.ok, true);
-      assert.deepEqual(wrong.body.check, { present: true, passed: false });
+      assert.deepEqual(wrong.body.check, { present: false });
+      assert.equal(wrong.body.solution.present, true);
+      assert.equal(wrong.body.solution.passed, false);
       assert.equal(wrong.body.lesson.status, "not_started");
+
+      // Задание выполнено — и заодно снесено то, о чём оно не просило.
+      // Проверка по предикату («книга добавлена?») такое пропускала;
+      // сравнение состояния — нет.
+      const collateralDamage = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.checkedPracticeLesson}/practice/run`,
+        { sql: `${PILOT.checkedPracticeSolution}; delete from books where id = 2;` },
+      );
+      assert.equal(collateralDamage.status, 200);
+      assert.equal(collateralDamage.body.solution.passed, false, `лишние изменения засчитаны: ${collateralDamage.raw}`);
+      assert.match(collateralDamage.body.solution.reason ?? "", /books/);
+      assert.equal(collateralDamage.body.lesson.status, "not_started");
 
       const solved = await api.post<PracticeRunResponse>(
         `/courses/${PILOT.courseId}/lessons/${PILOT.checkedPracticeLesson}/practice/run`,
@@ -454,7 +470,7 @@ void test("поднятый стек проходит сквозной поль�
       );
       assert.equal(solved.status, 200);
       assert.equal(solved.body.ok, true, `решение не выполнилось: ${solved.raw}`);
-      assert.deepEqual(solved.body.check, { present: true, passed: true });
+      assert.deepEqual(solved.body.solution, { present: true, passed: true });
       assert.equal(solved.body.lesson.status, "completed");
       assert.equal(solved.body.lesson.completionMode, "practice");
       completed.add(PILOT.checkedPracticeLesson);
@@ -510,20 +526,33 @@ void test("поднятый стек проходит сквозной поль�
       assert.equal(wrongEndpoint.body.error, "practice_type_mismatch");
     });
 
-    await t.test("сброс песочницы возвращает данные курса к исходным, прогресс остаётся", async () => {
-      const reset = await api.post<SandboxStatus>(`/courses/${PILOT.courseId}/sandbox/reset`);
-      assert.equal(reset.status, 200);
-      assert.equal(reset.body.active, true);
-
+    await t.test("каждая попытка стартует с эталонной базы, прогресс при этом остаётся", async () => {
+      // Книга была добавлена предыдущим тестом и урок за неё зачтён. Для
+      // СЛЕДУЮЩЕГО запуска её в базе нет: песочница пересевается перед
+      // каждой попыткой, поэтому задание не может ни опереться на то, что
+      // сделал ученик раньше, ни быть испорченным этим.
       const run = await api.post<PracticeRunResponse>(
         `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
         { sql: `select count(*) as n from books where title = '${PILOT.checkedPracticeBookTitle}'` },
       );
       assert.equal(run.body.ok, true);
-      assert.deepEqual(run.body.result?.rows, [["0"]], "после сброса песочница должна быть как после seed");
+      assert.deepEqual(run.body.result?.rows, [["0"]], "песочница должна быть как после seed");
+
+      // И «испортить» её напоказ тоже нельзя: следующий запуск снова
+      // видит seed.
+      const destructive = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
+        { sql: "delete from books; select count(*) as n from books" },
+      );
+      assert.equal(destructive.body.ok, true, destructive.raw);
+      const afterDestructive = await api.post<PracticeRunResponse>(
+        `/courses/${PILOT.courseId}/lessons/${PILOT.comparedPracticeLesson}/practice/run`,
+        { sql: "select count(*) as n from books" },
+      );
+      assert.deepEqual(afterDestructive.body.result?.rows, [["5"]], "удаление не должно пережить попытку");
 
       const progress = await api.get<CourseProgress>(`/courses/${PILOT.courseId}/progress`);
-      assert.equal(progress.body.completedLessons, completed.size, "сброс песочницы не трогает прогресс");
+      assert.equal(progress.body.completedLessons, completed.size, "пересев песочницы не трогает прогресс");
     });
 
     await t.test("экспорт даёт версионированный файл с зачётами и версиями курсов", async () => {

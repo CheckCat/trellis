@@ -1,7 +1,8 @@
-import { useState } from "react";
 import { ApiError } from "../../api/client";
-import type { PracticeSqlError, PublicPractice, PublicSqlPractice } from "../../api/types";
+import type { PracticeResultSet, PracticeSqlError, PublicPractice, PublicSqlPractice } from "../../api/types";
+import { PlayIcon } from "../../ui/icons";
 import { AnswerForm } from "./AnswerForm";
+import { draftKey, useDraft } from "./draft";
 import { ResultTable } from "./ResultTable";
 import { SqlEditor } from "./SqlEditor";
 import { usePractice } from "./usePractice";
@@ -37,9 +38,14 @@ export function PracticeView({
 
 /**
  * The SQL kind: an editor against the course's sandbox, the raw result (or
- * Postgres' own error text) of the last run, the verdict of each grading
- * mechanic the lesson declares, and a way to reset the sandbox back to its
- * seeded state.
+ * Postgres' own error text) of the last run, and the verdict of each
+ * grading mechanic the lesson declares.
+ *
+ * There is no "reset the sandbox" control, because there is nothing to
+ * reset: the backend rebuilds the sandbox from the course's seed before
+ * every single attempt. That is also why the editor says so after a
+ * statement that changed data — otherwise the next run looks like the
+ * previous one silently failed.
  */
 function SqlPracticeView({
   courseId,
@@ -50,18 +56,45 @@ function SqlPracticeView({
   lessonId: string;
   practice: PublicSqlPractice;
 }) {
-  const [sql, setSql] = useState("");
-  const { execution, isRunning, runError, run, isResetting, resetError, resetSucceeded, reset } = usePractice(
-    courseId,
-    lessonId,
-    practice.sandbox,
-  );
+  // Черновик переживает уход с урока: вернувшись, ученик видит своё
+  // решение, а не пустое поле (см. draft.ts — почему localStorage, а не
+  // файл переноса).
+  const [sql, setSql] = useDraft(draftKey(courseId, lessonId));
+  // Тот же предикат, что блокирует кнопку, — и он же решает, что написать
+  // рядом. Одно условие на два следствия: иначе кнопка и подпись начинают
+  // расходиться на пробельной строке.
+  const isEmpty = sql.trim().length === 0;
+  const { execution, isRunning, runError, run } = usePractice(courseId, lessonId);
 
   return (
     <section className="practice-view">
       <p className="practice-prompt">{practice.prompt}</p>
 
-      <SqlEditor value={sql} onChange={setSql} onRun={() => run(sql)} busy={isRunning} />
+      <SqlEditor value={sql} onChange={setSql} busy={isRunning} />
+
+      {/* Запуск — единственное действие над песочницей: сбрасывать её
+       * вручную больше не нужно, движок пересевает её сам перед каждой
+       * попыткой. Иконка вместо слова: подпись живёт в `aria-label`/`title`,
+       * а форма значка узнаётся быстрее. */}
+      <div className="practice-toolbar">
+        <button
+          type="button"
+          className="icon-button icon-button--primary"
+          onClick={() => run(sql)}
+          // Зеркалит серверную проверку `pattern: "\\S"` на теле запроса
+          // (routes/practice/sql.ts): отправка, которая гарантированно
+          // вернёт 400, из браузера не уходит.
+          disabled={isRunning || isEmpty}
+          aria-label={isRunning ? "Выполняем…" : "Выполнить"}
+          title={isRunning ? "Выполняем…" : isEmpty ? "Введите запрос, чтобы выполнить" : "Выполнить запрос"}
+        >
+          <PlayIcon />
+        </button>
+        {/* Выключенный вид кнопки говорит «нельзя», эта строка — «чего не
+         * хватает»; без неё ученику остаётся догадываться. */}
+        {isEmpty && !isRunning && <span className="practice-toolbar-note">Введите запрос, чтобы выполнить.</span>}
+      </div>
+
       {runError !== null && (
         <p className="muted-note">
           {runError instanceof ApiError ? runError.message : "Не удалось выполнить запрос. Попробуйте ещё раз."}
@@ -91,34 +124,49 @@ function SqlPracticeView({
                   }.`}
             </p>
           )}
+          {execution.solution.present && execution.solution.passed !== undefined && (
+            <p className={verdictClassName(execution.solution.passed)}>
+              {execution.solution.passed
+                ? "База пришла в нужное состояние."
+                : `База пришла не в то состояние${
+                    execution.solution.reason === undefined ? "" : `: ${execution.solution.reason}`
+                  }.`}
+            </p>
+          )}
+          {execution.ok && execution.result !== undefined && <ChangeNote result={execution.result} />}
         </div>
       )}
 
-      <div className="practice-sandbox-controls">
-        {/* Not gated on `isRunning`: a reset targets the sandbox itself, not
-         * the in-flight run, and react-query's `MutationObserver.reset()`
-         * (called by `usePractice`'s reset `onSuccess`) detaches this view's
-         * run-mutation observer from whatever `Mutation` instance is still
-         * executing — that instance's eventual success/error can no longer
-         * reach `execution`/`runError` here, so a run finishing after a
-         * reset cannot repaint a stale result over the freshly-reset
-         * sandbox. Letting the learner reset without waiting out a slow
-         * query is a deliberate UX choice, not an oversight. */}
-        <button type="button" className="reset-sandbox-button" onClick={reset} disabled={isResetting}>
-          {isResetting ? "Сбрасываем…" : "Сбросить песочницу"}
-        </button>
-        {resetError !== null && (
-          <p className="muted-note">
-            {resetError instanceof ApiError ? resetError.message : "Не удалось сбросить песочницу. Попробуйте ещё раз."}
-          </p>
-        )}
-        {resetSucceeded && <p className="muted-note">Песочница сброшена до исходного состояния.</p>}
-      </div>
     </section>
   );
 }
 
-/** Shared by both verdict lines. `passed` is `undefined` only for a
+/**
+ * Says what a data-changing statement did — and that it will not stick.
+ *
+ * Without this the engine looks broken: the learner runs an UPDATE, sees
+ * "UPDATE 1", runs a SELECT to admire it, and the row is unchanged, because
+ * the second run started from the seed like every run does. Postgres' own
+ * command tag is what decides whether to say anything, so nothing here
+ * parses the learner's SQL.
+ */
+function ChangeNote({ result }: { result: PracticeResultSet }) {
+  const changed = result.command !== undefined && CHANGING_COMMANDS.has(result.command);
+  if (!changed || result.rowCount === null || result.rowCount === undefined) {
+    return null;
+  }
+  return (
+    <p className="practice-change-note">
+      Изменено строк: {result.rowCount}. Перед следующим запуском песочница вернётся к исходному состоянию — чтобы
+      увидеть результат, выполните изменение и запрос одним запуском.
+    </p>
+  );
+}
+
+/** Command tags Postgres reports for statements that wrote something. */
+const CHANGING_COMMANDS = new Set(["INSERT", "UPDATE", "DELETE", "MERGE"]);
+
+/** Shared by all verdict lines. `passed` is `undefined` only for a
  * mechanic that did not run (the learner's SQL errored), which the callers
  * already filter out — the failed styling is the safe default. */
 function verdictClassName(passed: boolean | undefined): string {

@@ -5,7 +5,7 @@ import {
   compareResults,
   isPracticeExpectedError,
   MAX_COMPARISON_ROWS,
-  runPracticeExpected,
+  readPracticeExpected,
   type ComparableResult,
   type PracticeExpectedVerdict,
 } from "./compare.js";
@@ -139,7 +139,7 @@ void test("compareResults names the learner's OWN row number in an unordered mis
   );
 });
 
-// --- runPracticeExpected: the reference query against a sandbox client ---
+// --- readPracticeExpected: the reference query against a sandbox client ---
 
 const EXPECTED_SQL = "select title from books where in_stock = true";
 
@@ -161,15 +161,19 @@ async function runExpected(
     rowModes: scripted.queries.map((query) => query.rowMode),
   });
   try {
-    const verdict = await scripted.driver.withClient((client) =>
-      runPracticeExpected(client, {
+    const verdict = await scripted.driver.withClient(async (client) => {
+      // Reading the reference and judging the attempt against it are two
+      // steps now, because the route runs them at two different moments:
+      // the reference comes off the freshly seeded sandbox BEFORE the
+      // learner's statement (routes/practice/sql.ts). These tests still
+      // exercise the pair together — that is what the mechanic is.
+      const reference = await readPracticeExpected(client, {
         sql: EXPECTED_SQL,
-        ordered,
-        attempt,
         courseId: "some-course",
         lessonId: "some-lesson",
-      }),
-    );
+      });
+      return compareResults(attempt, reference, ordered);
+    });
     return { verdict, ...collect() };
   } catch (err) {
     return { error: err, ...collect() };
@@ -182,7 +186,7 @@ function script(answer: ScriptedAnswer): (text: string) => ScriptedAnswer {
   return (text: string) => (text === EXPECTED_SQL ? answer : resultSet({ command: text.toUpperCase(), rowCount: null }));
 }
 
-void test("runPracticeExpected runs the reference inside a read-only transaction and ends it", async () => {
+void test("readPracticeExpected runs the reference inside a read-only transaction and ends it", async () => {
   const run = await runExpected(
     side([TEXT], [["Отцы и дети"]]),
     script(resultSet({ columns: ["title"], rows: [["Отцы и дети"]], dataTypeIds: [TEXT] })),
@@ -198,7 +202,7 @@ void test("runPracticeExpected runs the reference inside a read-only transaction
   assert.equal(run.rowModes[1], "array");
 });
 
-void test("runPracticeExpected ends the transaction even when the reference query fails", async () => {
+void test("readPracticeExpected ends the transaction even when the reference query fails", async () => {
   const run = await runExpected(
     side([TEXT], [["a"]]),
     script(databaseError('relation "bookz" does not exist', { code: "42P01" })),
@@ -213,7 +217,7 @@ void test("runPracticeExpected ends the transaction even when the reference quer
   assert.deepEqual(run.texts, ["begin transaction read only", EXPECTED_SQL, "rollback"]);
 });
 
-void test("runPracticeExpected rejects a multi-statement reference query", async () => {
+void test("readPracticeExpected rejects a multi-statement reference query", async () => {
   const run = await runExpected(side([TEXT], [["a"]]), script([resultSet({}), resultSet({})]));
 
   assert.ok(isPracticeExpectedError(run.error));
@@ -222,7 +226,7 @@ void test("runPracticeExpected rejects a multi-statement reference query", async
   assert.doesNotMatch(run.error.message, /in_stock|select title/);
 });
 
-void test("runPracticeExpected rejects a reference result past the comparison limit as the AUTHOR's problem", async () => {
+void test("readPracticeExpected rejects a reference result past the comparison limit as the AUTHOR's problem", async () => {
   const oversized = MAX_COMPARISON_ROWS + 1;
   const run = await runExpected(
     side([INT4], [], oversized),
@@ -244,7 +248,7 @@ void test("runPracticeExpected rejects a reference result past the comparison li
   assert.match(run.error.message, /assignment-configuration problem, not a wrong answer/);
 });
 
-void test("runPracticeExpected compares ordered results in sequence when the assignment says so", async () => {
+void test("readPracticeExpected compares ordered results in sequence when the assignment says so", async () => {
   const reference = script(
     resultSet({
       columns: ["title", "published_year"],

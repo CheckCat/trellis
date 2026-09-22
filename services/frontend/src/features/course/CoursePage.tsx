@@ -1,9 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { ApiError, api } from "../../api/client";
+import type { CourseProgressResponse } from "../../api/types";
+import { ConfirmDialog } from "../../ui/ConfirmDialog";
+import { ArrowRightIcon, CheckIcon, FlameIcon, RefreshIcon } from "../../ui/icons";
+import { plural } from "../../ui/plural";
 import { ModuleList } from "./ModuleList";
+import { nextUnfinishedLesson, studyStreakDays } from "./progress";
 
 /**
- * Course navigation page: module/lesson tree with per-lesson statuses.
+ * Course navigation page: where the learner is in this course, the one
+ * action that moves them forward, and the module/lesson tree.
+ *
  * Fetches `GET /courses/:courseId/progress` (not `CourseDetailResponse` —
  * that shape carries no status) so the tree it renders already has
  * completed/not_started joined onto every lesson, per task-011's report.
@@ -43,13 +52,137 @@ export function CoursePage({ courseId }: { courseId: string }) {
   }
 
   return (
-    <>
-      <h1 className="page-heading">{data.title}</h1>
-      {courseData?.description !== undefined && <p className="muted-note">{courseData.description}</p>}
-      <p className="muted-note">
-        {data.completedLessons} / {data.totalLessons} уроков пройдено
-      </p>
+    <article className="course">
+      <header className="course-header">
+        <h1 className="page-heading">{data.title}</h1>
+        {courseData?.description !== undefined && <p className="course-description">{courseData.description}</p>}
+      </header>
+
+      <CourseStatus courseId={courseId} progress={data} />
+
       <ModuleList courseId={courseId} modules={data.modules} />
+    </article>
+  );
+}
+
+/**
+ * The band between the title and the tree: how far along the course is, the
+ * single action that continues it, and the way back to the start.
+ *
+ * All three read from the same already-fetched tree — no extra request, and
+ * no stored "current lesson" cursor anywhere (see progress.ts).
+ */
+function CourseStatus({ courseId, progress }: { courseId: string; progress: CourseProgressResponse }) {
+  const next = nextUnfinishedLesson(progress);
+  const streak = studyStreakDays(progress);
+  const started = progress.completedLessons > 0;
+
+  return (
+    <section className="course-status">
+      <CourseProgressBar progress={progress} />
+
+      <p className="course-counters">
+        {/* Предложение целиком — один flex-элемент. Иначе зазор строки
+         * раздвигает число и слова вокруг него, и «2 из 9» читается как
+         * два куска текста, а не как одна фраза. */}
+        <span>
+          <strong>{progress.completedLessons}</strong> из {progress.totalLessons}{" "}
+          {plural(progress.totalLessons, ["урока", "уроков", "уроков"])} пройдено
+        </span>
+        {/* Серия — единственная «игровая» механика здесь, и она ничего не
+         * хранит: это арифметика по датам зачётов, которые и так уезжают в
+         * файл переноса. Один день — не серия, поэтому порог 2. */}
+        {streak >= 2 && (
+          <span className="streak" title="Дней подряд с пройденными уроками">
+            <FlameIcon />
+            {streak} {plural(streak, ["день", "дня", "дней"])} подряд
+          </span>
+        )}
+      </p>
+
+      <div className="course-actions">
+        {next === undefined ? (
+          <p className="course-done">
+            <CheckIcon />
+            Курс пройден целиком
+          </p>
+        ) : (
+          <Link
+            className="button button--primary"
+            to="/courses/$courseId/lessons/$lessonId"
+            params={{ courseId, lessonId: next.lesson.id }}
+          >
+            {started ? "Продолжить" : "Начать курс"}
+            <ArrowRightIcon />
+          </Link>
+        )}
+        {/* Нечего стирать — нечего и предлагать: на нетронутом курсе кнопка
+         * «Перепройти» была бы действием без последствий. */}
+        {started && <RestartCourseButton courseId={courseId} progress={progress} />}
+      </div>
+
+      {next !== undefined && started && (
+        <p className="course-next-hint muted-note">Следующий: {next.lesson.title}</p>
+      )}
+    </section>
+  );
+}
+
+/** Course-level progress as a bar. Purely decorative for a screen reader —
+ * the counters right beside it say the same in words, and a duplicate
+ * `progressbar` role would just be read twice. */
+function CourseProgressBar({ progress }: { progress: CourseProgressResponse }) {
+  const share = progress.totalLessons === 0 ? 0 : progress.completedLessons / progress.totalLessons;
+  return (
+    <div className="course-progress" aria-hidden="true">
+      <div className="course-progress-fill" style={{ width: `${Math.round(share * 100)}%` }} />
+    </div>
+  );
+}
+
+/**
+ * «Перепройти» — the only control in the app that destroys progress, so it
+ * asks first and names what will be lost in the question rather than in a
+ * vague "are you sure".
+ */
+function RestartCourseButton({ courseId, progress }: { courseId: string; progress: CourseProgressResponse }) {
+  const queryClient = useQueryClient();
+  const [asking, setAsking] = useState(false);
+
+  const resetMutation = useMutation({
+    mutationFn: () => api.resetCourseProgress(courseId),
+    onSuccess: () => {
+      setAsking(false);
+      void queryClient.invalidateQueries({ queryKey: ["courseProgress", courseId] });
+    },
+  });
+
+  return (
+    <>
+      <button type="button" className="button button--quiet" onClick={() => setAsking(true)}>
+        <RefreshIcon />
+        Перепройти
+      </button>
+      {resetMutation.isError && <p className="muted-note">Не удалось сбросить прогресс. Попробуйте ещё раз.</p>}
+      {asking && (
+        <ConfirmDialog
+          title="Перепройти курс?"
+          body={
+            <>
+              <p>
+                Будет стёрто {progress.completedLessons}{" "}
+                {plural(progress.completedLessons, ["пройденный урок", "пройденных урока", "пройденных уроков"])} курса
+                «{progress.title}». Прогресс других курсов останется на месте.
+              </p>
+              <p className="muted-note">Отменить это действие нельзя — восстановить можно только из файла переноса.</p>
+            </>
+          }
+          confirmLabel={resetMutation.isPending ? "Стираем…" : "Стереть и начать заново"}
+          busy={resetMutation.isPending}
+          onConfirm={() => resetMutation.mutate()}
+          onCancel={() => setAsking(false)}
+        />
+      )}
     </>
   );
 }

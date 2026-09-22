@@ -67,6 +67,18 @@ export interface CourseSqlPractice {
    * absent otherwise — the manifest may omit it, the domain model may not
    * leave "default false" implicit. */
   readonly ordered?: boolean;
+  /**
+   * The author's own SQL solution to the exercise. The engine runs it on
+   * the seeded sandbox, runs the learner's SQL on an identical one, and
+   * compares the two resulting STATES (practice/state.ts).
+   *
+   * The strict mechanic for assignments that change data: where `check`
+   * grades only the predicate its author thought to write, this grades
+   * everything, including the rows the assignment never mentions. Like
+   * `check` and `expected`, it is the answer to the exercise and never
+   * leaves the backend.
+   */
+  readonly solution?: string;
 }
 
 /** One value the learner is asked to report back in an `answer` practice. */

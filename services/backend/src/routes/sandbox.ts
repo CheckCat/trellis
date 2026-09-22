@@ -1,5 +1,10 @@
-// Sandbox API: see whether a course's practice sandbox is prepared, and
-// "сбросить песочницу" — rebuild it from the course's seed files.
+// Sandbox API: see whether a course's practice sandbox is prepared.
+//
+// There was a second endpoint here — "сбросить песочницу", a manual rebuild
+// from the course's seed. It went away when every practice attempt began
+// re-seeding on its own (routes/practice/sql.ts): a button that restores the
+// starting state is noise next to an engine that never leaves it. The
+// provisioner's `reset` stays — it is what the attempt path rebuilds with.
 //
 // Nothing here knows any SQL. The endpoint calls `fastify.sandbox` (the
 // provisioner) and translates its one error type into an honest HTTP
@@ -54,39 +59,11 @@ export default async function sandboxRoutes(fastify: FastifyInstance): Promise<v
     },
   );
 
-  fastify.post<{ Params: { courseId: string }; Body: { sandboxId?: string } | null }>(
-    "/courses/:courseId/sandbox/reset",
-    {
-      schema: {
-        params: courseParamsSchema,
-        body: resetBodySchema,
-        response: {
-          200: sandboxStatusResponseSchema,
-          400: sandboxErrorResponseSchema,
-          404: sandboxErrorResponseSchema,
-          422: sandboxErrorResponseSchema,
-          503: sandboxErrorResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      try {
-        // Unconditional rebuild, even if this course's sandbox is already
-        // live — that is the entire point of a reset: the user has made a
-        // mess of the practice tables and wants the course's starting state
-        // back.
-        const state = await fastify.sandbox.reset(request.params.courseId, request.body?.sandboxId);
-        return toStatusPayload(state);
-      } catch (err) {
-        return sendSandboxError(request, reply, err);
-      }
-    },
-  );
 }
 
-/** One response shape for both endpoints: `active` first, everything else
- * only when there is something to describe. A client checks `active` — it
- * never has to infer readiness from the presence of some other field. */
+/** The status response: `active` first, everything else only when there is
+ * something to describe. A client checks `active` — it never has to infer
+ * readiness from the presence of some other field. */
 function toStatusPayload(state: SandboxState | undefined) {
   if (state === undefined) {
     return { active: false };
@@ -136,19 +113,6 @@ const courseParamsSchema = {
   type: "object",
   required: ["courseId"],
   properties: { courseId: { type: "string" } },
-} as const;
-
-// The body is optional as a whole: a course with exactly one declared
-// sandbox needs no argument at all, and a client that sends nothing is doing
-// the normal thing. `"null"` is in the type list because that is what
-// Fastify hands the validator for a bodyless POST — verified, not assumed:
-// without it the request fails schema validation with `400 body must be
-// object` before the handler ever runs. When a body IS sent,
-// `additionalProperties: false` keeps everything but `sandboxId` out.
-const resetBodySchema = {
-  type: ["object", "null"],
-  additionalProperties: false,
-  properties: { sandboxId: { type: "string", minLength: 1 } },
 } as const;
 
 const sandboxStatusResponseSchema = {

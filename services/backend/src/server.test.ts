@@ -57,14 +57,14 @@ void test(
       // used to construct a competing provisioner.
       assert.equal(app.sandbox, injectedSandbox);
 
-      const response = await app.inject({
-        method: "POST",
-        url: `/courses/${FIXTURE_COURSE_ID}/sandbox/reset`,
-      });
+      // Exercised through the provisioner rather than an endpoint: the
+      // manual-reset route is gone (every practice attempt re-seeds on its
+      // own now), and what this test is about is which provisioner the
+      // server kept, not which URL answers.
+      await app.sandbox.reset(FIXTURE_COURSE_ID);
 
-      assert.equal(response.statusCode, 200);
-      // Proof the request actually ran against `injectedSandbox`'s
-      // recording pool, not some other driver built from the bogus URL.
+      // Proof it actually ran against `injectedSandbox`'s recording pool,
+      // not some other driver built from the bogus URL.
       assert.ok(recording.statements.includes("COMMIT"), recording.statements.join(" | "));
     } finally {
       await app.close();

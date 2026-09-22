@@ -8,10 +8,15 @@
 //   - completing an already-completed lesson is a no-op for `completed_at`
 //     (a repeat pass must not rewrite when the lesson was first passed) but
 //     refreshes `course_version`/`updated_at` — see `markLessonCompleted`;
-//   - there is no un-complete / delete operation, on purpose: a passed
-//     lesson never un-passes (product model). Task 010's import will need
-//     its own write path; it should add it here rather than reaching into
-//     the table from transfer/.
+//   - a passed lesson never un-passes by itself (product model): there is
+//     no per-lesson un-complete, and nothing in the grading paths deletes.
+//     The single carve-out is `resetCourseProgress` — «Перепройти курс», an
+//     explicit, confirmed, whole-course erase the learner asks for. It is
+//     not the inverse of `markLessonCompleted` (no caller may reach for it
+//     to undo one lesson) and it is deliberately the only DELETE in the
+//     module, so "what can destroy progress" stays a one-line answer.
+//     Task 010's import has its own write path here too, rather than
+//     reaching into the table from transfer/.
 //   - no attempt history is stored anywhere — a wrong quiz answer writes
 //     nothing at all.
 
@@ -99,6 +104,22 @@ export interface ProgressRepository {
    * empty input touches the database not at all.
    */
   importProgress(records: readonly ImportProgressRecord[]): Promise<ProgressRecord[]>;
+  /**
+   * Erases every stored completion of one course and returns how many rows
+   * went away — «Перепройти курс».
+   *
+   * The one destructive operation in this module (see the header note). It
+   * takes a course, never a lesson: the product model has no "un-pass this
+   * one lesson", and an API that accepted a lesson id would be exactly
+   * that. Rows of OTHER courses are untouched, orphaned rows of THIS course
+   * are not spared — they are this course's progress too, just for lessons
+   * the installed version no longer has, and a learner who asked to start
+   * the course over means all of it.
+   *
+   * A course with no progress is not an error: zero rows deleted, zero
+   * written, and the caller gets `0`.
+   */
+  resetCourseProgress(courseId: string): Promise<number>;
 }
 
 export function createProgressRepository(pool: AppPool): ProgressRepository {
@@ -231,6 +252,17 @@ export function createProgressRepository(pool: AppPool): ProgressRepository {
         ],
       );
       return result.rows.map(toProgressRecord);
+    },
+
+    async resetCourseProgress(courseId) {
+      // No `returning`: the caller needs the count, not the rows — what was
+      // erased is by definition gone, and handing back the deleted records
+      // would invite a caller to "undo" a reset the learner confirmed.
+      const result = await pool.query(`delete from core.lesson_progress where course_id = $1`, [courseId]);
+      // `rowCount` is `number | null` in `pg`'s types (null for commands
+      // that report none); a DELETE always reports one, so the coalesce is
+      // a type formality, not a case that happens.
+      return result.rowCount ?? 0;
     },
   };
 }

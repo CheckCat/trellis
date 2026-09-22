@@ -1,5 +1,5 @@
 id: pilot-sql
-version: 1.2.0
+version: 1.3.0
 title: "Основы SQL: работа с таблицей книг"
 description: "Пилотный курс для обкатки платформы: SELECT, WHERE и изменение данных на примере небольшой таблицы книг."
 sandboxes:
@@ -66,14 +66,23 @@ modules:
         practice:
           sandbox: main
           prompt: "Добавьте в таблицу books новую книгу: title = 'Мастер и Маргарита', author = 'Михаил Булгаков', published_year = 1967, in_stock = true."
-          check: "select count(*) = 1 as ok from books where title = 'Мастер и Маргарита' and author = 'Михаил Булгаков' and published_year = 1967 and in_stock = true"
+          # Зачёт по состоянию всей песочницы: движок выполнит это решение
+          # на засеянной базе, запрос ученика — на такой же, и сравнит
+          # результат целиком. Поэтому здесь не нужен check: «добавил, но
+          # заодно снёс три другие книги» не пройдёт само собой, без
+          # единого дополнительного условия в манифесте.
+          solution: "insert into books (title, author, published_year, in_stock) values ('Мастер и Маргарита', 'Михаил Булгаков', 1967, true)"
       - id: practice-update-stock
         title: "Практика: обновить статус книги"
         content: lessons/practice-update-stock.md
         practice:
           sandbox: main
           prompt: "Отметьте книгу с id = 1 («Война и мир») как отсутствующую в продаже: обновите in_stock на false."
-          check: "select count(*) = 1 as ok from books where id = 1 and in_stock = false"
+          # Раньше здесь стоял check по одной книге — и `update books set
+          # in_stock = false` без WHERE проходил его: книга 1 действительно
+          # становилась false, а испорченные заодно четыре строки check не
+          # интересовали. Сравнение состояния ловит это без всяких оговорок.
+          solution: "update books set in_stock = false where id = 1"
       - id: practice-by-year
         title: "Практика: книги по году издания"
         content: lessons/practice-by-year.md

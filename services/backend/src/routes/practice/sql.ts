@@ -51,11 +51,22 @@ import {
 } from "../../practice/execute.js";
 import { isPracticeCheckError, runPracticeCheck, type PracticeCheckVerdict } from "../../practice/check.js";
 import {
+  compareResults,
   isPracticeExpectedError,
   MAX_COMPARISON_ROWS,
-  runPracticeExpected,
+  readPracticeExpected,
+  type ComparableResult,
   type PracticeExpectedVerdict,
 } from "../../practice/compare.js";
+import {
+  assertDeterministic,
+  comparePracticeState,
+  isPracticeSolutionError,
+  runPracticeSolution,
+  snapshotSandboxState,
+  type PracticeSolutionVerdict,
+  type SandboxStateSnapshot,
+} from "../../practice/state.js";
 import { lessonCompletionMode } from "../../progress/model.js";
 import { isPostgresSandboxDriver } from "../../sandbox/postgres-sandbox.js";
 import { isSandboxError, SandboxError } from "../../sandbox/types.js";
@@ -100,15 +111,8 @@ export const sqlPracticeStrategy: PracticeStrategy = {
       let execution: PracticeExecution;
       let verdict: PracticeCheckVerdict | undefined;
       let expectedVerdict: PracticeExpectedVerdict | undefined;
+      let solutionVerdict: PracticeSolutionVerdict | undefined;
       try {
-        // Idempotent: the first practice request of a course pays for the
-        // seed, later ones don't — re-seeding on every run would wipe the
-        // tables the learner just created, mid-exercise.
-        await fastify.sandbox.ensure(course.id, practice.sandbox);
-
-        // One client for the attempt AND the check, so the check grades the
-        // session the attempt left behind (temp tables and all) rather than
-        // some other pooled connection's view.
         const driver = fastify.sandbox.drivers.get("postgres");
         if (!isPostgresSandboxDriver(driver)) {
           // The course declared a Postgres sandbox (validation guarantees
@@ -120,72 +124,150 @@ export const sqlPracticeStrategy: PracticeStrategy = {
             `This build has no Postgres sandbox driver registered, so SQL practice cannot run.`,
           );
         }
+        const sandboxDriver = driver;
+        const context = { courseId: course.id, lessonId: location.lesson.id };
+        // Read once into a local so TypeScript keeps the narrowing across
+        // the closures below — `practice.solution` is a property access and
+        // would have to be re-narrowed inside every one of them.
+        const solutionSql = practice.solution;
 
-        const attempt = await driver.withClient(async (client) => {
-          try {
-            const executed = await executePracticeSql(client, request.body.sql, {
-              // Rows are only retained for grading when something actually
-              // grades them — see `PracticeGradingRows`. `MAX_RESULT_ROWS`
-              // still caps what `executed.result` (the client's grid)
-              // carries either way.
-              ...(practice.expected === undefined ? {} : { gradingRows: MAX_COMPARISON_ROWS }),
-            });
-            if (practice.check === undefined && practice.expected === undefined) {
-              return { executed, checked: undefined, compared: undefined };
+        // The whole attempt happens inside one exclusive, freshly seeded
+        // window. Nothing carries over from the last attempt, this lesson's
+        // or another's — see `withFreshSandbox` for why accumulated state
+        // turned out to be ungradable.
+        const attempt = await fastify.sandbox.withFreshSandbox(
+          course.id,
+          practice.sandbox,
+          async ({ reseed }) => {
+            // Step 1 — the references, read from the seeded state BEFORE
+            // the learner's statement can touch it. Skipped entirely for an
+            // assignment that declares neither: a self-marked exercise (or
+            // a `check`-only one) must not pay for a connection nobody
+            // reads from.
+            const needsReference = practice.expected !== undefined || solutionSql !== undefined;
+            const reference: {
+              rows?: ComparableResult;
+              state?: SandboxStateSnapshot;
+            } = !needsReference
+              ? {}
+              : await sandboxDriver.withClient(async (client) => {
+                  try {
+                    const rows =
+                      practice.expected === undefined
+                        ? undefined
+                        : await readPracticeExpected(client, { sql: practice.expected, ...context });
+                    if (solutionSql === undefined) {
+                      return { rows };
+                    }
+                    await runPracticeSolution(client, { sql: solutionSql, ...context });
+                    return { rows, state: await snapshotSandboxState(client) };
+                  } finally {
+                    await resetSandboxSession(client);
+                  }
+                });
+
+            // The solution CHANGED the sandbox (that is what made it
+            // gradable), so the learner must not inherit it.
+            if (solutionSql !== undefined) {
+              await reseed();
             }
-            // Before any grading, not after: an attempt that failed inside
-            // a transaction leaves the session in the "current transaction
-            // is aborted" state, where no further query can run at all, and
-            // an attempt that opened a transaction and never closed it must
-            // not have its uncommitted work graded as if it were durable.
-            await rollbackOpenTransaction(client);
 
-            // `expected` first, and only for an attempt that produced a
-            // result at all ("если запрос ученика упал с ошибкой —
-            // expected не выполняется": there are no rows to compare, and
-            // the learner already has Postgres' own error). Before the
-            // check because the check is arbitrary course SQL over the same
-            // session, while the reference query is read-only by
-            // construction — this order is the one where neither mechanic
-            // can disturb the other's subject.
-            const compared =
-              practice.expected === undefined || !executed.ok
-                ? undefined
-                : await runPracticeExpected(client, {
-                    sql: practice.expected,
-                    ordered: practice.ordered === true,
-                    attempt: {
-                      columnTypeIds: executed.result.columns.map((column) => column.dataTypeId),
-                      rows: executed.grading?.rows ?? executed.result.rows,
-                      totalRows: executed.grading?.totalRows ?? executed.result.rows.length,
-                    },
-                    courseId: course.id,
-                    lessonId: location.lesson.id,
-                  });
+            // Step 2 — the learner's own statement, on a sandbox identical
+            // to the one the references were read from.
+            const referenceState = reference.state;
+            const result = await sandboxDriver.withClient(async (client) => {
+              try {
+                const executed = await executePracticeSql(client, request.body.sql, {
+                  // Rows are only retained for grading when something
+                  // actually grades them — see `PracticeGradingRows`.
+                  // `MAX_RESULT_ROWS` still caps what `executed.result`
+                  // (the client's grid) carries either way.
+                  ...(practice.expected === undefined ? {} : { gradingRows: MAX_COMPARISON_ROWS }),
+                });
+                if (
+                  practice.check === undefined &&
+                  practice.expected === undefined &&
+                  solutionSql === undefined
+                ) {
+                  return { executed, checked: undefined, compared: undefined, stated: undefined };
+                }
+                // Before any grading, not after: an attempt that failed
+                // inside a transaction leaves the session in the "current
+                // transaction is aborted" state, where no further query can
+                // run at all, and an attempt that opened a transaction and
+                // never closed it must not have its uncommitted work graded
+                // as if it were durable.
+                await rollbackOpenTransaction(client);
 
-            if (practice.check === undefined) {
-              return { executed, checked: undefined, compared };
-            }
-            const checked = await runPracticeCheck(client, {
-              sql: practice.check,
-              courseId: course.id,
-              lessonId: location.lesson.id,
+                // Comparison against the reference rows, and only for an
+                // attempt that produced a result at all ("если запрос
+                // ученика упал с ошибкой — expected не выполняется": there
+                // are no rows to compare, and the learner already has
+                // Postgres' own error).
+                const compared =
+                  reference.rows === undefined || !executed.ok
+                    ? undefined
+                    : compareResults(
+                        {
+                          columnTypeIds: executed.result.columns.map((column) => column.dataTypeId),
+                          rows: executed.grading?.rows ?? executed.result.rows,
+                          totalRows: executed.grading?.totalRows ?? executed.result.rows.length,
+                        },
+                        reference.rows,
+                        practice.ordered === true,
+                      );
+
+                // State comparison. Unlike `expected`, it runs even when
+                // the attempt errored: a statement that failed halfway can
+                // still have committed part of its work, and "the database
+                // ended up right" is a question with an answer either way.
+                let stated: PracticeSolutionVerdict | undefined;
+                if (referenceState !== undefined) {
+                  stated = comparePracticeState(referenceState, await snapshotSandboxState(client));
+                }
+
+                const checked =
+                  practice.check === undefined
+                    ? undefined
+                    : await runPracticeCheck(client, { sql: practice.check, ...context });
+                return { executed, checked, compared, stated };
+              } finally {
+                // Whatever happened — a broken check throwing included —
+                // the connection goes back to the pool carrying none of
+                // this request's session state (see `resetSandboxSession`).
+                await resetSandboxSession(client);
+              }
             });
-            return { executed, checked, compared };
-          } finally {
-            // Whatever happened — a broken check throwing included — the
-            // connection goes back to the pool carrying none of this
-            // request's session state (see `resetSandboxSession`).
-            await resetSandboxSession(client);
-          }
-        });
+
+            // The solution is re-verified only when the learner did NOT
+            // match it: that is the moment the answer is disputed, and the
+            // only moment a third re-seed is worth its ~30ms. An attempt
+            // that MATCHED cannot have been graded against a moving
+            // target. See `assertDeterministic` for what this catches that
+            // a "no now(), no random()" rule for course authors cannot.
+            if (solutionSql !== undefined && referenceState !== undefined && result.stated?.passed === false) {
+              await reseed();
+              const second = await sandboxDriver.withClient(async (client) => {
+                try {
+                  await runPracticeSolution(client, { sql: solutionSql, ...context });
+                  return await snapshotSandboxState(client);
+                } finally {
+                  await resetSandboxSession(client);
+                }
+              });
+              assertDeterministic(referenceState, second, context);
+            }
+            return result;
+          },
+        );
         execution = attempt.executed;
         verdict = attempt.checked;
         expectedVerdict = attempt.compared;
+        solutionVerdict = attempt.stated;
       } catch (err) {
-        if (isPracticeCheckError(err) || isPracticeExpectedError(err)) {
-          // A broken grading query (either mechanic) — course content, not
-          // a failed attempt. Same class (and status) as a seed file the
+        if (isPracticeCheckError(err) || isPracticeExpectedError(err) || isPracticeSolutionError(err)) {
+          // A broken grading query (any mechanic) — course content, not a
+          // failed attempt. Same class (and status) as a seed file the
           // database rejects, and the same for an assignment whose expected
           // result is too large to compare: the author configured it, the
           // learner cannot have caused it.
@@ -217,11 +299,13 @@ export const sqlPracticeStrategy: PracticeStrategy = {
       // must be declared — "зачёт требует прохождения обоих" when a lesson
       // carries both. An assignment with neither is self-marked and never
       // reaches this branch anyway (its completion mode is `manual`).
-      const graded = practice.check !== undefined || practice.expected !== undefined;
+      const graded =
+        practice.check !== undefined || practice.expected !== undefined || practice.solution !== undefined;
       const allPassed =
         graded &&
         (practice.check === undefined || verdict?.passed === true) &&
-        (practice.expected === undefined || expectedVerdict?.passed === true);
+        (practice.expected === undefined || expectedVerdict?.passed === true) &&
+        (practice.solution === undefined || solutionVerdict?.passed === true);
 
       // A lesson carrying both a quiz and a graded practice is gated by its
       // quiz (progress/model.ts: one lesson, one gate). The verdicts are
@@ -262,6 +346,21 @@ export const sqlPracticeStrategy: PracticeStrategy = {
                   : {
                       passed: expectedVerdict.passed,
                       ...(expectedVerdict.reason === undefined ? {} : { reason: expectedVerdict.reason }),
+                    }),
+              },
+        // The state mechanic reports like the other two: presence first, a
+        // verdict only when one was reached. Its `reason` names tables and
+        // row counts — never a cell, and never a word of the solution.
+        solution:
+          practice.solution === undefined
+            ? { present: false }
+            : {
+                present: true,
+                ...(solutionVerdict === undefined
+                  ? {}
+                  : {
+                      passed: solutionVerdict.passed,
+                      ...(solutionVerdict.reason === undefined ? {} : { reason: solutionVerdict.reason }),
                     }),
               },
         ...payload,
@@ -365,10 +464,22 @@ const practiceExpectedSchema = {
   },
 } as const;
 
+const practiceSolutionSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["present"],
+  properties: {
+    present: { type: "boolean" },
+    passed: { type: "boolean" },
+    // Counts and table names only — practice/state.ts builds it.
+    reason: { type: "string" },
+  },
+} as const;
+
 const practiceRunResponseSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["ok", "durationMs", "check", "expected", "lesson", "course"],
+  required: ["ok", "durationMs", "check", "expected", "solution", "lesson", "course"],
   properties: {
     ok: { type: "boolean" },
     result: practiceResultSchema,
@@ -376,6 +487,7 @@ const practiceRunResponseSchema = {
     durationMs: { type: "integer" },
     check: practiceCheckSchema,
     expected: practiceExpectedSchema,
+    solution: practiceSolutionSchema,
     // The same `{ lesson, course }` pair the other write endpoints answer
     // with (routes/progress.ts, routes/quiz.ts), so a client redraws the
     // lesson's status and the course counters from one response.
