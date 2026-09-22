@@ -12,7 +12,8 @@
 // verdict. String literals and comments are removed first so that a book
 // titled 'Order by Chaos' does not count as ORDER BY.
 
-/** Feature ids a plan may list in `skills[].grants_sql`. Closed on
+/** Feature ids a plan may grant, as `sql:<id>` in a term's `grants`
+ * (lint/features.ts is the registry those values come from). Closed on
  * purpose: a typo in a plan must be a finding, not a silently ignored
  * entry that makes the rule pass by accident. */
 export const SQL_FEATURES: readonly string[] = [

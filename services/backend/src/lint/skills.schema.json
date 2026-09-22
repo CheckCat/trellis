@@ -19,7 +19,7 @@
     },
     "terms": {
       "type": "array",
-      "description": "Vocabulary of the course: a term and the lesson that introduces it. The lint reads the lessons' Markdown and reports a term used before its own lesson — the non-technical half of the same problem `grants_sql` covers for SQL.",
+      "description": "Vocabulary of the course: a term and the lesson that introduces it. The lint reads the lessons' Markdown and reports a term used before its own lesson — the non-technical half of the same problem a term's `grants` covers for SQL.",
       "items": { "$ref": "#/$defs/term" }
     },
     "lessons": {
