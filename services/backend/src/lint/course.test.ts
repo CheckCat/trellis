@@ -525,33 +525,6 @@ modules:
   assert.equal(ghost[0]?.path, "skills.modules[1].id");
 });
 
-void test("a wrong quiz option with no explanation warns, one finding per option", () => {
-  const silent: CourseQuiz = {
-    question: "Which one?",
-    options: [
-      { id: "right", text: "A", correct: true },
-      { id: "wrong-1", text: "B", correct: false },
-      { id: "wrong-2", text: "C", correct: false, explanation: "C mixes up two periods." },
-      { id: "wrong-3", text: "D", correct: false },
-    ],
-  };
-  const findings = lintCourse(course({ intro: [{ id: "q", quiz: silent }] }));
-
-  const silentOptions = of(findings, "quiz-wrong-option-without-explanation");
-  assert.deepEqual(
-    silentOptions.map((finding) => finding.path),
-    ["modules[0].lessons[0].quiz.options[1]", "modules[0].lessons[0].quiz.options[3]"],
-  );
-  assert.equal(silentOptions[0]?.severity, "warning");
-  assert.match(silentOptions[0]?.message ?? "", /Wrong option "wrong-1"/);
-});
-
-void test("the correct option needs no explanation, and a fully annotated quiz is silent", () => {
-  // `QUIZ`'s only wrong option carries an explanation and its correct one
-  // does not — the shape every course should end up in.
-  assert.deepEqual(of(lintCourse(course({ intro: [{ id: "q", quiz: QUIZ }] })), "quiz-wrong-option-without-explanation"), []);
-});
-
 // --- Vocabulary ----------------------------------------------------------
 // The rule a non-technical course needs most. Everything above reasons
 // about the plan; these read the lessons themselves, so their fixtures

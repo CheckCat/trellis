@@ -356,6 +356,10 @@ npm run course:lint -- courses/pilot-sql        # можно перечисли�
 
 **Ошибки (E)**
 
+- `manifest-invalid`, `skills-invalid` — пакет не удалось прочитать:
+  `manifest.yaml` или `skills.yaml` не проходит валидацию. Линт при этом не
+  запускается вовсе (в выводе так и сказано), поэтому остальных находок в
+  этом прогоне не будет — сначала чинится это.
 - `lesson-unknown`, `lesson-undocumented`, `lesson-duplicated` — списки
   уроков в манифесте и в плане обязаны покрывать друг друга ровно.
 - `lesson-requires-unknown`, `lesson-requires-order`,

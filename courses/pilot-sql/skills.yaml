@@ -85,7 +85,7 @@ lessons:
   # WHERE объясняется ДО задания на фильтрацию, а не после: обратный
   # порядок (как было до версии 1.4.0) требовал от ученика конструкции,
   # которой курс ещё не давал. Это и ловит правило
-  # practice-uses-untaught-sql.
+  # practice-uses-untaught.
   - id: where-clause
     teaches: [filter-rows]
     requires: [select-basics]

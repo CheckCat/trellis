@@ -33,8 +33,10 @@ export type LintSeverity = "error" | "warning";
 export interface LintFinding {
   readonly severity: LintSeverity;
   /** Stable machine-readable rule id, so a generator can react to a
-   * specific finding instead of matching on prose. */
-  readonly rule: string;
+   * specific finding instead of matching on prose. Typed against
+   * `LINT_RULES`: a rule the list does not know about is a compile error,
+   * not a surprise in someone's output. */
+  readonly rule: LintRule;
   /**
    * Where the problem is. A MANIFEST coordinate (`modules[1].lessons[3]`)
    * whenever the thing exists there — that is the file an author fixes
@@ -104,7 +106,6 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   // them for a package without skills.yaml is what makes the lint useful
   // before a plan exists.
   checkPacing(lessons, course, findings);
-  checkQuizExplanations(lessons, findings);
   checkQuizGuessable(lessons, findings);
   checkStrictGrading(lessons, findings);
   checkAnswerFields(lessons, findings);
@@ -379,7 +380,7 @@ function checkSkills(
 
 /** What each `verify` promises: the practice type and the grading mechanic
  * of capabilities.ts that has to be registered for it to be runnable. */
-const VERIFY_MECHANICS: Readonly<Record<VerifyKind, { practiceType?: string; mechanic?: string }>> = {
+export const VERIFY_MECHANICS: Readonly<Record<VerifyKind, { practiceType?: string; mechanic?: string }>> = {
   quiz: {},
   "sql-state": { practiceType: "sql", mechanic: "check" },
   "sql-result": { practiceType: "sql", mechanic: "expected" },
@@ -476,45 +477,6 @@ function describeActualVerification(lesson: CourseLesson): readonly VerifyKind[]
   return kinds;
 }
 
-/** W: pacing. Neither of these makes a course wrong; both make it worse to
- * sit through, and neither is visible by reading one lesson at a time —
- * which is why a tool is the right place for them. */
-/**
- * W: a wrong quiz option should say WHY it is wrong.
- *
- * The engine cannot require this — `explanation` is optional in the
- * manifest schema and a course without it is perfectly runnable, which is
- * why this is a warning and not an error. But a quiz that answers "Неверно"
- * and nothing else teaches nothing: the learner who picked that option did
- * so for a reason, and the one sentence explaining the reason is the only
- * part of the quiz that does any teaching. This rule is where that rule of
- * authorship lives, since it cannot live in the type system.
- *
- * Correct options are not checked: an explanation there is welcome but
- * optional — being right is already the feedback.
- */
-function checkQuizExplanations(lessons: readonly PositionedLesson[], findings: LintFinding[]): void {
-  for (const at of lessons) {
-    const quiz = at.lesson.quiz;
-    if (quiz === undefined) {
-      continue;
-    }
-    quiz.options.forEach((option, optionIndex) => {
-      if (option.correct || option.explanation !== undefined) {
-        return;
-      }
-      findings.push({
-        severity: "warning",
-        rule: "quiz-wrong-option-without-explanation",
-        path: `${at.path}.quiz.options[${optionIndex}]`,
-        message:
-          `Wrong option "${option.id}" of lesson "${at.lesson.id}" has no explanation — a learner who picks it ` +
-          `is told only that they are wrong.`,
-      });
-    });
-  }
-}
-
 /**
  * W: an exercise that changes data should be graded by its SOLUTION.
  *
@@ -557,6 +519,9 @@ function checkStrictGrading(lessons: readonly PositionedLesson[], findings: Lint
   }
 }
 
+/** W: pacing. Neither of these makes a course wrong; both make it worse to
+ * sit through, and neither is visible by reading one lesson at a time —
+ * which is why a tool is the right place for them. */
 function checkPacing(lessons: readonly PositionedLesson[], course: Course, findings: LintFinding[]): void {
   let runStart: PositionedLesson | undefined;
   let run = 0;
@@ -1010,10 +975,23 @@ function checkGrants(
   }
 }
 
-/** Every rule this lint can report, with the severity it reports at.
- * Exported so the tests can assert that the list in courses/README.md and
- * the rules that actually exist are the same set. */
-export const LINT_RULES: readonly string[] = [
+/**
+ * Every rule this lint can report.
+ *
+ * Not a description of the code but a constraint on it: `LintFinding.rule`
+ * is typed as `LintRule`, so reporting a rule that is not on this list does
+ * not compile. The reverse direction — a rule listed here that nothing
+ * reports, or that reports something courses/README.md never documents —
+ * is what course.rules.test.ts checks. Both halves earn their keep: the
+ * list used to say "exported so the tests can assert..." while no test did,
+ * and it carried a rule that could never fire.
+ */
+export const LINT_RULES = [
+  // Reported by the CLI before `lintCourse` runs at all: a package that
+  // does not load has nothing to lint, and saying so under a rule id keeps
+  // every line of the tool's output shaped the same way.
+  "manifest-invalid",
+  "skills-invalid",
   "lesson-unknown",
   "lesson-duplicated",
   "lesson-undocumented",
@@ -1030,7 +1008,6 @@ export const LINT_RULES: readonly string[] = [
   "module-without-checks",
   "module-over-budget",
   "module-unknown",
-  "quiz-wrong-option-without-explanation",
   "quiz-answer-guessable",
   "practice-check-without-solution",
   "lesson-is-placeholder",
@@ -1045,4 +1022,8 @@ export const LINT_RULES: readonly string[] = [
   "grant-unknown",
   "practice-uses-untaught",
   "course-without-grants",
-];
+] as const;
+
+/** The rule ids a finding may carry — derived from the list above, so the
+ * list cannot fall behind the code. */
+export type LintRule = (typeof LINT_RULES)[number];

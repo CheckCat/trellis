@@ -159,15 +159,32 @@ function toLessonResponse(lesson: CourseLesson) {
   };
 }
 
+/**
+ * The learner-facing shape of one assignment — the place where "what the
+ * course wrote" becomes "what the browser is told".
+ *
+ * Every kind is named and the switch is exhaustive (`never` below), so a
+ * practice type added to the domain stops the build here. That matters
+ * more than it looks: `publicPracticeSchema` serializes with
+ * `additionalProperties: false`, so a kind that fell through to the `sql`
+ * branch would not error — it would reach the browser as a prompt with its
+ * payload quietly stripped.
+ */
 function toPublicPractice(practice: CoursePractice) {
-  if (practice.type === "answer") {
-    return {
-      type: practice.type,
-      prompt: practice.prompt,
-      fields: practice.fields.map((field) => ({ id: field.id, label: field.label, kind: field.kind })),
-    };
+  switch (practice.type) {
+    case "answer":
+      return {
+        type: practice.type,
+        prompt: practice.prompt,
+        fields: practice.fields.map((field) => ({ id: field.id, label: field.label, kind: field.kind })),
+      };
+    case "sql":
+      return { type: practice.type, prompt: practice.prompt, sandbox: practice.sandbox };
+    default: {
+      const unhandled: never = practice;
+      throw new Error(`no public shape for practice type ${JSON.stringify((unhandled as { type: string }).type)}`);
+    }
   }
-  return { type: practice.type, prompt: practice.prompt, sandbox: practice.sandbox };
 }
 
 // --- JSON Schemas (plain JSON Schema, no TypeBox — see task-003 report's
@@ -281,7 +298,7 @@ const publicQuizSchema = {
  * what to call it and what sort of value to ask for. `expected` and
  * `tolerance` are the answer and stay on the server — same rule as a quiz
  * option's `correct` and a practice's `check`. */
-const publicAnswerFieldSchema = {
+export const publicAnswerFieldSchema = {
   type: "object",
   additionalProperties: false,
   required: ["id", "label", "kind"],
@@ -296,8 +313,14 @@ const publicAnswerFieldSchema = {
  * has no discriminated-union support, and `additionalProperties: false`
  * already guarantees nothing beyond these fields is serialized either way.
  * `sandbox` is present only for `sql`, `fields` only for `answer` — see
- * `toLessonResponse`. */
-const publicPracticeSchema = {
+ * `toLessonResponse`.
+ *
+ * The enum is written out rather than spread from `PRACTICE_TYPES` because
+ * these schemas are literals fast-json-stringify compiles once at startup;
+ * courses.schema.test.ts is the seam that keeps it equal to the registry.
+ * Getting it wrong is quiet in the worst way — `additionalProperties:
+ * false` strips whatever the schema does not name. */
+export const publicPracticeSchema = {
   type: "object",
   additionalProperties: false,
   required: ["type", "prompt"],

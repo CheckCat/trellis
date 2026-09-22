@@ -27,8 +27,25 @@ import type { ValidationError } from "../courses/types.js";
 /** The file the lint looks for beside `manifest.yaml`. */
 export const SKILLS_FILE_NAME = "skills.yaml";
 
-/** How a lesson is meant to be verified — see skills.schema.json. */
-export type VerifyKind = "quiz" | "sql-state" | "sql-result" | "answer" | "self";
+/**
+ * How a lesson is meant to be verified.
+ *
+ * A const tuple rather than a bare union so the same list can be compared
+ * with skills.schema.json's `verify` enum (skills.verify.test.ts). The two
+ * used to be written out twice with nothing between them: a value added to
+ * one and not the other either failed to parse a plan the type accepts, or
+ * accepted a plan the lint has no rule for.
+ *
+ * Deliberately COARSER than the engine's mechanics, and deliberately not
+ * derived from them: `sql-state` is satisfied by `check` or by `solution`,
+ * and a plan has no business choosing between the two — that is the
+ * manifest's decision, made later. `VERIFY_MECHANICS` in lint/course.ts is
+ * where each value is mapped onto the mechanics it needs, and a test keeps
+ * that mapping inside what the registry actually registers.
+ */
+export const VERIFY_KINDS = ["quiz", "sql-state", "sql-result", "answer", "self"] as const;
+
+export type VerifyKind = (typeof VERIFY_KINDS)[number];
 
 export interface SkillEntry {
   readonly id: string;
