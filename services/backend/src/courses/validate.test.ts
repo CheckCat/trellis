@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { parse as parseYaml } from "yaml";
 
+import { practiceTypeCapability } from "../capabilities.js";
 import type { CourseAnswerPractice, CourseSqlPractice, ValidationResult } from "./types.js";
 import { resolveSafePath, validateManifest } from "./validate.js";
 import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeFixtureFiles } from "./testSupport.js";
@@ -760,8 +761,26 @@ void test("validateManifest accepts a type: answer practice, with no sandbox any
   });
 });
 
+/**
+ * Every property the `sql` capability declares and the `answer` one does
+ * not, as a YAML line. Derived, not listed: the hand-written list this
+ * replaces was missing `solution` — added to `sql` long after the list was
+ * written, and nothing said so. All of them are scalars, which is why one
+ * stub value per type is enough.
+ */
+function sqlOnlyPracticeLines(): readonly string[] {
+  const answerFields = new Set((practiceTypeCapability("answer")?.manifestFields ?? []).map((field) => field.name));
+  return (practiceTypeCapability("sql")?.manifestFields ?? [])
+    .filter((field) => !answerFields.has(field.name))
+    .map((field) => `${field.name}: ${field.valueType === "boolean" ? "true" : '"x"'}`);
+}
+
 void test("validateManifest rejects sql-only properties on a type: answer practice", () => {
-  for (const line of ["sandbox: main", 'check: "select true"', 'expected: "select a"', "ordered: true"]) {
+  const lines = sqlOnlyPracticeLines();
+  // Guards the derivation itself: an empty list would make every
+  // assertion below vacuous while the test still reported success.
+  assert.ok(lines.length >= 5, `expected the sql type to declare properties answer does not: ${lines.join(", ")}`);
+  for (const line of lines) {
     withPackageDir((dir) => {
       const result = validateManifest(parseYaml(answerManifestYaml([...VALID_ANSWER_FIELDS, line])), dir);
 

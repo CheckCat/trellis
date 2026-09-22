@@ -16,7 +16,8 @@
 // product model: re-taking a completed lesson/quiz is allowed, but a passed
 // lesson never un-passes).
 
-import type { Course, CourseLesson, CourseModule, CourseQuiz } from "../courses/types.js";
+import { practiceTypeCapability } from "../capabilities.js";
+import type { Course, CourseLesson, CourseModule, CoursePractice, CourseQuiz } from "../courses/types.js";
 
 export type LessonStatus = "completed" | "not_started";
 
@@ -24,17 +25,17 @@ export type LessonStatus = "completed" | "not_started";
  * How a lesson is allowed to become `completed`:
  *  - `quiz`     — the lesson has a quiz: answering it correctly is what
  *                 completes it (an explicit "mark as done" must not).
- *  - `practice` — the lesson has a practice assignment carrying at least
- *                 one of the core's grading mechanics: for a `sql`
- *                 assignment, `check` (a query over the sandbox's state)
- *                 and/or `expected` (a reference query whose rows the
- *                 learner's result is compared with); for an `answer`
- *                 assignment, its `fields` (always present — an answer
- *                 assignment is graded by construction). Their verdicts
- *                 are what complete it, and the core has no grading logic
- *                 beyond these declarative mechanics — project invariant.
- *  - `manual`   — everything else (plain content, or a `sql` practice
- *                 assignment with neither mechanic): the user marks it
+ *  - `practice` — the lesson has a practice assignment that declares at
+ *                 least one of its type's grading mechanics. WHICH
+ *                 mechanics a type has is not spelled out here: the
+ *                 capability registry is the authority, and
+ *                 `lessonCompletionMode` reads it (see `isGraded`). Their
+ *                 verdicts are what complete the lesson, and the core has
+ *                 no grading logic beyond these declarative mechanics —
+ *                 project invariant.
+ *  - `manual`   — everything else: plain content, or a practice assignment
+ *                 that declares no mechanic at all (a `sql` exercise meant
+ *                 to be explored rather than graded). The user marks it
  *                 done themselves.
  *
  * A lesson carrying both a quiz and a checked practice resolves to `quiz`:
@@ -173,18 +174,45 @@ export function lessonCompletionMode(lesson: CourseLesson): LessonCompletionMode
   if (lesson.quiz !== undefined) {
     return "quiz";
   }
-  const practice = lesson.practice;
-  if (practice !== undefined) {
-    const graded =
-      practice.type === "answer" ||
-      practice.check !== undefined ||
-      practice.expected !== undefined ||
-      practice.solution !== undefined;
-    if (graded) {
-      return "practice";
-    }
+  if (lesson.practice !== undefined && isGraded(lesson.practice)) {
+    return "practice";
   }
   return "manual";
+}
+
+/**
+ * Does this assignment declare a grading mechanic the engine will run?
+ *
+ * Asked of the capability registry rather than answered by listing types
+ * and their fields here. The list was the bug: a new practice type could be
+ * registered, given a strategy and wired into the routes, and still land in
+ * `manual` — which is not a harmless default. A `manual` lesson credits
+ * nothing when the learner solves it, and offers a "mark as done" button
+ * when they have not.
+ *
+ * A mechanic counts as declared when any of the manifest fields that switch
+ * it on is present. On the validated domain model that is exactly the
+ * enumeration it replaces: `ordered` is normalized to exist precisely when
+ * `expected` does (courses/validate.ts), so the `expected` mechanic cannot
+ * be switched on by its modifier alone.
+ */
+function isGraded(practice: CoursePractice): boolean {
+  const capability = practiceTypeCapability(practice.type);
+  if (capability === undefined) {
+    // Unreachable: manifest.schema.json's `practice.type` enum is checked
+    // against the registry (capabilities.test.ts), so an unregistered type
+    // never survives validation. Stated rather than left to fall through,
+    // because the fall-through answer — `manual` — is the wrong one.
+    return false;
+  }
+  // The union has no index signature by design (a `sql` assignment must not
+  // typecheck as having `fields`), so reading a field named by the registry
+  // needs this widening. It is a read of a plain data object, and the field
+  // names come from the registry rather than from a request.
+  const declared = practice as unknown as Record<string, unknown>;
+  return capability.mechanics.some((mechanic) =>
+    mechanic.manifestFields.some((field) => declared[field] !== undefined),
+  );
 }
 
 export interface QuizVerdict {

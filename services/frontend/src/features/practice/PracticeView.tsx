@@ -20,6 +20,13 @@ import { usePractice } from "./usePractice";
  * different endpoint, a different verdict shape, and one of them has no
  * sandbox at all — so this dispatches instead of branching inside one
  * component.
+ *
+ * Every kind is named, and an unnamed one says so. There is no `else`
+ * branch falling through to the SQL editor: `api/types.ts` is written by
+ * hand, so a backend that learns a third practice type before this app
+ * does sends a `type` TypeScript here believes impossible. Falling through
+ * would point an SQL editor at a sandbox the assignment does not have and
+ * blame the learner for the empty result.
  */
 export function PracticeView({
   courseId,
@@ -30,10 +37,39 @@ export function PracticeView({
   lessonId: string;
   practice: PublicPractice;
 }) {
-  if (practice.type === "answer") {
-    return <AnswerForm courseId={courseId} lessonId={lessonId} practice={practice} />;
+  switch (practice.type) {
+    case "answer":
+      return <AnswerForm courseId={courseId} lessonId={lessonId} practice={practice} />;
+    case "sql":
+      return <SqlPracticeView courseId={courseId} lessonId={lessonId} practice={practice} />;
+    default:
+      // Unreachable by the types above — which is exactly the case worth
+      // handling, since the types describe what this build knows, not what
+      // the backend serves. Adding a kind to `PublicPractice` and
+      // forgetting it here is a compile error; meeting one at runtime is
+      // this.
+      return <UnsupportedPractice practice={practice} />;
   }
-  return <SqlPracticeView courseId={courseId} lessonId={lessonId} practice={practice} />;
+}
+
+/**
+ * A practice kind this build cannot display.
+ *
+ * Says what happened and what to do about it, in the app's own voice: the
+ * course is fine, the app is behind. The prompt is shown anyway — it is
+ * plain text the learner can act on, and showing it beats an empty box.
+ */
+function UnsupportedPractice({ practice }: { practice: never }) {
+  const { type, prompt } = practice as unknown as { type: string; prompt?: string };
+  return (
+    <section className="practice-view">
+      {prompt !== undefined && <p className="practice-prompt">{prompt}</p>}
+      <p className="muted-note">
+        Это задание типа «{type}» — курс рассчитан на более новую версию платформы, чем установлена. Обновите
+        приложение, чтобы выполнить его здесь.
+      </p>
+    </section>
+  );
 }
 
 /**

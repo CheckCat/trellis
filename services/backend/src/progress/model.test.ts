@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { CourseLesson, CourseQuiz } from "../courses/types.js";
+import { CAPABILITIES } from "../capabilities.js";
+import type { CourseLesson, CoursePractice, CourseQuiz } from "../courses/types.js";
 import { findLesson, gradeQuizAnswer, lessonCompletionMode } from "./model.js";
 import { courseFixture } from "./testSupport.js";
 
@@ -47,6 +48,31 @@ void test("lessonCompletionMode: practice WITH a grading mechanic is completed b
   assert.equal(lessonCompletionMode(both), "practice");
   // Project invariant: "задание без механик зачёта — самоотметка".
   assert.equal(lessonCompletionMode(ungraded), "manual");
+});
+
+void test("lessonCompletionMode reads the registry, so a NEW practice type is graded without touching it", () => {
+  // Drives itself off the capability document instead of naming "sql" and
+  // "answer": register a third practice type tomorrow and this test starts
+  // covering it the same day. That is the point of the change it guards —
+  // `lessonCompletionMode` used to enumerate types and their fields, and an
+  // unlisted type silently resolved to `manual`: no credit for solving it,
+  // a "mark as done" button for not solving it.
+  for (const capability of CAPABILITIES.practiceTypes) {
+    for (const mechanic of capability.mechanics) {
+      const practice = { type: capability.type, prompt: "Do it." } as Record<string, unknown>;
+      // Values are irrelevant — the rule is about a field being WRITTEN.
+      // `true` stands in for whatever the field's real type is.
+      for (const field of mechanic.manifestFields) {
+        practice[field] = true;
+      }
+      const lesson: CourseLesson = { id: "l", title: "L", practice: practice as unknown as CoursePractice };
+      assert.equal(
+        lessonCompletionMode(lesson),
+        "practice",
+        `mechanic "${mechanic.name}" of practice type "${capability.type}" does not gate its lesson`,
+      );
+    }
+  }
 });
 
 void test("lessonCompletionMode: a quiz wins over a checked practice on the same lesson (edge case)", () => {

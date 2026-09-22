@@ -9,6 +9,7 @@ import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject } from "ajv";
 
+import { CAPABILITIES, practiceTypeCapability } from "../capabilities.js";
 import manifestSchema from "./manifest.schema.json" with { type: "json" };
 import type {
   CourseAnswerField,
@@ -304,6 +305,72 @@ function validateLesson(
  * returning a value here keeps the rest of the lesson's checks running so
  * an author sees every problem at once (same contract as `validateQuiz`).
  */
+/**
+ * Every property any practice type declares, mapped to the types that
+ * declare it — built from the capability registry at module load.
+ *
+ * This is what makes a property "foreign": writing `sandbox:` on an
+ * `answer` assignment is wrong because the `answer` capability document
+ * does not list it, not because this file happens to remember that it
+ * shouldn't. The lists used to be written out by hand here, and a hand-
+ * written list of another type's properties is a list that goes stale the
+ * moment a type gains a field — silently, by accepting it.
+ *
+ * Properties nobody declares are NOT this map's problem:
+ * manifest.schema.json carries `additionalProperties: false` on the
+ * practice block, so a typo is rejected structurally before the semantic
+ * pass runs. What is left over is exactly the known-but-wrong-type case.
+ */
+const PRACTICE_FIELD_OWNERS: ReadonlyMap<string, readonly CoursePracticeType[]> = (() => {
+  const owners = new Map<string, CoursePracticeType[]>();
+  for (const capability of CAPABILITIES.practiceTypes) {
+    for (const field of capability.manifestFields) {
+      const declared = owners.get(field.name);
+      if (declared === undefined) {
+        owners.set(field.name, [capability.type]);
+      } else {
+        declared.push(capability.type);
+      }
+    }
+  }
+  return owners;
+})();
+
+/** The properties one practice type accepts, in the registry's order —
+ * used to answer "then what may I write?" in the rejection itself. */
+function declaredFields(type: CoursePracticeType): string {
+  return (practiceTypeCapability(type)?.manifestFields ?? []).map((field) => field.name).join(", ");
+}
+
+/**
+ * Rejects properties that belong to a DIFFERENT practice type than the one
+ * declared. One error per offending property, naming it and the type it
+ * belongs to: a course author who wrote `sandbox:` under `type: answer`
+ * needs to know which half of the pair is the mistake.
+ *
+ * Foreign properties are rejected rather than ignored — project invariant.
+ * Ignoring them would let a manifest declare a grading mechanic that never
+ * runs, and the author would find out from a learner.
+ */
+function rejectForeignFields(
+  practice: RawPractice,
+  type: CoursePracticeType,
+  practicePath: string,
+  errors: ValidationError[],
+): void {
+  const written = practice as unknown as Record<string, unknown>;
+  for (const [name, owners] of PRACTICE_FIELD_OWNERS) {
+    if (owners.includes(type) || written[name] === undefined) {
+      continue;
+    }
+    const belongsTo = owners.map((owner) => `"${owner}"`).join(" / ");
+    errors.push({
+      path: `${practicePath}.${name}`,
+      message: `"${name}" belongs to a practice of type ${belongsTo}, not "${type}". A practice of type "${type}" may declare: ${declaredFields(type)}.`,
+    });
+  }
+}
+
 function validatePractice(
   practice: RawPractice,
   practicePath: string,
@@ -314,15 +381,9 @@ function validatePractice(
   // existed must stay valid, unchanged, forever.
   const type: CoursePracticeType = practice.type ?? "sql";
 
+  rejectForeignFields(practice, type, practicePath, errors);
+
   if (type === "answer") {
-    for (const forbidden of ["sandbox", "check", "expected", "ordered", "solution"] as const) {
-      if (practice[forbidden] !== undefined) {
-        errors.push({
-          path: `${practicePath}.${forbidden}`,
-          message: `"${forbidden}" belongs to a practice of type "sql" — a practice of type "answer" has no sandbox and nothing to execute, it compares the learner's typed-in answers with "fields[].expected".`,
-        });
-      }
-    }
     if (practice.fields === undefined) {
       errors.push({
         path: `${practicePath}.fields`,
@@ -337,12 +398,6 @@ function validatePractice(
     };
   }
 
-  if (practice.fields !== undefined) {
-    errors.push({
-      path: `${practicePath}.fields`,
-      message: `"fields" belongs to a practice of type "answer" — a practice of type "sql" is graded by running the learner's own SQL ("check"/"expected").`,
-    });
-  }
   if (practice.sandbox === undefined) {
     errors.push({
       path: `${practicePath}.sandbox`,

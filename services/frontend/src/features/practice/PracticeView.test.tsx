@@ -58,6 +58,29 @@ function lessonCourse(completed: boolean) {
   };
 }
 
+describe("PracticeView, meeting a kind it does not know", () => {
+  it("says the app is behind and still shows the prompt, instead of opening an SQL editor", () => {
+    // `api/types.ts` is hand-written, so this is not a hypothetical: a
+    // backend that learns a third practice type before this build does
+    // sends a `type` TypeScript here believes impossible. The cast is the
+    // test — it produces exactly the value the types rule out.
+    const unknownKind = { type: "code", prompt: "Напишите функцию sumEven." } as unknown as PublicPractice;
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={queryClient}>
+        <PracticeView courseId="c1" lessonId="l1" practice={unknownKind} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(/Напишите функцию sumEven\./)).toBeTruthy();
+    expect(screen.getByText(/более новую версию платформы/)).toBeTruthy();
+    // The old `else` branch rendered the SQL editor here — an editor
+    // pointed at a sandbox this assignment never declared.
+    expect(container.querySelector('[contenteditable="true"]')).toBeNull();
+    expect(screen.queryByRole("button", { name: /Выполнить/ })).toBeNull();
+  });
+});
+
 describe("PracticeView", () => {
   it("runs the SQL, shows the result table, and reports a passing check while re-fetching progress (happy path)", async () => {
     const { queryClient, container } = renderView(async (url) => {

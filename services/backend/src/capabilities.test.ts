@@ -49,6 +49,27 @@ void test("manifest.schema.json's fields[].kind enum is exactly the registered a
   assert.deepEqual(schemaEnum("$defs", "answerField", "properties", "kind", "enum"), [...ANSWER_FIELD_KINDS]);
 });
 
+void test("manifest.schema.json's practice properties are exactly the union of what the types declare", () => {
+  // The seam courses/validate.ts now stands on: it derives "which property
+  // belongs to which practice type" from the registry, and leans on the
+  // schema's `additionalProperties: false` to have already rejected a
+  // property nobody declares. Both halves have to be true at once.
+  //
+  // A field in the registry but not the schema is the worse direction: an
+  // author follows the capability document, writes the field, and ajv
+  // rejects it as unknown — the engine contradicting its own contract.
+  const practice = (manifestSchema as { $defs: Record<string, { properties?: Record<string, unknown> }> }).$defs
+    .practice;
+  assert.ok(practice?.properties !== undefined, "manifest.schema.json has no $defs.practice.properties");
+  const declared = new Set<string>();
+  for (const capability of CAPABILITIES.practiceTypes) {
+    for (const field of capability.manifestFields) {
+      declared.add(field.name);
+    }
+  }
+  assert.deepEqual(Object.keys(practice.properties).sort(), [...declared].sort());
+});
+
 // --- The registry may not disagree with itself ---------------------------
 
 void test("every registered practice type has a capability document, and vice versa", () => {
