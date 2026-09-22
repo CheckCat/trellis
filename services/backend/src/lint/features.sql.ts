@@ -38,6 +38,17 @@ export const SQL_FEATURES: readonly string[] = [
   "delete",
   "transaction",
   "ddl",
+  // Added later than the rest, after the analyzer was found silent on the
+  // three constructs an analytics course is most likely to build a lesson
+  // around. The criterion for adding one is not "SQL has it" — that way
+  // lies a parser — but "a course teaches this as its own technique, and a
+  // learner who has not met it cannot produce it". `sum(x) over (...)`
+  // used to read as plain `aggregate`, so a course could grant `aggregate`
+  // in module 1 and set a window-function exercise in module 2 with
+  // nothing said.
+  "window",
+  "cte",
+  "date-function",
 ];
 
 const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
@@ -61,6 +72,19 @@ const PATTERNS: ReadonlyArray<readonly [string, RegExp]> = [
   ["delete", /\bdelete\s+from\b/],
   ["transaction", /\b(?:begin|commit|rollback|savepoint)\b/],
   ["ddl", /\b(?:create|alter|drop|truncate)\b/],
+  // `over (` is the only way a window function can be written, so the
+  // ranking functions below are redundant with it in valid SQL — they are
+  // listed anyway because a reference answer with a typo should still be
+  // read as "this exercise is about window functions".
+  ["window", /\bover\s*\(|\bwindow\s+[a-z_]\w*\s+as\b|\b(?:row_number|rank|dense_rank|percent_rank|ntile|lag|lead|first_value|last_value|nth_value)\s*\(/],
+  ["cte", /\bwith\s+(?:recursive\s+)?[a-z_]\w*\s*(?:\([^)]*\))?\s+as\s*(?:materialized\s+|not\s+materialized\s+)?\(/],
+  // Function-like names need their parenthesis: a column called `age` or
+  // `extract` is data, not date arithmetic. The bare keywords in the
+  // second half have no call syntax to key on and are accepted as words.
+  [
+    "date-function",
+    /\b(?:date_trunc|date_part|extract|age|make_date|make_time|make_timestamp|make_interval|to_date|to_timestamp|justify_days|justify_hours)\s*\(|\b(?:interval|current_date|current_timestamp|localtimestamp|localtime)\b/,
+  ],
 ];
 
 /** Strips string literals, dollar-quoted blocks and comments — everything

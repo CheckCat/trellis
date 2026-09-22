@@ -56,6 +56,13 @@ const FILLER =
   "абзаца — проверяется только то, что он есть и что он достаточно длинный, " +
   "поэтому мысль здесь повторяется дважды без всякой пользы для читателя.";
 
+/** What an unwritten lesson looks like: the marker the course-author skill
+ * tells an author to leave behind. The rules that used to key on the
+ * COURSE's `-skeleton` version key on this instead. */
+function placeholder(id: string): string {
+  return `# ${id}\n\n> ЗАГЛУШКА — текст урока не написан.\n`;
+}
+
 function body(id: string): string {
   return `# ${id}\n\n${FILLER}`;
 }
@@ -447,20 +454,49 @@ void test("isSkeletonVersion reads the semver prerelease, not the whole string",
   assert.equal(isSkeletonVersion("1.0.0+skeleton"), false);
 });
 
-void test("a skeleton's empty lessons make verify a warning, so the plan can still be reviewed", () => {
+void test("an UNWRITTEN lesson makes verify a warning, so the plan can still be reviewed", () => {
   const plan = skills(`
 version: 1
 lessons:
   - id: a
     verify: quiz
 `);
-  // Same course, same plan, only the version differs.
-  const written = lintCourse(course({ intro: ["a"] }, "1.0.0"), { skills: plan });
-  const skeleton = lintCourse(course({ intro: ["a"] }, "0.1.0-skeleton"), { skills: plan });
+  const written = lintCourse(course({ intro: [{ id: "a", content: body("a") }] }, "1.0.0"), { skills: plan });
+  const stub = lintCourse(course({ intro: [{ id: "a", content: placeholder("a") }] }, "0.1.0-skeleton"), {
+    skills: plan,
+  });
 
   assert.equal(of(written, "verify-mismatch")[0]?.severity, "error");
-  assert.equal(of(skeleton, "verify-mismatch")[0]?.severity, "warning");
-  assert.match(of(skeleton, "verify-mismatch")[0]?.message ?? "", /this course's version is a skeleton/);
+  assert.equal(of(stub, "verify-mismatch")[0]?.severity, "warning");
+  assert.match(of(stub, "verify-mismatch")[0]?.message ?? "", /this lesson is still a placeholder/);
+});
+
+void test("a WRITTEN lesson is held to the plan even while the course is a skeleton", () => {
+  // The reason the exemption moved from the course to the lesson. An
+  // author with five modules written and two to go had to choose between
+  // being checked on the five and lying about the two; now the suffix
+  // excuses only the lessons that say they are unwritten.
+  const plan = skills(`
+version: 1
+lessons:
+  - id: done
+    verify: quiz
+  - id: todo
+    verify: quiz
+`);
+  const findings = lintCourse(
+    course({ intro: [{ id: "done", content: body("done") }, { id: "todo", content: placeholder("todo") }] }, "0.1.0-skeleton"),
+    { skills: plan },
+  );
+
+  const mismatches = of(findings, "verify-mismatch");
+  assert.deepEqual(
+    mismatches.map((finding) => [finding.path, finding.severity]),
+    [
+      ["modules[0].lessons[0]", "error"],
+      ["modules[0].lessons[1]", "warning"],
+    ],
+  );
 });
 
 // --- Pacing and budgets --------------------------------------------------
@@ -751,6 +787,70 @@ lessons:
   assert.match(found[0]?.message ?? "", /no term of this course explains/);
 });
 
+void test("a mentioned_before entry that excuses nothing is a warning", () => {
+  const plan = skills(`
+version: 1
+lessons:
+  - id: before
+    verify: self
+  - id: home
+    verify: self
+  - id: after
+    verify: self
+terms:
+  - term: сезонность
+    introduced_in: home
+    mentioned_before: [before, after]
+`);
+  const findings = lintCourse(
+    course({
+      m: [
+        // Says nothing about the term, so its exemption is dead.
+        { id: "before", content: body("before") },
+        { id: "home", content: `# home\n\nСезонность — это колебания по месяцам. ${FILLER}` },
+        { id: "after", content: body("after") },
+      ],
+    }),
+    { skills: plan },
+  );
+
+  const unused = of(findings, "term-mentioned-before-unused");
+  assert.equal(unused.length, 2);
+  assert.ok(unused.every((finding) => finding.severity === "warning"));
+  // "after" comes later than the introducing lesson: there was never
+  // anything there to excuse.
+  assert.match(unused.map((finding) => finding.message).join("\n"), /comes no earlier than "home"/);
+  assert.match(unused.map((finding) => finding.message).join("\n"), /nothing in that lesson mentions it/);
+});
+
+void test("a mentioned_before entry that IS doing its job stays silent", () => {
+  const plan = skills(`
+version: 1
+lessons:
+  - id: intro
+    verify: self
+  - id: home
+    verify: self
+terms:
+  - term: сезонность
+    introduced_in: home
+    mentioned_before: [intro]
+`);
+  const findings = lintCourse(
+    course({
+      m: [
+        { id: "intro", content: `# intro\n\nДальше разберём сезонность. ${FILLER}` },
+        { id: "home", content: `# home\n\nСезонность — это колебания по месяцам. ${FILLER}` },
+      ],
+    }),
+    { skills: plan },
+  );
+
+  assert.deepEqual(of(findings, "term-mentioned-before-unused"), []);
+  // And the exemption still does what it exists for.
+  assert.deepEqual(of(findings, "term-used-before-introduced"), []);
+});
+
 // --- Empty and guessable content ----------------------------------------
 
 void test("a placeholder lesson is an error once the course stops calling itself a skeleton", () => {
@@ -768,6 +868,53 @@ void test("a lesson too short to explain anything is a warning", () => {
   const findings = lintCourse(course({ m: [{ id: "one", content: "# One\n\nКороткий урок." }] }));
 
   assert.equal(of(findings, "lesson-too-short").length, 1);
+});
+
+void test("inside a skeleton, a short WRITTEN lesson still warns and a placeholder does not", () => {
+  // `lesson-too-short` used to be off for the whole package while the
+  // version carried `-skeleton` — so the lessons an author had actually
+  // finished went unmeasured for as long as any lesson was unfinished.
+  const findings = lintCourse(
+    course(
+      {
+        m: [
+          { id: "stub", content: placeholder("stub") },
+          { id: "thin", content: "# Thin\n\nКороткий урок." },
+        ],
+      },
+      "0.1.0-skeleton",
+    ),
+  );
+
+  assert.deepEqual(
+    of(findings, "lesson-too-short").map((finding) => finding.path),
+    ["modules[0].lessons[1]"],
+  );
+});
+
+void test("a term whose lesson is still a placeholder is not yet expected to explain it", () => {
+  const plan = skills(`
+version: 1
+lessons:
+  - id: stub
+    verify: self
+terms:
+  - term: сезонность
+    introduced_in: stub
+`);
+  // The introducing lesson is unwritten, so "its text never uses the word"
+  // is not a defect — it is the state the author is in.
+  const stub = lintCourse(course({ m: [{ id: "stub", content: placeholder("stub") }] }, "0.1.0-skeleton"), {
+    skills: plan,
+  });
+  assert.deepEqual(of(stub, "term-not-introduced"), []);
+
+  // Written, and still silent about the term it was supposed to
+  // introduce: a defect even though the course is a skeleton.
+  const written = lintCourse(course({ m: [{ id: "stub", content: body("stub") }] }, "0.1.0-skeleton"), {
+    skills: plan,
+  });
+  assert.equal(of(written, "term-not-introduced").length, 1);
 });
 
 void test("a quiz whose correct option is visibly the longest is a warning", () => {

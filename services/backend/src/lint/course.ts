@@ -120,7 +120,7 @@ export function lintCourse(course: Course, options: LintCourseOptions = {}): rea
   const planned = checkLessonCoverage(skills, lessons, byId, findings);
   checkLessonPrerequisites(planned, byId, findings);
   checkSkills(skills, planned, byId, findings);
-  checkVerify(planned, byId, skeleton, options.capabilities ?? CAPABILITIES, findings);
+  checkVerify(planned, byId, options.capabilities ?? CAPABILITIES, findings);
   checkBudgets(skills, planned, course, findings);
   checkTerms(skills, lessons, byId, skeleton, findings);
   checkGrants(skills, planned, byId, skeleton, findings);
@@ -395,13 +395,13 @@ export const VERIFY_MECHANICS: Readonly<Record<VerifyKind, { practiceType?: stri
  * The two halves are separate rules on purpose. "The engine has no such
  * mechanic" is never downgraded — a build either has it or does not,
  * whether or not the content is written. "The lesson doesn't contain it
- * yet" IS downgraded for a skeleton, which is the whole reason a skeleton
- * can be reviewed at all.
+ * yet" IS downgraded, but only for a lesson that still says it is
+ * unwritten: that is what makes a skeleton reviewable without also
+ * excusing the lessons around it that are finished.
  */
 function checkVerify(
   planned: readonly PlannedLesson[],
   byId: ReadonlyMap<string, PositionedLesson>,
-  skeleton: boolean,
   capabilities: EngineCapabilities,
   findings: LintFinding[],
 ): void {
@@ -428,17 +428,21 @@ function checkVerify(
     if (actual.includes(entry.verify)) {
       continue;
     }
+    const placeholder = isPlaceholderLesson(at.lesson);
     findings.push({
-      // A skeleton's lessons are deliberately empty — the plan is the
-      // thing under review, and holding it to content nobody has written
-      // yet would make the whole exercise impossible.
-      severity: skeleton ? "warning" : "error",
+      // An unwritten lesson is deliberately empty — the plan is the thing
+      // under review, and holding it to content nobody has written yet
+      // would make the whole exercise impossible. A lesson that IS
+      // written is held to the plan even while the course as a whole is
+      // still a skeleton: text without the quiz it was planned to carry
+      // is a half-done lesson, and saying so is the point.
+      severity: placeholder ? "warning" : "error",
       rule: "verify-mismatch",
       path: at.path,
       message:
         `Lesson "${entry.id}" is planned as "${entry.verify}", but the manifest gives it ` +
         `${actual.length === 0 ? "no verification the engine recognizes" : actual.map((kind) => `"${kind}"`).join(", ")}.` +
-        (skeleton ? " (Warning only: this course's version is a skeleton.)" : ""),
+        (placeholder ? " (Warning only: this lesson is still a placeholder.)" : ""),
     });
   }
 
@@ -603,6 +607,25 @@ function checkBudgets(
  * something else. */
 const PLACEHOLDER_MARKER = /(^|[^\p{L}])ЗАГЛУШКА([^\p{L}]|$)/iu;
 
+/**
+ * Is THIS lesson still unwritten?
+ *
+ * The finer half of `-skeleton`. The version suffix is a property of the
+ * whole course, and using it to mute content rules mutes them for the
+ * lessons that ARE written too — which is the situation an author is in
+ * for most of the course's life: five modules done, two to go, and no way
+ * to be checked on the five without lying about the two.
+ *
+ * So the suffix now decides only the course-wide questions ("may this
+ * package still ship placeholders at all", "may the plan still have no
+ * glossary"), and the per-lesson questions ask the lesson. A lesson
+ * answers by carrying the marker: an explicit claim by its author, not a
+ * guess from its length.
+ */
+function isPlaceholderLesson(lesson: CourseLesson): boolean {
+  return lesson.content !== undefined && PLACEHOLDER_MARKER.test(lesson.content);
+}
+
 /** Below this many characters of prose a lesson is not an explanation.
  * Deliberately low: a short lesson is a style, an empty one is a hole. */
 export const MIN_LESSON_PROSE = 400;
@@ -614,9 +637,6 @@ export const MIN_LESSON_PROSE = 400;
  * noticing, and a human reviewing seventy lessons stops noticing around
  * the twentieth. */
 function checkPlaceholders(lessons: readonly PositionedLesson[], skeleton: boolean, findings: LintFinding[]): void {
-  if (skeleton) {
-    return;
-  }
   for (const entry of lessons) {
     const text = entry.lesson.content;
     if (text === undefined) {
@@ -624,13 +644,19 @@ function checkPlaceholders(lessons: readonly PositionedLesson[], skeleton: boole
       // `content` at all, so there is no text to be a placeholder.
       continue;
     }
-    if (PLACEHOLDER_MARKER.test(text)) {
-      findings.push({
-        severity: "error",
-        rule: "lesson-is-placeholder",
-        path: entry.path,
-        message: `Lesson "${entry.lesson.id}" is still a placeholder, but this course no longer calls itself a skeleton.`,
-      });
+    if (isPlaceholderLesson(entry.lesson)) {
+      // "Still a placeholder" is the one question here that IS about the
+      // whole package: a skeleton is allowed to be full of them, and a
+      // course that dropped the suffix is not. Either way there is no
+      // written text below to measure.
+      if (!skeleton) {
+        findings.push({
+          severity: "error",
+          rule: "lesson-is-placeholder",
+          path: entry.path,
+          message: `Lesson "${entry.lesson.id}" is still a placeholder, but this course no longer calls itself a skeleton.`,
+        });
+      }
       continue;
     }
     if (entry.lesson.practice !== undefined) {
@@ -845,8 +871,51 @@ function checkTerms(
     }
 
     const phrases = phrasesOf(term);
+
+    // Every `mentioned_before` entry is a hand-written exemption from the
+    // rule below, and nothing can check the thing that actually matters —
+    // whether the early mention really announces the term ("разберём в
+    // модуле 3") instead of leaning on it as known. That half stays with
+    // the reviewer.
+    //
+    // What a machine CAN do is keep the list from growing quietly: an
+    // entry that exempts nothing is removed, so the list only ever holds
+    // live exemptions and stays short enough to read. Nine lessons of the
+    // pilot already needed eight entries; seventy-five lessons would bury
+    // the real ones among the stale.
+    for (const id of allowed) {
+      const mentioned = byId.get(id);
+      if (mentioned === undefined) {
+        // Already reported as `term-mentioned-before-unknown` above.
+        continue;
+      }
+      if (mentioned.order >= home.order) {
+        findings.push({
+          severity: "warning",
+          rule: "term-mentioned-before-unused",
+          path: `skills.terms[${index}].mentioned_before`,
+          message:
+            `Term "${term.term}" allows an early mention in lesson "${id}", which comes no earlier than ` +
+            `"${home.lesson.id}", the lesson that introduces it — there is nothing there to excuse.`,
+        });
+        continue;
+      }
+      const stems = seenStems.get(id);
+      // An unwritten lesson cannot mention anything yet; the exemption is
+      // for text that is still to come.
+      if (stems !== undefined && !isPlaceholderLesson(mentioned.lesson) && !mentions(stems, phrases)) {
+        findings.push({
+          severity: "warning",
+          rule: "term-mentioned-before-unused",
+          path: `skills.terms[${index}].mentioned_before`,
+          message:
+            `Term "${term.term}" allows an early mention in lesson "${id}", but nothing in that lesson mentions ` +
+            `it — the exemption does nothing and can be removed.`,
+        });
+      }
+    }
     const homeStems = proseStems.get(home.lesson.id);
-    if (homeStems !== undefined && !skeleton && !mentions(homeStems, phrases)) {
+    if (homeStems !== undefined && !isPlaceholderLesson(home.lesson) && !mentions(homeStems, phrases)) {
       findings.push({
         severity: "error",
         rule: "term-not-introduced",
@@ -1016,6 +1085,7 @@ export const LINT_RULES = [
   "answer-number-without-tolerance",
   "term-introduced-unknown",
   "term-mentioned-before-unknown",
+  "term-mentioned-before-unused",
   "term-not-introduced",
   "term-used-before-introduced",
   "course-without-glossary",
