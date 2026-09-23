@@ -1142,7 +1142,10 @@ a {
   font-style: italic;
 }
 
-.practice-sql-error {
+/* Ошибка загрузки модуля в практике кода (`.practice-code-error`) — тот же
+ * вид, что у ошибки Postgres. */
+.practice-sql-error,
+.practice-code-error {
   margin: 0;
   padding: 0.75rem 1rem;
   background-color: var(--color-bg);
@@ -1152,6 +1155,50 @@ a {
   font-size: 0.85rem;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Таблица случаев практики кода. Моноширинные значения, строка целиком
+ * окрашена по вердикту — глазу не нужно искать колонку «Вердикт». */
+.code-cases {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.code-cases th,
+.code-cases td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.code-cases th {
+  background-color: var(--color-bg);
+}
+
+.code-case--passed td:last-child {
+  color: var(--color-status-ok);
+  font-weight: 600;
+}
+
+.code-case--failed td:last-child {
+  color: var(--color-status-error);
+  font-weight: 600;
+}
+
+.code-case-error {
+  color: var(--color-status-error);
+}
+
+.code-case-output {
+  margin: 0;
+  max-height: 8rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
 .practice-verdict {

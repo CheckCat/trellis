@@ -2,6 +2,7 @@ import type { PracticeResultSet, PracticeSqlError, PublicPractice, PublicSqlPrac
 import { formatApiError } from "../../../shared/lib/format-api-error";
 import { PlayIcon } from "../../../shared/ui/icons";
 import { AnswerForm } from "../answer-form";
+import { CodePracticeView } from "../code-practice-view";
 import { draftKey, useDraft } from "../draft";
 import { ResultTable } from "../result-table";
 import { SqlEditor } from "../sql-editor";
@@ -16,8 +17,8 @@ import { usePractice } from "../use-practice";
  * still needs this UI to let the learner run SQL; `LessonView`'s "mark as
  * done" button is what completes that kind of lesson.
  *
- * The two kinds share the prompt and nothing else — a different input, a
- * different endpoint, a different verdict shape, and one of them has no
+ * The three kinds share the prompt and nothing else — a different input, a
+ * different endpoint, a different verdict shape, and two of them have no
  * sandbox at all — so this dispatches instead of branching inside one
  * component.
  *
@@ -43,9 +44,7 @@ export function PracticeView({
     case "sql":
       return <SqlPracticeView courseId={courseId} lessonId={lessonId} practice={practice} />;
     case "code":
-      // Task 9 replaces this with CodePracticeView; until then the page
-      // says honestly that this build cannot display the kind.
-      return <UnsupportedPractice practice={practice as never} />;
+      return <CodePracticeView courseId={courseId} lessonId={lessonId} practice={practice} />;
     default:
       // Unreachable by the types above — which is exactly the case worth
       // handling, since the types describe what this build knows, not what

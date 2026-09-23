@@ -63,8 +63,9 @@ describe("PracticeView, meeting a kind it does not know", () => {
     // `shared/api/types.ts` is hand-written, so this is not a hypothetical: a
     // backend that learns a third practice type before this build does
     // sends a `type` TypeScript here believes impossible. The cast is the
-    // test — it produces exactly the value the types rule out.
-    const unknownKind = { type: "code", prompt: "Напишите функцию sumEven." } as unknown as PublicPractice;
+    // test — it produces exactly the value the types rule out. (`code` is
+    // a kind this build knows now; `file` still is not.)
+    const unknownKind = { type: "file", prompt: "Напишите функцию sumEven." } as unknown as PublicPractice;
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const { container } = render(
       <QueryClientProvider client={queryClient}>
