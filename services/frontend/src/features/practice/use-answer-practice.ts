@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api/client";
+import { api } from "../../shared/api/client";
 
 /**
  * Drives one lesson's `answer` practice: submitting the values the learner

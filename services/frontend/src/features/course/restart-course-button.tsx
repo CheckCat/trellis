@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api/client";
-import type { CourseProgressResponse } from "../../api/types";
-import { ConfirmDialog } from "../../ui/confirm-dialog";
-import { RefreshIcon } from "../../ui/icons";
-import { plural } from "../../ui/plural";
+import { api } from "../../shared/api/client";
+import type { CourseProgressResponse } from "../../shared/api/types";
+import { ConfirmDialog } from "../../shared/ui/confirm-dialog";
+import { RefreshIcon } from "../../shared/ui/icons";
+import { plural } from "../../shared/lib/plural";
 
 /**
  * «Перепройти» — the only control in the app that destroys progress, so it

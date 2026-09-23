@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import type { ModuleProgress } from "../../api/types";
-import { CheckIcon } from "../../ui/icons";
+import type { ModuleProgress } from "../../shared/api/types";
+import { CheckIcon } from "../../shared/ui/icons";
 
 /**
  * Pure presentational list of a course's modules and lessons, each lesson a

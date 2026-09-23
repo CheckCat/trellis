@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../api/client";
+import { api } from "../../shared/api/client";
 
 /**
  * What the most recently submitted answer told the caller about the option

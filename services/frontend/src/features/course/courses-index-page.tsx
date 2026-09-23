@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { api } from "../../api/client";
-import { CheckIcon } from "../../ui/icons";
+import { api } from "../../shared/api/client";
+import { CheckIcon } from "../../shared/ui/icons";
 
 /**
  * The home screen: every installed course, with how far along each one is.

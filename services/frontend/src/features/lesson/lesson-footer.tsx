@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { api } from "../../api/client";
-import type { LessonCompletionMode } from "../../api/types";
+import { api } from "../../shared/api/client";
+import type { LessonCompletionMode } from "../../shared/api/types";
 import type { PlacedLesson } from "../../entities/course/progress";
-import { ArrowLeftIcon, ArrowRightIcon, CheckIcon } from "../../ui/icons";
+import { ArrowLeftIcon, ArrowRightIcon, CheckIcon } from "../../shared/ui/icons";
 
 const NON_MANUAL_NOTE: Record<Exclude<LessonCompletionMode, "manual">, string> = {
   quiz: "Урок завершается правильным ответом на квиз.",

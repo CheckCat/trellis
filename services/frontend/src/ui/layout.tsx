@@ -1,5 +1,5 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { TransferIcon } from "./icons";
+import { TransferIcon } from "../shared/ui/icons";
 import { HealthIndicator } from "./health-indicator";
 
 /** Root layout: header (title + connection status) wraps every route's
