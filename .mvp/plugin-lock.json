@@ -1,7 +1,7 @@
 {
  "derived": {
   ".claude/agents/backend-implementer.md": {
-   "output_sha256": "sha256:c644cebd45a9820bd4c83dfe14b55510b20f66b50e07bc9c940a364e550d5784",
+   "output_sha256": "sha256:8232ce7d8c859db32ec9dc9832b4340c1e0c0bfa76c25941e139fe5f3de1f767",
    "placeholders": {
     "PROJECT": "trellis",
     "SERVICE_API": "trellis-api",
@@ -9,14 +9,14 @@
    },
    "role": "backend-implementer",
    "sources": {
-    "skills/bootstrap/templates/_common.md": "sha256:f426c6e0109d2ddc1f1235eb0c95cbc2ed4138a02267a8899e9dde24be4271b1",
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
     "skills/bootstrap/templates/backend-implementer.fastify.template.md": "sha256:7d7ae5ca9fa1a4195605c68d66bd10b4d2e17642f8b2a4cb941f2ac16e6d3570"
    },
    "stack": "fastify",
    "template": "backend-implementer.fastify.template.md"
   },
   ".claude/agents/devops-engineer.md": {
-   "output_sha256": "sha256:5220470757383c46a3c2e8fa6b2fc543be87cecdc6c8715343afa4329124c731",
+   "output_sha256": "sha256:8b16056c79e3f258afcfe33a9e68c1e30861d4845ff9ca03d91f3e78498bc46e",
    "placeholders": {
     "PROJECT": "trellis",
     "SERVICE_API": "trellis-api",
@@ -24,14 +24,14 @@
    },
    "role": "devops-engineer",
    "sources": {
-    "skills/bootstrap/templates/_common.md": "sha256:f426c6e0109d2ddc1f1235eb0c95cbc2ed4138a02267a8899e9dde24be4271b1",
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
     "skills/bootstrap/templates/devops-engineer.docker-compose.fastify.template.md": "sha256:791a049ed7a4e3a6c18e0be116b8d18baff54616c82b9136f83ea73625896af7"
    },
    "stack": "docker-compose.fastify",
    "template": "devops-engineer.docker-compose.fastify.template.md"
   },
   ".claude/agents/frontend-implementer.md": {
-   "output_sha256": "sha256:a515fb13925ab83ce2969bac24aa438f6c2b543d2be402ea8e748355c97a2d11",
+   "output_sha256": "sha256:61df47e58ae2f3c0427ce8b92ed66954b242f7d1131edf07c4e9fbb010f00474",
    "placeholders": {
     "PROJECT": "trellis",
     "SERVICE_API": "trellis-api",
@@ -39,14 +39,14 @@
    },
    "role": "frontend-implementer",
    "sources": {
-    "skills/bootstrap/templates/_common.md": "sha256:f426c6e0109d2ddc1f1235eb0c95cbc2ed4138a02267a8899e9dde24be4271b1",
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
     "skills/bootstrap/templates/frontend-implementer.react.template.md": "sha256:786d5ae7a472997892a43b336327751c32290c1c60f05feb4c57a2b2ca94cd44"
    },
    "stack": "react",
    "template": "frontend-implementer.react.template.md"
   },
   ".claude/agents/integration-specialist.md": {
-   "output_sha256": "sha256:604436e2371c830bd40d51e15d0df7e915d378c549a10ba98f9120d5e92d9584",
+   "output_sha256": "sha256:a9865137c2d237959381ee9a23b44ee70b424a470c538c07ddb7cb8a2f30bab6",
    "placeholders": {
     "PROJECT": "trellis",
     "SERVICE_API": "trellis-api",
@@ -54,14 +54,59 @@
    },
    "role": "integration-specialist",
    "sources": {
-    "skills/bootstrap/templates/_common.md": "sha256:f426c6e0109d2ddc1f1235eb0c95cbc2ed4138a02267a8899e9dde24be4271b1",
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
     "skills/bootstrap/templates/integration-specialist.template.md": "sha256:4ab783db1e12b94215a2a26628ec2fedfd5e98026e9766f73e8c184f9489ed9f"
    },
    "stack": "",
    "template": "integration-specialist.template.md"
   },
+  ".claude/agents/mvp-relay.md": {
+   "output_sha256": "sha256:fcb22fac9cbd3c6add1aa64b679d06e3a3ce96c5bb50c71d451e324eededc985",
+   "placeholders": {
+    "PROJECT": "trellis",
+    "SERVICE_API": "trellis-api",
+    "SERVICE_WORKER": "trellis-worker"
+   },
+   "role": "mvp-relay",
+   "sources": {
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
+    "skills/bootstrap/templates/mvp-relay.template.md": "sha256:fcb22fac9cbd3c6add1aa64b679d06e3a3ce96c5bb50c71d451e324eededc985"
+   },
+   "stack": "",
+   "template": "mvp-relay.template.md"
+  },
+  ".claude/agents/mvp-reviewer.md": {
+   "output_sha256": "sha256:a2dede9a1d22dc7b2d308f9ae448a7694fd025669354eae0573e20f38cd7c79b",
+   "placeholders": {
+    "PROJECT": "trellis",
+    "SERVICE_API": "trellis-api",
+    "SERVICE_WORKER": "trellis-worker"
+   },
+   "role": "mvp-reviewer",
+   "sources": {
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
+    "skills/bootstrap/templates/mvp-reviewer.template.md": "sha256:a2dede9a1d22dc7b2d308f9ae448a7694fd025669354eae0573e20f38cd7c79b"
+   },
+   "stack": "",
+   "template": "mvp-reviewer.template.md"
+  },
+  ".claude/agents/mvp-validator.md": {
+   "output_sha256": "sha256:bdaa350a148779b9446c9925157fd440ef167023efa7fd6c88e93fe0627a02d9",
+   "placeholders": {
+    "PROJECT": "trellis",
+    "SERVICE_API": "trellis-api",
+    "SERVICE_WORKER": "trellis-worker"
+   },
+   "role": "mvp-validator",
+   "sources": {
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
+    "skills/bootstrap/templates/mvp-validator.template.md": "sha256:bdaa350a148779b9446c9925157fd440ef167023efa7fd6c88e93fe0627a02d9"
+   },
+   "stack": "",
+   "template": "mvp-validator.template.md"
+  },
   ".claude/agents/test-writer.md": {
-   "output_sha256": "sha256:d9f4fe8ac93b87bcf79fe7382022103c47f06297587309395c97eb56d08b98b7",
+   "output_sha256": "sha256:cd481be53981076f90c27655a081d970621d31be1a680c4ff72e5adad2829f86",
    "placeholders": {
     "PROJECT": "trellis",
     "SERVICE_API": "trellis-api",
@@ -69,7 +114,7 @@
    },
    "role": "test-writer",
    "sources": {
-    "skills/bootstrap/templates/_common.md": "sha256:f426c6e0109d2ddc1f1235eb0c95cbc2ed4138a02267a8899e9dde24be4271b1",
+    "skills/bootstrap/templates/_common.md": "sha256:c30eb5d96ea579304f92368f333ada53e2891fec880ab26b8c87e52effb21cfe",
     "skills/bootstrap/templates/test-writer.fastify.template.md": "sha256:03143633016f0c18a2a6716e274f71de1e5d30eb351a0f445f8b6756eb179583"
    },
    "stack": "fastify",
@@ -80,31 +125,33 @@
  "normative": {
   "lib/apply-patches.py": "sha256:7925984d278cd2af53108724d71eade76c611b49897b26ab838b031a20b6e1be",
   "lib/brief-contract.sh": "sha256:1257ce9204c74be4afcff4695a27c4fc126c59f655d20337ab8be9b251ab4023",
+  "lib/experiments.sh": "sha256:9e9a6c397d5726d6b8c524de5245aee9f4e3652b9803d36a203d1660bd396530",
   "lib/finalize.sh": "sha256:9ce7660080bf6c68542f43ca876a094a9d0889a57f87506fa021d9a9e7f24b53",
   "lib/gate.sh": "sha256:d911eb54d6fb0d9aeed9d15e31eb3e3e28bc92d822a1564f558105a595ca68d6",
-  "lib/plan-io.mjs": "sha256:5eb1b41db088de061fce3ed5a80ba213ddff02749ef2258715d74e491db65b53",
+  "lib/handoff.sh": "sha256:83538c33ea1a5d35e68c601155d929a4751bde7489cd97f6b665557683889281",
+  "lib/plan-io.mjs": "sha256:aac5bbedb2c996b41ed14057a49c458a54f420e4bd02f183920c3f7a12e3f681",
   "lib/plugin-lock.sh": "sha256:032cc28620aa98d1ee3f3f66882759372b6527b0ff41548c89429dae928b1451",
   "lib/review-package.sh": "sha256:702139a19ac6937f55d89ff8b87d6ebef2670e4d22f307c2e9980be5c4e9b452",
   "lib/save-review.sh": "sha256:a0ee6255149f65c0def72f2dfc05b7132601c23bc9d85239b1970c122de8cfdf",
   "lib/state.sh": "sha256:f704bad91ce8128ee39f6b15ee883311aebbe55c1b624a7e91a7ffe3de791f85",
   "lib/validate-task.sh": "sha256:cec71600aa5d190587b93294e8fe918fbe249ca6869c043204c1a08ba33ceadd",
-  "skills/bootstrap/SKILL.md": "sha256:8f69e792217c3822ea726bdea9f9c0a1ccf18e83ce1ca7d94f1f83220bed3568",
-  "skills/bootstrap/scripts/assemble-agent.sh": "sha256:4d4c20c67b7f5613a4fab00810d603f6daeb271ceccf9ef6b062fc09835d4169",
+  "skills/bootstrap/SKILL.md": "sha256:184be0ffec2539faa5bf45768fbc12fa3c35441d09cd2db1f2643e467d77438f",
+  "skills/bootstrap/scripts/assemble-agent.sh": "sha256:3c9c759a8eebfe4c5cdb05ce1dcff1cbf5b9fdf64ba91287836e95e68b418ffe",
   "skills/bootstrap/scripts/check-meta.sh": "sha256:ac3996c28795966d1190451d77d1c13ba37b705b4e122cd1d6d01aeaae590b47",
-  "skills/bootstrap/scripts/verify-agents-drift.sh": "sha256:f625a0a33439f37106c438646d7bf0b4bc39dbd9655f6e4c9b1f30f4196cdf70",
+  "skills/bootstrap/scripts/verify-agents-drift.sh": "sha256:7ca107f666f8dee00aa22446e960f657dca4c1ed633dc5d377905a581cc9d472",
   "skills/brief/SKILL.md": "sha256:3059d30f5cf906a8597ba3881b325426797bbc58d6e8d9ec66a8e38aea69a3e0",
   "skills/brief/scripts/package-brief.sh": "sha256:11db34d2b02605beae89da1e5a0f66bd6f48fb4498bd7c0efaedac98f9da7121",
-  "skills/build/SKILL.md": "sha256:bfdd28d9332a3c85529629dfeedd7b29f9f0181dce1eb6d202b7639ecbab0cb3",
+  "skills/build/SKILL.md": "sha256:fd6119335bef707874668e566c87b78daac26e0b87c675deb1ccaa7e06ddd5f5",
   "skills/clarify/SKILL.md": "sha256:1e0782727a84254503e69571763144fd952fe3ee83f06dbc6d2709824378bbc5",
   "skills/clarify/scripts/queue-check.sh": "sha256:87780f01cc0e214b3e2fce4cc062c2fc5b3915d1932b52e6cbc04586905164e4",
   "skills/plan/SKILL.md": "sha256:59709c281f41b6e4202c70f3eb450d947fdf55c2832eefb50e2093926da0bb40",
   "skills/plan/scripts/validate-plan.py": "sha256:d9a9fa43c293ff5894a8cf6ccb1687b46482a94d5ea269b81b920eac70318190",
   "skills/resume/SKILL.md": "sha256:9e1f9a09ab963737c8c0e532ba7afa2e1e36740f884d56d78ead920c7ed32906",
-  "skills/retro/SKILL.md": "sha256:5a217f7adf65025af9fce3e135c7ef0201ddb2b85602fac367fe4784b4e95428",
-  "skills/sync/SKILL.md": "sha256:61c67294ba755207fe1c6ff416740463d4db078dd4ea797263f34d5aa9fbf41d"
+  "skills/retro/SKILL.md": "sha256:5f243519067f28b6393f0ff08b729f6f9e4932e3eacf3dd2cb866d67db23dcb3",
+  "skills/sync/SKILL.md": "sha256:c2129131f3c097d0535c06420c5c0a5e35b6fa9df1ee32b4d088686ee4c76edc"
  },
  "plugin": {
-  "git_sha": "9afe4fe2324a9ac27fac841a6c4ec69e62ce3ebc",
+  "git_sha": "ba9db9121a3e18e7ae3b85362b007ddb6a27e15c",
   "name": "mvp",
   "version": "2.0.0"
  }
