@@ -37,9 +37,9 @@ export interface CourseQuiz {
  * kind exists only if it is registered there (project invariant), and two
  * declarations of the same union could disagree.
  */
-import type { AnswerFieldKind, SandboxType } from "../capabilities/index.js";
+import type { AnswerFieldKind, CodeLanguage, SandboxType } from "../capabilities/index.js";
 
-export type { AnswerFieldKind, CoursePracticeType, SandboxType } from "../capabilities/index.js";
+export type { AnswerFieldKind, CodeLanguage, CoursePracticeType, SandboxType } from "../capabilities/index.js";
 
 /**
  * A practice assignment done in a course SANDBOX: the learner writes SQL,
@@ -107,6 +107,39 @@ export interface CourseAnswerPractice {
   readonly prompt: string;
   /** At least one, with unique ids (validate.ts). Order is display order. */
   readonly fields: readonly CourseAnswerField[];
+}
+
+/** One call of a `code` assignment's function: what it is called with,
+ * and where the value it must return comes from. */
+export interface CourseCodeCase {
+  readonly args: readonly unknown[];
+  /**
+   * Normalized by validate.ts from "does the manifest have an `expected`
+   * KEY" (an `in` check — YAML cannot express undefined, and `expected:
+   * null` is a legitimate value). An explicit discriminator rather than an
+   * optional field so nothing downstream has to guess whether a missing
+   * `expected` means "graded by the solution".
+   */
+  readonly reference: { readonly kind: "expected"; readonly value: unknown } | { readonly kind: "solution" };
+}
+
+/**
+ * A practice assignment done as CODE: the learner writes a module that
+ * exports `entry`, the engine calls it with each case's `args` in a child
+ * process and compares what comes back with the reference — the case's
+ * own `expected`, or what the author's `solution` returns for the same
+ * arguments. `solution`, like the sql kind's, never leaves the backend.
+ */
+export interface CourseCodePractice {
+  readonly type: "code";
+  readonly language: CodeLanguage;
+  readonly prompt: string;
+  readonly entry: string;
+  /** Initial editor contents — public, it is shown to the learner. */
+  readonly starter?: string;
+  /** At least one (validate.ts). Order is display order. */
+  readonly cases: readonly CourseCodeCase[];
+  readonly solution?: string;
 }
 
 /**

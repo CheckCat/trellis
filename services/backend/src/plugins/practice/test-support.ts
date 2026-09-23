@@ -28,6 +28,8 @@ import { DatabaseError, type PoolClient } from "pg";
 import { createCourseRegistry } from "../../courses/registry/index.js";
 import { makeTempDir, writeCoursePackage } from "../../courses/test-support.js";
 import type { ProgressRecord } from "../../progress/model/index.js";
+import type { EncodedValue } from "./code/compare.js";
+import type { CodeRunner, CodeRunRequest, CodeRunResult } from "./code/run-node.js";
 import {
   createInMemoryProgressRepository,
   poolThatMustNotBeUsed,
@@ -447,4 +449,30 @@ export function dualGateManifestYaml(courseId = "progress-fixture"): string {
     '          check: "select count(*) = 1 from t"',
     "",
   ].join("\n");
+}
+
+// --- The `code` practice type (plugins/practice/code/) ---------------------
+
+/** A runner that answers by script instead of spawning node: the route and
+ * the orchestration are defined by what they SEND to a runner and what they
+ * make of the answer, and a real child process would make every outcome
+ * (timeout, crash, unavailable) slow or impossible to produce on demand. */
+export function createScriptedCodeRunner(
+  respond: (request: CodeRunRequest, index: number) => CodeRunResult,
+): { runner: CodeRunner; requests: CodeRunRequest[] } {
+  const requests: CodeRunRequest[] = [];
+  return {
+    requests,
+    runner: {
+      async run(request) {
+        requests.push(request);
+        return respond(request, requests.length - 1);
+      },
+    },
+  };
+}
+
+/** A clean `ran` result returning `values` case by case. */
+export function ranWith(values: readonly EncodedValue[]): CodeRunResult {
+  return { kind: "ran", durationMs: 1, cases: values.map((value) => ({ value, output: "", truncated: false })) };
 }
