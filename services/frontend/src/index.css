@@ -1036,24 +1036,30 @@ a {
   line-height: 1.55;
 }
 
-.sql-editor-frame {
+/* `.code-editor` — тот же редактор для практики кода (CodeMirror в
+ * JS/TS-режиме); стили общие, чтобы два редактора не разъезжались. */
+.sql-editor-frame,
+.code-editor-frame {
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   overflow: hidden;
 }
 
-.sql-editor .cm-editor {
+.sql-editor .cm-editor,
+.code-editor .cm-editor {
   font-size: 0.9rem;
   background-color: var(--color-surface);
 }
 
-.sql-editor .cm-editor.cm-focused {
+.sql-editor .cm-editor.cm-focused,
+.code-editor .cm-editor.cm-focused {
   outline: none;
 }
 
 /* Редактор в фокусе подсвечивается рамкой целиком: собственный контур
  * CodeMirror внутри скруглённой рамки выглядел бы вторым прямоугольником. */
-.sql-editor-frame:focus-within {
+.sql-editor-frame:focus-within,
+.code-editor-frame:focus-within {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
@@ -1061,17 +1067,21 @@ a {
 /* CodeMirror подсвечивает текущую строку и её номер голубым — цветом
  * из собственной темы по умолчанию, чужим в зелёной палитре платформы. */
 .sql-editor .cm-activeLine,
-.sql-editor .cm-activeLineGutter {
+.sql-editor .cm-activeLineGutter,
+.code-editor .cm-activeLine,
+.code-editor .cm-activeLineGutter {
   background-color: var(--color-accent-soft);
 }
 
-.sql-editor .cm-gutters {
+.sql-editor .cm-gutters,
+.code-editor .cm-gutters {
   background-color: var(--color-bg);
   border-right-color: var(--color-border);
   color: var(--color-text-muted);
 }
 
-.sql-editor .cm-cursor {
+.sql-editor .cm-cursor,
+.code-editor .cm-cursor {
   border-left-color: var(--color-text);
 }
 
