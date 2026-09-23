@@ -28,6 +28,7 @@ import { DatabaseError, type PoolClient } from "pg";
 import { createCourseRegistry } from "../../courses/registry/index.js";
 import { makeTempDir, writeCoursePackage } from "../../courses/test-support.js";
 import type { ProgressRecord } from "../../progress/model/index.js";
+import type { PracticeStrategy } from "./api.js";
 import type { EncodedValue } from "./code/compare.js";
 import type { CodeRunner, CodeRunRequest, CodeRunResult } from "./code/run-node.js";
 import {
@@ -201,6 +202,9 @@ export interface WithPracticeAppOptions {
   /** `false` builds the server with no sandbox at all — the production shape
    * of "SANDBOX_DATABASE_URL wasn't provided". */
   readonly configured?: boolean;
+  /** Overrides the strategy registry — how a test hands the `code`
+   * strategy a scripted runner instead of a real node process. */
+  readonly practiceStrategies?: readonly PracticeStrategy[];
 }
 
 /**
@@ -236,6 +240,7 @@ export async function withPracticeApp(
       ...(options.configured === false
         ? {}
         : { sandbox: createSandboxProvisioner({ courses: registry, drivers: [sandbox.driver] }) }),
+      ...(options.practiceStrategies === undefined ? {} : { practiceStrategies: options.practiceStrategies }),
     });
     try {
       await run({ app, progress, sandbox });
@@ -475,4 +480,52 @@ export function createScriptedCodeRunner(
 /** A clean `ran` result returning `values` case by case. */
 export function ranWith(values: readonly EncodedValue[]): CodeRunResult {
   return { kind: "ran", durationMs: 1, cases: values.map((value) => ({ value, output: "", truncated: false })) };
+}
+
+export const CODE_LESSON_ID = "code-lesson";
+export const CODE_SOLUTION_LESSON_ID = "code-solution-lesson";
+/** The solution the fixture declares — text that must never appear in any response. */
+export const FIXTURE_CODE_SOLUTION = "export function sum(a, b) { return a + b; }";
+/** Public: the starter IS meant to reach the learner. */
+export const FIXTURE_CODE_STARTER = "export function sum(a: number, b: number): number {\n  return 0;\n}";
+
+/** Two code lessons: one graded by explicit expectations, one by the
+ * author's solution (with one case carrying both). No sandboxes at all —
+ * a code course needs none. */
+export function codeManifestYaml(courseId = "progress-fixture"): string {
+  return [
+    `id: ${courseId}`,
+    "version: 1.0.0",
+    "title: Progress fixture course",
+    "modules:",
+    "  - id: only-module",
+    "    title: Only module",
+    "    lessons:",
+    `      - id: ${CODE_LESSON_ID}`,
+    "        title: Code lesson with explicit expectations",
+    "        practice:",
+    "          type: code",
+    "          language: typescript",
+    "          prompt: Add two numbers.",
+    "          entry: sum",
+    `          starter: ${JSON.stringify(FIXTURE_CODE_STARTER)}`,
+    "          cases:",
+    "            - args: [2, 3]",
+    "              expected: 5",
+    "            - args: [-1, 1]",
+    "              expected: 0",
+    `      - id: ${CODE_SOLUTION_LESSON_ID}`,
+    "        title: Code lesson graded by the author's solution",
+    "        practice:",
+    "          type: code",
+    "          language: javascript",
+    "          prompt: Add two numbers.",
+    "          entry: sum",
+    "          cases:",
+    "            - args: [2, 3]",
+    "            - args: [10, 5]",
+    "              expected: 15",
+    `          solution: ${JSON.stringify(FIXTURE_CODE_SOLUTION)}`,
+    "",
+  ].join("\n");
 }
