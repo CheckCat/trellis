@@ -58,6 +58,12 @@ export type CoursePracticeType = (typeof PRACTICE_TYPES)[number];
 export const ANSWER_FIELD_KINDS = ["number", "text"] as const;
 export type AnswerFieldKind = (typeof ANSWER_FIELD_KINDS)[number];
 
+/** Languages a `code` practice may declare in `practice.language`. One
+ * runtime (Node) runs both; the list exists so a course names what the
+ * learner writes and the editor knows which mode to open. */
+export const CODE_LANGUAGES = ["typescript", "javascript"] as const;
+export type CodeLanguage = (typeof CODE_LANGUAGES)[number];
+
 /**
  * The sandbox role's server-side statement timeout, in seconds.
  *
