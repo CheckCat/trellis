@@ -47,8 +47,8 @@ export type { AnswerFieldKind, CoursePracticeType, SandboxType } from "../capabi
  *
  * Both grading mechanics are optional and independent (an assignment may
  * carry neither, one, or both); when both are present, the lesson is only
- * completed when both pass — see routes/practice.ts. With neither, the
- * lesson is self-marked.
+ * completed when both pass — see plugins/practice/sql/route.ts. With
+ * neither, the lesson is self-marked.
  */
 export interface CourseSqlPractice {
   readonly type: "sql";
@@ -59,7 +59,7 @@ export interface CourseSqlPractice {
   readonly check?: string;
   /** Reference SQL whose RESULT SET the learner's own result is compared
    * against — the only way to grade a `SELECT`, which leaves no state
-   * behind to check (practice/compare.ts). Like `check`, it is the answer
+   * behind to check (plugins/practice/sql/compare.ts). Like `check`, it is the answer
    * to the exercise and never leaves the backend. */
   readonly expected?: string;
   /** Whether row order matters in that comparison. Normalized by
@@ -70,7 +70,7 @@ export interface CourseSqlPractice {
   /**
    * The author's own SQL solution to the exercise. The engine runs it on
    * the seeded sandbox, runs the learner's SQL on an identical one, and
-   * compares the two resulting STATES (practice/state.ts).
+   * compares the two resulting STATES (plugins/practice/sql/state.ts).
    *
    * The strict mechanic for assignments that change data: where `check`
    * grades only the predicate its author thought to write, this grades

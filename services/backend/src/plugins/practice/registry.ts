@@ -6,13 +6,13 @@
 // discovered in production. The two registries cannot drift.
 //
 // Adding a mechanic is: an entry in capabilities.ts's `PRACTICE_TYPES` and
-// `practiceTypes`, a module beside this one, and one line here. Nothing in
-// index.ts, nothing in shared.ts, nothing in the provisioner.
+// `practiceTypes`, a plugin folder beside sql/ and answer/, and one line
+// here. Nothing in index.ts, nothing in api.ts, nothing in the provisioner.
 
 import type { CoursePracticeType } from "../../capabilities.js";
-import { answerPracticeStrategy } from "./answer.js";
-import { sqlPracticeStrategy } from "./sql.js";
-import type { PracticeStrategy } from "./shared.js";
+import { answerPracticeStrategy } from "./answer/index.js";
+import { sqlPracticeStrategy } from "./sql/index.js";
+import type { PracticeStrategy } from "./api.js";
 
 export const PRACTICE_STRATEGIES: Readonly<Record<CoursePracticeType, PracticeStrategy>> = {
   sql: sqlPracticeStrategy,

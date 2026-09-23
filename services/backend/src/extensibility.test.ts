@@ -12,7 +12,7 @@
 //   - sandbox/provisioner.ts dispatches on the type the COURSE declares.
 //     If it ever special-cased "postgres", the stub driver below would
 //     never be called;
-//   - routes/practice/index.ts loops over the strategy registry and names
+//   - plugins/practice/index.ts loops over the strategy registry and names
 //     no type. If it ever registered handlers itself, the stub strategy
 //     below would have no route.
 //
@@ -40,7 +40,7 @@ import {
 } from "./progress/test-support.js";
 import { createSandboxProvisioner } from "./sandbox/provisioner.js";
 import { SandboxError, type SandboxDriver, type SandboxSpec, type SandboxType } from "./sandbox/types.js";
-import { practiceStrategies, type PracticeStrategy } from "./routes/practice/index.js";
+import { practiceStrategies, type PracticeStrategy } from "./plugins/practice/index.js";
 import { buildServer } from "./server.js";
 
 /** A sandbox kind that does not exist yet — see the header. */
@@ -170,7 +170,7 @@ void test("a practice strategy for an unregistered-in-code type serves without r
       progress: createInMemoryProgressRepository([]),
       logger: false,
       // The one line a real `file` mechanic would add to
-      // routes/practice/registry.ts.
+      // plugins/practice/registry.ts.
       practiceStrategies: [...practiceStrategies(), stubPracticeStrategy],
     });
     try {

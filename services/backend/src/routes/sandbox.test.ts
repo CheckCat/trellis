@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import type { AppPool } from "../db/pool.js";
-import { createPostgresSandboxDriverFromPool } from "../sandbox/postgres-sandbox.js";
+import { createPostgresSandboxDriverFromPool } from "../plugins/postgres-sandbox/index.js";
 import { createSandboxProvisioner } from "../sandbox/provisioner.js";
 import {
   createRecordingPool,
@@ -24,13 +24,13 @@ import { buildServer } from "../server.js";
 //
 // What its tests covered did NOT go away, it moved to where it belongs:
 //   - the SQL a rebuild issues, and a seed the database rejects
-//     -> sandbox/postgres-sandbox.test.ts (the driver, with a recording
+//     -> plugins/postgres-sandbox/postgres-sandbox.test.ts (the driver, with a recording
 //        pool, which is what actually produces those statements);
 //   - an unknown course, an ambiguous sandbox, a vanished seed file
 //     -> sandbox/provisioner.test.ts (the resolution rules, none of which
 //        are HTTP-shaped);
 //   - SandboxError -> HTTP status, the one genuinely route-level thing
-//     -> routes/practice.test.ts, since `POST practice/run` is now the
+//     -> plugins/practice/practice.test.ts, since `POST practice/run` is now the
 //        only surface that can hit a sandbox failure.
 // What remains here is this file's own subject: the status endpoint.
 

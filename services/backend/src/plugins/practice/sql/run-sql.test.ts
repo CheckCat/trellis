@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { CourseSqlPractice } from "../courses/types.js";
-import type { FreshSandboxContext } from "../sandbox/types.js";
-import { checkResult, createScriptedSandboxDriver, databaseError, resultSet } from "./test-support.js";
+import type { CourseSqlPractice } from "../../../courses/types.js";
+import type { FreshSandboxContext } from "../../../sandbox/types.js";
+import { checkResult, createScriptedSandboxDriver, databaseError, resultSet } from "../test-support.js";
 import { evaluateSqlPracticeAttempt, runSqlPracticeAttempt, type SqlPracticeAttemptResult } from "./run-sql.js";
 
 const CONTEXT = { courseId: "fixture-course", lessonId: "fixture-lesson" };

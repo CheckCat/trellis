@@ -1,5 +1,5 @@
 // Test-only helpers for the sandbox layer, shared by
-// sandbox/postgres-sandbox.test.ts, sandbox/provisioner.test.ts and
+// plugins/postgres-sandbox/postgres-sandbox.test.ts, sandbox/provisioner.test.ts and
 // routes/sandbox.test.ts. Kept out of the production build exactly like
 // courses/test-support.ts, db/test-support.ts and progress/test-support.ts —
 // see tsconfig.json's `exclude`.

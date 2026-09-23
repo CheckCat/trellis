@@ -15,7 +15,7 @@
 import type { FastifyInstance } from "fastify";
 
 import { practiceStrategies } from "./registry.js";
-import type { PracticeStrategy } from "./shared.js";
+import type { PracticeStrategy } from "./api.js";
 
 export interface PracticeRoutesOptions {
   /** Defaults to the built-in registry. */
@@ -32,4 +32,4 @@ export default async function practiceRoutes(
 }
 
 export { PRACTICE_STRATEGIES, practiceStrategies } from "./registry.js";
-export type { PracticeStrategy } from "./shared.js";
+export type { PracticeStrategy } from "./api.js";

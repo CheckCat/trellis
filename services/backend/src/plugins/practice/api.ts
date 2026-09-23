@@ -12,7 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { practiceTypeCapability, type CoursePracticeType } from "../../capabilities.js";
 import type { Course, CoursePractice } from "../../courses/types.js";
 import { findLesson, type LessonLocation } from "../../progress/model.js";
-import { sendCourseNotFound, sendLessonNotFound } from "../progress.js";
+import { sendCourseNotFound, sendLessonNotFound } from "../../routes/progress.js";
 
 /**
  * One practice mechanic's HTTP surface.

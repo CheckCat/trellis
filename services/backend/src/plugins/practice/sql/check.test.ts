@@ -8,7 +8,7 @@ import {
   databaseError,
   resultSet,
   type ScriptedAnswer,
-} from "./test-support.js";
+} from "../test-support.js";
 
 const CHECK_SQL = "select count(*) = 1 from expected_table";
 

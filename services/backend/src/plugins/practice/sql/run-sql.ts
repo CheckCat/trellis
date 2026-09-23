@@ -33,9 +33,9 @@ import {
   type PracticeSolutionVerdict,
   type SandboxStateSnapshot,
 } from "./state.js";
-import type { CourseSqlPractice } from "../courses/types.js";
-import type { PostgresSandboxDriver } from "../sandbox/postgres-sandbox.js";
-import type { FreshSandboxContext } from "../sandbox/types.js";
+import type { CourseSqlPractice } from "../../../courses/types.js";
+import type { PostgresSandboxDriver } from "../../postgres-sandbox/index.js";
+import type { FreshSandboxContext } from "../../../sandbox/types.js";
 
 export interface SqlPracticeAttemptResult {
   readonly executed: PracticeExecution;

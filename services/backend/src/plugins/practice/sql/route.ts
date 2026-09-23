@@ -41,19 +41,19 @@
 
 import type { FastifyInstance } from "fastify";
 
-import { MAX_PRACTICE_SQL_LENGTH } from "../../capabilities.js";
-import type { CourseSqlPractice } from "../../courses/types.js";
-import { isPracticeCheckError } from "../../practice/check.js";
-import { isPracticeExpectedError } from "../../practice/compare.js";
+import { MAX_PRACTICE_SQL_LENGTH } from "../../../capabilities.js";
+import type { CourseSqlPractice } from "../../../courses/types.js";
+import { isPracticeCheckError } from "./check.js";
+import { isPracticeExpectedError } from "./compare.js";
 import {
   evaluateSqlPracticeAttempt,
   runSqlPracticeAttempt,
   type SqlPracticeAttemptResult,
-} from "../../practice/run-sql.js";
-import { isPracticeSolutionError } from "../../practice/state.js";
-import { lessonCompletionMode } from "../../progress/model.js";
-import { isPostgresSandboxDriver } from "../../sandbox/postgres-sandbox.js";
-import { isSandboxError, SandboxError } from "../../sandbox/types.js";
+} from "./run-sql.js";
+import { isPracticeSolutionError } from "./state.js";
+import { lessonCompletionMode } from "../../../progress/model.js";
+import { isPostgresSandboxDriver } from "../../postgres-sandbox/index.js";
+import { isSandboxError, SandboxError } from "../../../sandbox/types.js";
 import {
   buildTree,
   courseProgressSummarySchema,
@@ -61,9 +61,9 @@ import {
   lessonParamsSchema,
   lessonProgressSchema,
   toLessonCompletionPayload,
-} from "../progress.js";
-import { sendSandboxError } from "../sandbox.js";
-import { resolvePractice, type PracticeStrategy } from "./shared.js";
+} from "../../../routes/progress.js";
+import { sendSandboxError } from "../../../routes/sandbox.js";
+import { resolvePractice, type PracticeStrategy } from "../api.js";
 
 export const sqlPracticeStrategy: PracticeStrategy = {
   type: "sql",

@@ -29,6 +29,6 @@
     "src/db/test-support.ts",
     "src/progress/test-support.ts",
     "src/sandbox/test-support.ts",
-    "src/practice/test-support.ts"
+    "src/plugins/practice/test-support.ts"
   ]
 }

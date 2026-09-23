@@ -11,7 +11,7 @@ import { createProgressRepository, type ProgressRepository } from "./progress/re
 import {
   createPostgresSandboxDriver,
   createUnconfiguredPostgresSandboxDriver,
-} from "./sandbox/postgres-sandbox.js";
+} from "./plugins/postgres-sandbox/index.js";
 import { createSandboxProvisioner } from "./sandbox/provisioner.js";
 import type { SandboxProvisioner } from "./sandbox/types.js";
 import healthRoutes from "./routes/health.js";
@@ -20,7 +20,7 @@ import coursesRoutes from "./routes/courses.js";
 import progressRoutes from "./routes/progress.js";
 import quizRoutes from "./routes/quiz.js";
 import sandboxRoutes from "./routes/sandbox.js";
-import practiceRoutes, { type PracticeStrategy } from "./routes/practice/index.js";
+import practiceRoutes, { type PracticeStrategy } from "./plugins/practice/index.js";
 import transferRoutes from "./routes/transfer.js";
 
 export interface BuildServerOptions {
@@ -110,10 +110,10 @@ export interface BuildServerOptions {
    */
   readonly logger?: FastifyServerOptions["logger"];
   /**
-   * Overrides the practice-mechanic registry (routes/practice/registry.ts).
+   * Overrides the practice-mechanic registry (plugins/practice/registry.ts).
    * Production never passes this; a test does, to register a mechanic the
    * shipped build does not have and prove that doing so needs no change to
-   * routes/practice/index.ts.
+   * plugins/practice/index.ts.
    */
   readonly practiceStrategies?: readonly PracticeStrategy[];
 }

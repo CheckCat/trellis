@@ -26,7 +26,7 @@ import type { Course, CourseLesson, CourseModule } from "../courses/types.js";
 import type { SkillsDocument, SkillsLessonEntry, TermEntry, VerifyKind } from "./skills.js";
 import { mentions, phrasesOf, stemsOf } from "./terms.js";
 import { analyzerFor, grantId, isKnownGrant, knownGrants } from "./features.js";
-import { gradeAnswers } from "../practice/answer.js";
+import { gradeAnswers } from "../plugins/practice/answer/grade.js";
 
 export type LintSeverity = "error" | "warning";
 

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AppPool } from "./db/pool.js";
-import { createPostgresSandboxDriverFromPool } from "./sandbox/postgres-sandbox.js";
+import { createPostgresSandboxDriverFromPool } from "./plugins/postgres-sandbox/index.js";
 import { createSandboxProvisioner } from "./sandbox/provisioner.js";
 import { createRecordingPool, createSandboxFixture, FIXTURE_COURSE_ID } from "./sandbox/test-support.js";
 import { buildServer } from "./server.js";

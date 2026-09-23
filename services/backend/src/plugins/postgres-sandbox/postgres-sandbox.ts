@@ -21,8 +21,8 @@
 
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 
-import { createPool, redactPassword, type AppPool } from "../db/pool.js";
-import { SandboxError, isSandboxError, type SandboxDriver, type SandboxSpec } from "./types.js";
+import { createPool, redactPassword, type AppPool } from "../../db/pool.js";
+import { SandboxError, isSandboxError, type SandboxDriver, type SandboxSpec } from "../../sandbox/types.js";
 
 /** The schema the sandbox role owns (docker/postgres/init/02-schemas.sql).
  * Not configurable through the environment on purpose: it is fixed by the

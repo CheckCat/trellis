@@ -467,7 +467,7 @@ function validateAnswerFields(
     } else if (!numeric && (field.expected as string).trim() === "") {
       errors.push({
         path: `${fieldPath}.expected`,
-        // Answers are compared trimmed (practice/answer.ts), so a blank
+        // Answers are compared trimmed (plugins/practice/answer/grade.ts), so a blank
         // expected value would be matched by a learner submitting nothing
         // at all — an assignment that grades itself.
         message: `Answer field "${field.id}" has a blank "expected" — there would be nothing to get right.`,

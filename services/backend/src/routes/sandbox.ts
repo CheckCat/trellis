@@ -2,7 +2,7 @@
 //
 // There was a second endpoint here — "сбросить песочницу", a manual rebuild
 // from the course's seed. It went away when every practice attempt began
-// re-seeding on its own (routes/practice/sql.ts): a button that restores the
+// re-seeding on its own (plugins/practice/sql/route.ts): a button that restores the
 // starting state is noise next to an engine that never leaves it. The
 // provisioner's `reset` stays — it is what the attempt path rebuilds with.
 //
@@ -13,7 +13,7 @@
 //
 // Note what is NOT exposed: no endpoint returns seed SQL text, and none runs
 // arbitrary SQL — running the user's own SQL in the sandbox is task 009's
-// `routes/practice.ts`, deliberately a separate surface.
+// `plugins/practice/sql/`, deliberately a separate surface.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
@@ -81,7 +81,7 @@ function toStatusPayload(state: SandboxState | undefined) {
   };
 }
 
-/** Shared with routes/practice.ts (task 009): preparing a course's sandbox
+/** Shared with plugins/practice/sql/ (task 009): preparing a course's sandbox
  * before running practice SQL goes through the same `fastify.sandbox.ensure`
  * and can fail in exactly the same ways, so both surfaces must answer the
  * same status and the same body for the same `SandboxError` — a second copy

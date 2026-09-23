@@ -19,7 +19,7 @@
 //
 // Project invariant: a practice mechanic or a sandbox type exists only if
 // it is registered here. Adding one means an entry in this file plus its
-// own module — never a change to routes/practice/index.ts or to
+// own module — never a change to plugins/practice/index.ts or to
 // sandbox/provisioner.ts, both of which dispatch through a registry keyed
 // by these same names.
 //
@@ -27,9 +27,9 @@
 // number is never written twice, and nothing else — in particular no route,
 // no driver and no strategy, so that everything else may import it.
 
-import { MAX_RESULT_ROWS } from "./practice/execute.js";
-import { MAX_COMPARISON_ROWS, NUMERIC_TOLERANCE } from "./practice/compare.js";
-import { MAX_STATE_ROWS_PER_TABLE } from "./practice/state.js";
+import { MAX_RESULT_ROWS } from "./plugins/practice/sql/execute.js";
+import { MAX_COMPARISON_ROWS, NUMERIC_TOLERANCE } from "./plugins/practice/sql/compare.js";
+import { MAX_STATE_ROWS_PER_TABLE } from "./plugins/practice/sql/state.js";
 
 /**
  * Version of the course-manifest contract described below.
@@ -70,11 +70,11 @@ export type AnswerFieldKind = (typeof ANSWER_FIELD_KINDS)[number];
 export const SANDBOX_STATEMENT_TIMEOUT_SECONDS = 30;
 
 /** Largest `sql` submission the practice endpoint accepts, in characters
- * (routes/practice/sql.ts's body schema). */
+ * (plugins/practice/sql/route.ts's body schema). */
 export const MAX_PRACTICE_SQL_LENGTH = 50_000;
 
 /** Largest single typed-in answer the `answer` endpoint accepts, in
- * characters (routes/practice/answer.ts's body schema). */
+ * characters (plugins/practice/answer/route.ts's body schema). */
 export const MAX_ANSWER_VALUE_LENGTH = 1000;
 
 // --- Capability document shapes ------------------------------------------
@@ -120,7 +120,7 @@ export interface PracticeTypeCapability {
   readonly requiresSandbox: boolean;
   /** Path (relative to a lesson) an attempt is submitted to. The single
    * source for both `endpoint` below and the "you want the other
-   * endpoint" refusal in routes/practice/shared.ts. */
+   * endpoint" refusal in plugins/practice/api.ts. */
   readonly submitPath: string;
   /** Where a learner's attempt is submitted, spelled out. Always derived
    * from `submitPath` — see `submitEndpoint`. */

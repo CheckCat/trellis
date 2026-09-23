@@ -23,7 +23,7 @@
 // Nothing in this module touches a database — it is pure, and the route
 // calls it with the lesson's own fields.
 
-import type { CourseAnswerField } from "../courses/types.js";
+import type { CourseAnswerField } from "../../../courses/types.js";
 
 /** One field's verdict. Deliberately just a boolean: see the header. */
 export interface AnswerFieldVerdict {

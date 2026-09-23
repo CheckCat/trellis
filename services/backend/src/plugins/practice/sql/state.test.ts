@@ -10,7 +10,7 @@ import {
   snapshotSandboxState,
   type SandboxStateSnapshot,
 } from "./state.js";
-import { createScriptedSandboxDriver, databaseError, resultSet, type ScriptedAnswer } from "./test-support.js";
+import { createScriptedSandboxDriver, databaseError, resultSet, type ScriptedAnswer } from "../test-support.js";
 
 const CONTEXT = { courseId: "some-course", lessonId: "some-lesson" } as const;
 const SOLUTION_SQL = "update books set in_stock = false where id = 1";

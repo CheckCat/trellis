@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { CourseAnswerField } from "../courses/types.js";
-import { gradeAnswers, parseAnswerNumber } from "./answer.js";
+import type { CourseAnswerField } from "../../../courses/types.js";
+import { gradeAnswers, parseAnswerNumber } from "./grade.js";
 
 function numberField(expected: number, tolerance = 0, id = "n"): CourseAnswerField {
   return { id, label: "Сколько?", kind: "number", expected, tolerance };

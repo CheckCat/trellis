@@ -13,7 +13,7 @@ import {
   SANDBOX_TYPES,
 } from "./capabilities.js";
 import { CAPABILITIES_CONTRACT_PATH, renderCapabilitiesContract } from "./capabilities-cli.js";
-import { PRACTICE_STRATEGIES } from "./routes/practice/index.js";
+import { PRACTICE_STRATEGIES } from "./plugins/practice/index.js";
 import { repoPath } from "./repo-root.js";
 
 /** Reads an `enum` out of the checked-in manifest schema by `$defs` path,
