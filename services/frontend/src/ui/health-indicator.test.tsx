@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HealthIndicator } from "./Layout";
+import { HealthIndicator } from "./health-indicator";
 
 // Same testing conventions as task 004's App.test.tsx (see that report):
 // no `@testing-library/jest-dom`, no vitest `globals: true` — hooks are

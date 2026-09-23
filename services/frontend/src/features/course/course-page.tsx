@@ -1,13 +1,12 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ApiError, api } from "../../api/client";
 import type { CourseProgressResponse } from "../../api/types";
-import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { ArrowRightIcon, CheckIcon, FlameIcon, RefreshIcon } from "../../ui/icons";
+import { nextUnfinishedLesson, studyStreakDays } from "../../entities/course/progress";
+import { ArrowRightIcon, CheckIcon, FlameIcon } from "../../ui/icons";
 import { plural } from "../../ui/plural";
-import { ModuleList } from "./ModuleList";
-import { nextUnfinishedLesson, studyStreakDays } from "./progress";
+import { ModuleList } from "./module-list";
+import { RestartCourseButton } from "./restart-course-button";
 
 /**
  * Course navigation page: where the learner is in this course, the one
@@ -70,7 +69,7 @@ export function CoursePage({ courseId }: { courseId: string }) {
  * single action that continues it, and the way back to the start.
  *
  * All three read from the same already-fetched tree — no extra request, and
- * no stored "current lesson" cursor anywhere (see progress.ts).
+ * no stored "current lesson" cursor anywhere (see entities/course/progress.ts).
  */
 function CourseStatus({ courseId, progress }: { courseId: string; progress: CourseProgressResponse }) {
   const next = nextUnfinishedLesson(progress);
@@ -137,52 +136,5 @@ function CourseProgressBar({ progress }: { progress: CourseProgressResponse }) {
     <div className="course-progress" aria-hidden="true">
       <div className="course-progress-fill" style={{ width: `${Math.round(share * 100)}%` }} />
     </div>
-  );
-}
-
-/**
- * «Перепройти» — the only control in the app that destroys progress, so it
- * asks first and names what will be lost in the question rather than in a
- * vague "are you sure".
- */
-function RestartCourseButton({ courseId, progress }: { courseId: string; progress: CourseProgressResponse }) {
-  const queryClient = useQueryClient();
-  const [asking, setAsking] = useState(false);
-
-  const resetMutation = useMutation({
-    mutationFn: () => api.resetCourseProgress(courseId),
-    onSuccess: () => {
-      setAsking(false);
-      void queryClient.invalidateQueries({ queryKey: ["courseProgress", courseId] });
-    },
-  });
-
-  return (
-    <>
-      <button type="button" className="button button--quiet" onClick={() => setAsking(true)}>
-        <RefreshIcon />
-        Перепройти
-      </button>
-      {resetMutation.isError && <p className="muted-note">Не удалось сбросить прогресс. Попробуйте ещё раз.</p>}
-      {asking && (
-        <ConfirmDialog
-          title="Перепройти курс?"
-          body={
-            <>
-              <p>
-                Будет стёрто {progress.completedLessons}{" "}
-                {plural(progress.completedLessons, ["пройденный урок", "пройденных урока", "пройденных уроков"])} курса
-                «{progress.title}». Прогресс других курсов останется на месте.
-              </p>
-              <p className="muted-note">Отменить это действие нельзя — восстановить можно только из файла переноса.</p>
-            </>
-          }
-          confirmLabel={resetMutation.isPending ? "Стираем…" : "Стереть и начать заново"}
-          busy={resetMutation.isPending}
-          onConfirm={() => resetMutation.mutate()}
-          onCancel={() => setAsking(false)}
-        />
-      )}
-    </>
   );
 }

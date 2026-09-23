@@ -1,10 +1,10 @@
 import { Link, createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import type { RouterHistory } from "@tanstack/react-router";
-import { CoursePage } from "./features/course/CoursePage";
-import { CoursesIndexPage } from "./features/course/CoursesIndexPage";
-import { LessonView } from "./features/lesson/LessonView";
-import { TransferPage } from "./features/transfer/TransferPage";
-import { Layout } from "./ui/Layout";
+import { CoursePage } from "./features/course/course-page";
+import { CoursesIndexPage } from "./features/course/courses-index-page";
+import { LessonView } from "./features/lesson/lesson-view";
+import { TransferPage } from "./features/transfer/transfer-page";
+import { Layout } from "./ui/layout";
 
 /**
  * Route tree, built with TanStack Router's code-based API (no file-based

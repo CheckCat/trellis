@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { Markdown } from "./Markdown";
+import { Markdown } from "./markdown";
 
 afterEach(() => {
   cleanup();

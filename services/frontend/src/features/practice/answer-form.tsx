@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ApiError, api } from "../../api/client";
+import { api } from "../../api/client";
 import type { PublicAnswerPractice } from "../../api/types";
 import { EyeIcon } from "../../ui/icons";
-import { useAnswerPractice } from "./useAnswerPractice";
+import { formatApiError } from "../../ui/format-api-error";
+import { useAnswerPractice } from "./use-answer-practice";
 
 /**
  * A practice assignment done outside the platform: the learner works in
@@ -145,11 +146,7 @@ export function AnswerForm({
       {solutionQuery.isError && <p className="muted-note">Не удалось показать ответ. Попробуйте ещё раз.</p>}
 
       {submitError !== null && (
-        <p className="muted-note">
-          {submitError instanceof ApiError
-            ? submitError.message
-            : "Не удалось отправить ответы. Попробуйте ещё раз."}
-        </p>
+        <p className="muted-note">{formatApiError(submitError, "Не удалось отправить ответы. Попробуйте ещё раз.")}</p>
       )}
 
       {marks !== undefined && (

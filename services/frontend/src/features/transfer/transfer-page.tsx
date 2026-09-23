@@ -1,7 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
-import { ApiError, api } from "../../api/client";
+import { api } from "../../api/client";
 import type { ProgressExportFile } from "../../api/types";
-import { ImportDialog } from "./ImportDialog";
+import { formatApiError } from "../../ui/format-api-error";
+import { ImportDialog } from "./import-dialog";
 
 /**
  * Suggested download name for an export, mirroring the backend's own
@@ -69,9 +70,7 @@ export function TransferPage() {
         </button>
         {exportMutation.isError && (
           <p className="muted-note">
-            {exportMutation.error instanceof ApiError
-              ? exportMutation.error.message
-              : "Не удалось подготовить файл экспорта. Попробуйте ещё раз."}
+            {formatApiError(exportMutation.error, "Не удалось подготовить файл экспорта. Попробуйте ещё раз.")}
           </p>
         )}
       </section>

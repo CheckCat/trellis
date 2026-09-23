@@ -2,6 +2,7 @@ import { useState, type ChangeEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "../../api/client";
 import type { ImportRejection, ImportResult, ProgressExportFile } from "../../api/types";
+import { formatApiError } from "../../ui/format-api-error";
 import { FileIcon } from "../../ui/icons";
 
 /** Narrows an `ApiError`'s `unknown` body to `ImportResult` — true for both
@@ -159,7 +160,7 @@ export function ImportDialog() {
 
       {staleWarning !== undefined && (
         <div className="import-warning">
-          <p>{error instanceof ApiError ? error.message : ""}</p>
+          <p>{formatApiError(error, "")}</p>
           <ImportSummary result={staleWarning} />
           <button type="button" className="button button--primary" onClick={confirmStaleImport}>
             Импортировать всё равно

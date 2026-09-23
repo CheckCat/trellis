@@ -1,11 +1,11 @@
-import { ApiError } from "../../api/client";
 import type { PracticeResultSet, PracticeSqlError, PublicPractice, PublicSqlPractice } from "../../api/types";
+import { formatApiError } from "../../ui/format-api-error";
 import { PlayIcon } from "../../ui/icons";
-import { AnswerForm } from "./AnswerForm";
+import { AnswerForm } from "./answer-form";
 import { draftKey, useDraft } from "./draft";
-import { ResultTable } from "./ResultTable";
-import { SqlEditor } from "./SqlEditor";
-import { usePractice } from "./usePractice";
+import { ResultTable } from "./result-table";
+import { SqlEditor } from "./sql-editor";
+import { usePractice } from "./use-practice";
 
 /**
  * A lesson's practice exercise, in whichever kind the course declared.
@@ -132,9 +132,7 @@ function SqlPracticeView({
       </div>
 
       {runError !== null && (
-        <p className="muted-note">
-          {runError instanceof ApiError ? runError.message : "Не удалось выполнить запрос. Попробуйте ещё раз."}
-        </p>
+        <p className="muted-note">{formatApiError(runError, "Не удалось выполнить запрос. Попробуйте ещё раз.")}</p>
       )}
 
       {execution !== undefined && (

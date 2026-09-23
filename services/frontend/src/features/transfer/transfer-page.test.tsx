@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TransferPage } from "./TransferPage";
+import { TransferPage } from "./transfer-page";
 
 // jsdom does not implement `URL.createObjectURL`/`revokeObjectURL` at all
 // (verified: `typeof URL.createObjectURL === "undefined"` under this
-// project's jsdom version, same class of gap testSetup.ts documents for
+// project's jsdom version, same class of gap test-setup.ts documents for
 // CodeMirror's Range methods) — assigned directly rather than
 // `vi.stubGlobal("URL", ...)`, which would have to reconstruct every other
 // static member of the real `URL` class this file doesn't care about.

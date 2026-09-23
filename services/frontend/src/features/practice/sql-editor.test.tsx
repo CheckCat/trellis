@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
-import { SqlEditor } from "./SqlEditor";
+import { SqlEditor } from "./sql-editor";
 
 afterEach(() => {
   cleanup();

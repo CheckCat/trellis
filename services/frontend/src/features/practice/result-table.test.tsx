@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import type { PracticeResultSet } from "../../api/types";
-import { ResultTable } from "./ResultTable";
+import { ResultTable } from "./result-table";
 
 afterEach(() => {
   cleanup();

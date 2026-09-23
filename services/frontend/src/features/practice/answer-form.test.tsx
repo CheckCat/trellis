@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PublicPractice } from "../../api/types";
-import { PracticeView } from "./PracticeView";
+import { PracticeView } from "./practice-view";
 
 afterEach(() => {
   cleanup();

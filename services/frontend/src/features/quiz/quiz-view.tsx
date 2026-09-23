@@ -1,6 +1,6 @@
 import type { PublicQuiz, PublicQuizOption } from "../../api/types";
-import { AnswerOption, type AnswerOptionStatus } from "./AnswerOption";
-import { useQuiz, type QuizVerdict } from "./useQuiz";
+import { AnswerOption, type AnswerOptionStatus } from "./answer-option";
+import { useQuiz, type QuizVerdict } from "./use-quiz";
 
 function optionStatus(
   option: PublicQuizOption,
