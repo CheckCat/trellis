@@ -104,7 +104,7 @@ BI, — выбор такой:
 
 `courses/<id>/skills.yaml`: какие умения строит курс, что от чего
 зависит, чем проверяется каждый урок (`verify: self | quiz |
-sql-result | sql-state | answer`). Формат — в `courses/README.md`,
+sql-result | sql-state | answer | code`). Формат — в `courses/README.md`,
 образец — `courses/pilot-sql/skills.yaml`.
 
 Пишется **до текстов**. Если умение нечем проверить, это видно здесь, а
@@ -248,6 +248,7 @@ docker compose exec -T postgres psql -U postgres -d scratch -c "<твой зап
 |---|---|
 | Практика в SQL-песочнице курса | `practice-sql` |
 | Задание выполняется снаружи (Excel, BI), ученик вписывает результат | `practice-answer` |
+| Задание на код: ученик пишет функцию на TypeScript/JavaScript | `practice-code` |
 
 Подключается только тот, который курсу нужен. Курс по коммуникациям не
 увидит SQL никогда.
