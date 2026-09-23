@@ -56,13 +56,15 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-// migrate.js/migrate.ts always ends up exactly two directories below
-// services/backend (dist/db/migrate.js, dist-test/db/migrate.js, and
-// src/db/migrate.ts alike), so this resolves to services/backend/migrations
-// in every one of those layouts.
+// migrate.js/migrate.ts always ends up exactly three directories below
+// services/backend (dist/db/migrate/migrate.js, dist-test/db/migrate/
+// migrate.js, and src/db/migrate/migrate.ts alike), so this resolves to
+// services/backend/migrations in every one of those layouts. The depth is
+// pinned by migrate.test.ts's directory check — the last time this file
+// moved, the path silently went stale and only the built stack noticed.
 export const DEFAULT_MIGRATIONS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../migrations",
+  "../../../migrations",
 );
 
 interface MigrationFile {

@@ -1,7 +1,22 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
-import { runMigrations } from "./migrate.js";
+import { DEFAULT_MIGRATIONS_DIR, runMigrations } from "./migrate.js";
+
+// No database needed, and deliberately so: this is the one check that
+// runs in CI unconditionally. The default directory is resolved relative
+// to the COMPILED file, and moving migrate.ts one folder deeper (the
+// module-folder refactor) silently pointed it at dist/migrations — a
+// startup ENOENT that only the built stack ever saw, because every test
+// touching migrations was skipped without DATABASE_URL.
+void test("DEFAULT_MIGRATIONS_DIR resolves to the real migrations folder from the compiled location", () => {
+  assert.ok(fs.existsSync(DEFAULT_MIGRATIONS_DIR), `${DEFAULT_MIGRATIONS_DIR} does not exist`);
+  assert.ok(
+    fs.readdirSync(DEFAULT_MIGRATIONS_DIR).includes("001_progress.sql"),
+    `${DEFAULT_MIGRATIONS_DIR} has no 001_progress.sql`,
+  );
+});
 import { connectToDisposableTestDbOrSkip } from "../test-support/index.js";
 
 const DESTRUCTIVE_MIGRATION_TEST_REASON =

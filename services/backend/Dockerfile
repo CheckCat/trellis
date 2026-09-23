@@ -40,7 +40,7 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/services/backend/dist services/backend/dist
 # runMigrations() resolves its default migrations dir at runtime as
-# ../../migrations relative to the compiled migrate.js (dist/db/migrate.js),
+# ../../../migrations relative to the compiled migrate.js (dist/db/migrate/migrate.js),
 # i.e. services/backend/migrations next to dist/ — must be copied alongside
 # dist or migrations at startup fail with ENOENT (see task-005 report).
 COPY --from=builder /app/services/backend/migrations services/backend/migrations
