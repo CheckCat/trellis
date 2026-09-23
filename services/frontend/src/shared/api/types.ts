@@ -94,9 +94,26 @@ export interface PublicAnswerPractice {
   fields: PublicAnswerField[];
 }
 
+/** `practice.language` — capabilities.ts's `CODE_LANGUAGES`. */
+export type CodeLanguage = "typescript" | "javascript";
+
+/** A practice assignment done as code: the learner's module must export
+ * `entry`; the backend calls it per case in a child node process. The
+ * cases and the solution stay on the server (routes/courses.ts's
+ * `toPublicPractice`) — only the starter text travels, because it is
+ * meant to be shown. */
+export interface PublicCodePractice {
+  type: "code";
+  prompt: string;
+  language: CodeLanguage;
+  entry: string;
+  starter?: string;
+}
+
 /** Discriminated on `type` — a lesson carries exactly one kind, and each
- * has its own submit endpoint (`practice/run` vs `practice/answer`). */
-export type PublicPractice = PublicSqlPractice | PublicAnswerPractice;
+ * has its own submit endpoint (`practice/run`, `practice/answer`,
+ * `practice/code`). */
+export type PublicPractice = PublicSqlPractice | PublicAnswerPractice | PublicCodePractice;
 
 /** GET /courses/:courseId/lessons/:lessonId — routes/courses.ts,
  * `lessonResponseSchema`. `content` is the lesson's Markdown body (may be
@@ -349,6 +366,48 @@ export interface PracticeRunResponse {
 export interface PracticeAnswerResponse {
   ok: boolean;
   fields: Record<string, { correct: boolean }>;
+  lesson: LessonProgress;
+  course: LessonCompletionResponse["course"];
+}
+
+/**
+ * A value as the backend's harness encoded it (plugins/practice/code/
+ * compare.ts): JSON, plus one-key marker objects for what JSON cannot
+ * carry — `{$undefined:true}`, `{$nan:true}`, `{$inf:1|-1}`,
+ * `{$bigint:"…"}`, `{$date:"…"|null}`, `{$map:[[k,v]]}`, `{$set:[…]}`,
+ * `{$function:"name"}`, `{$symbol:"…"}`. `features/practice/code-value`
+ * turns one back into text for display.
+ */
+export type EncodedValue = null | boolean | number | string | EncodedValue[] | { [key: string]: EncodedValue };
+
+/** One case of a code run (`practiceCodeCaseSchema`). `value` is the
+ * learner's OWN return value — the reference never reaches the client;
+ * `error` is the learner's own exception. Exactly one of the two is
+ * present when the run reached this case at all. */
+export interface PracticeCodeCaseResult {
+  args: EncodedValue[];
+  passed: boolean;
+  value?: EncodedValue;
+  error?: { message: string };
+  /** Captured `console.*` output of this case. */
+  output: string;
+  truncated: boolean;
+}
+
+export type PracticeCodeFailureKind = "load_failed" | "entry_missing" | "timeout" | "crashed";
+
+/** POST /courses/:courseId/lessons/:lessonId/practice/code —
+ * plugins/practice/code/route.ts's `practiceCodeResponseSchema`. Always
+ * 200 for the learner's own failures (`ok: false` + `failure`); a 422 is
+ * a broken solution, a 503 a runner that cannot start — both `ApiError`. */
+export interface PracticeCodeResponse {
+  ok: boolean;
+  /** Present iff `ok` is false. `message` is node's own text. */
+  failure?: { kind: PracticeCodeFailureKind; message: string };
+  durationMs: number;
+  cases: PracticeCodeCaseResult[];
+  /** Every case passed — the lesson's practice gate. */
+  passed: boolean;
   lesson: LessonProgress;
   course: LessonCompletionResponse["course"];
 }

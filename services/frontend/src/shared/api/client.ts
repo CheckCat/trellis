@@ -10,6 +10,7 @@ import type {
   LessonCompletionResponse,
   LessonDetailResponse,
   PracticeAnswerResponse,
+  PracticeCodeResponse,
   PracticeRunResponse,
   ProgressExportFile,
   QuizAnswerResponse,
@@ -123,6 +124,16 @@ export const api = {
         // number is the backend's rule (practice/answer.ts), and doing it
         // here too would be a second implementation of it, free to drift.
         body: JSON.stringify({ answers }),
+      },
+    ),
+
+  runPracticeCode: (courseId: string, lessonId: string, code: string): Promise<PracticeCodeResponse> =>
+    apiFetch<PracticeCodeResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/practice/code`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
       },
     ),
 

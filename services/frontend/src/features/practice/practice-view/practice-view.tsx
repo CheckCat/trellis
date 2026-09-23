@@ -42,6 +42,10 @@ export function PracticeView({
       return <AnswerForm courseId={courseId} lessonId={lessonId} practice={practice} />;
     case "sql":
       return <SqlPracticeView courseId={courseId} lessonId={lessonId} practice={practice} />;
+    case "code":
+      // Task 9 replaces this with CodePracticeView; until then the page
+      // says honestly that this build cannot display the kind.
+      return <UnsupportedPractice practice={practice as never} />;
     default:
       // Unreachable by the types above — which is exactly the case worth
       // handling, since the types describe what this build knows, not what
