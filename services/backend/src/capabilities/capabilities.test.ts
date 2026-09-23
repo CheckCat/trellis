@@ -3,9 +3,11 @@ import fs from "node:fs";
 import test from "node:test";
 
 import manifestSchema from "../courses/manifest.schema.json" with { type: "json" };
+import { MAX_CODE_CASES } from "../plugins/practice/code/limits.js";
 import {
   ANSWER_FIELD_KINDS,
   CAPABILITIES,
+  CODE_LANGUAGES,
   MANIFEST_CONTRACT_VERSION,
   PRACTICE_TYPES,
   practiceTypeCapability,
@@ -47,6 +49,16 @@ void test("manifest.schema.json's practice.type enum is exactly the registered p
 
 void test("manifest.schema.json's fields[].kind enum is exactly the registered answer-field kinds", () => {
   assert.deepEqual(schemaEnum("$defs", "answerField", "properties", "kind", "enum"), [...ANSWER_FIELD_KINDS]);
+});
+
+void test("manifest.schema.json's practice.language enum is exactly the registered code languages", () => {
+  assert.deepEqual(schemaEnum("$defs", "practice", "properties", "language", "enum"), [...CODE_LANGUAGES]);
+});
+
+void test("manifest.schema.json's cases maxItems is the registered case limit", () => {
+  const cases = (manifestSchema as { $defs: { practice: { properties: { cases: { maxItems?: number } } } } }).$defs
+    .practice.properties.cases;
+  assert.equal(cases.maxItems, MAX_CODE_CASES);
 });
 
 void test("manifest.schema.json's practice properties are exactly the union of what the types declare", () => {

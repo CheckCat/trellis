@@ -42,7 +42,9 @@ const sqlAnalyzer: FeatureAnalyzer = {
   practiceTypes: ["sql"],
   features: SQL_FEATURES,
   extract(practice) {
-    if (practice.type === "answer") {
+    // An analyzer is per language: a practice of any other kind has no
+    // SQL to read.
+    if (practice.type !== "sql") {
       return [];
     }
     // All three mechanics, because any of them can be the one that needs

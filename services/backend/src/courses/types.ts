@@ -145,10 +145,10 @@ export interface CourseCodePractice {
 /**
  * A lesson's practice assignment. A discriminated union rather than one
  * widened shape: `sandbox` is meaningless for an `answer` assignment and
- * `fields` is meaningless for a `sql` one, and making the compiler say so
+ * `fields` is meaningless for a `sql` one, `cases` for either, and making the compiler say so
  * is what keeps a third mechanic from quietly inheriting either.
  */
-export type CoursePractice = CourseSqlPractice | CourseAnswerPractice;
+export type CoursePractice = CourseSqlPractice | CourseAnswerPractice | CourseCodePractice;
 
 export interface CourseSandbox {
   readonly id: string;

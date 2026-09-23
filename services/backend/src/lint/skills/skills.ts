@@ -43,7 +43,7 @@ export const SKILLS_FILE_NAME = "skills.yaml";
  * where each value is mapped onto the mechanics it needs, and a test keeps
  * that mapping inside what the registry actually registers.
  */
-export const VERIFY_KINDS = ["quiz", "sql-state", "sql-result", "answer", "self"] as const;
+export const VERIFY_KINDS = ["quiz", "sql-state", "sql-result", "answer", "code", "self"] as const;
 
 export type VerifyKind = (typeof VERIFY_KINDS)[number];
 

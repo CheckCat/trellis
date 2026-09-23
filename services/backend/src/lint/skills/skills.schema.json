@@ -103,8 +103,8 @@
         },
         "verify": {
           "type": "string",
-          "enum": ["quiz", "sql-state", "sql-result", "answer", "self"],
-          "description": "How this lesson is meant to be checked. The lint holds the manifest to it: quiz -> a quiz; sql-state -> practice.check; sql-result -> practice.expected; answer -> practice.type: answer; self -> no automatic check at all."
+          "enum": ["quiz", "sql-state", "sql-result", "answer", "code", "self"],
+          "description": "How this lesson is meant to be checked. The lint holds the manifest to it: quiz -> a quiz; sql-state -> practice.check; sql-result -> practice.expected; answer -> practice.type: answer; code -> practice.type: code; self -> no automatic check at all."
         },
         "hours": {
           "type": "number",

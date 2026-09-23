@@ -7,7 +7,7 @@
 // apart without anything noticing. This module is the authority; the others
 // are checked against it:
 //
-//   - `SANDBOX_TYPES` / `PRACTICE_TYPES` / `ANSWER_FIELD_KINDS` are the
+//   - `SANDBOX_TYPES` / `PRACTICE_TYPES` / `ANSWER_FIELD_KINDS` / `CODE_LANGUAGES` are the
 //     domain's own unions — courses/types.ts and sandbox/types.ts derive
 //     their types from here rather than re-declaring them;
 //   - manifest.schema.json's matching `enum`s are checked against these
@@ -30,6 +30,12 @@
 import { MAX_RESULT_ROWS } from "../plugins/practice/sql/execute.js";
 import { MAX_COMPARISON_ROWS, NUMERIC_TOLERANCE } from "../plugins/practice/sql/compare.js";
 import { MAX_STATE_ROWS_PER_TABLE } from "../plugins/practice/sql/state.js";
+import {
+  CODE_MEMORY_MB,
+  CODE_TIMEOUT_SECONDS,
+  MAX_CODE_CASES,
+  MAX_CODE_OUTPUT_CHARS,
+} from "../plugins/practice/code/limits.js";
 
 /**
  * Version of the course-manifest contract described below.
@@ -51,7 +57,7 @@ export const SANDBOX_TYPES = ["postgres"] as const;
 export type SandboxType = (typeof SANDBOX_TYPES)[number];
 
 /** Practice kinds a course may declare in `practice.type`. */
-export const PRACTICE_TYPES = ["sql", "answer"] as const;
+export const PRACTICE_TYPES = ["sql", "answer", "code"] as const;
 export type CoursePracticeType = (typeof PRACTICE_TYPES)[number];
 
 /** Value kinds an `answer` practice field may declare in `fields[].kind`. */
@@ -83,13 +89,17 @@ export const MAX_PRACTICE_SQL_LENGTH = 50_000;
  * characters (plugins/practice/answer/route.ts's body schema). */
 export const MAX_ANSWER_VALUE_LENGTH = 1000;
 
+/** Largest `code` submission the practice endpoint accepts, in characters
+ * (plugins/practice/code/route.ts's body schema). */
+export const MAX_PRACTICE_CODE_LENGTH = 50_000;
+
 // --- Capability document shapes ------------------------------------------
 
 /** One property a course author may write in the manifest, described for
  * whoever is writing (or generating) that manifest. */
 export interface ManifestFieldCapability {
   readonly name: string;
-  readonly valueType: "string" | "number" | "boolean" | "object[]";
+  readonly valueType: "string" | "number" | "boolean" | "object[]" | "any" | "any[]";
   readonly required: boolean;
   readonly summary: string;
   /** The allowed values, when the field is an enum. */
@@ -338,6 +348,95 @@ const ANSWER_PRACTICE: PracticeTypeCapability = {
   completion: "Урок засчитывается, когда верны ВСЕ поля. Повторная отправка разрешена; зачтённый урок не расзачитывается.",
 };
 
+const CODE_PRACTICE: PracticeTypeCapability = {
+  type: "code",
+  summary:
+    "Задание выполняется как код: ученик пишет модуль на TypeScript или JavaScript, экспортирующий функцию, " +
+    "движок вызывает её в отдельном процессе Node на объявленных входах и сравнивает возвращённые значения " +
+    "с эталоном. Вывод в консоль показывается, но не проверяется.",
+  requiresSandbox: false,
+  submitPath: "practice/code",
+  endpoint: submitEndpoint("practice/code"),
+  manifestFields: [
+    {
+      name: "type",
+      valueType: "string",
+      required: true,
+      values: [...PRACTICE_TYPES],
+      summary: 'Должен быть "code" — для этого типа поле обязательно (умолчание — "sql").',
+    },
+    {
+      name: "language",
+      valueType: "string",
+      required: true,
+      values: [...CODE_LANGUAGES],
+      summary:
+        "Язык модуля ученика. Оба исполняются Node: TypeScript — со стиранием типов (только «стираемый» синтаксис: " +
+        "без enum, namespace и parameter properties; типы не проверяются, только убираются).",
+    },
+    { name: "prompt", valueType: "string", required: true, summary: "Формулировка задания для ученика." },
+    {
+      name: "entry",
+      valueType: "string",
+      required: true,
+      summary:
+        "Имя именованного ESM-экспорта, который движок вызывает (`export function sum`). Идентификатор, не `default`.",
+    },
+    {
+      name: "starter",
+      valueType: "string",
+      required: false,
+      summary: "Начальное содержимое редактора — сигнатура с пустым телом. Уходит клиенту как есть.",
+    },
+    {
+      name: "cases",
+      valueType: "object[]",
+      required: true,
+      summary: `Вызовы функции, по которым ставится зачёт. От 1 до ${MAX_CODE_CASES}; проверяются все.`,
+      fields: [
+        {
+          name: "args",
+          valueType: "any[]",
+          required: true,
+          summary: "Аргументы вызова по порядку (любые JSON-значения).",
+        },
+        {
+          name: "expected",
+          valueType: "any",
+          required: false,
+          summary:
+            "Ожидаемое возвращаемое значение (любое JSON-значение, null — тоже значение). Если поля нет, эталон " +
+            "берётся из solution; без solution поле обязательно. Клиенту не отдаётся никогда.",
+        },
+      ],
+    },
+    {
+      name: "solution",
+      valueType: "string",
+      required: false,
+      summary:
+        "Эталонное решение автора на том же language с тем же entry. Движок вызывает его на тех же args и берёт " +
+        "результат как эталон для каждого case без своего expected. Обязано быть детерминированным. Клиенту не " +
+        "отдаётся никогда.",
+    },
+  ],
+  mechanics: [
+    {
+      name: "cases",
+      manifestFields: ["cases", "solution"],
+      summary:
+        "Для каждого case движок вызывает функцию ученика с args, ждёт результат (Promise допустим) и сравнивает " +
+        "его с эталоном структурно: порядок ключей объектов не важен, порядок элементов массива важен, числа — " +
+        "точно, undefined и null различаются, NaN равен NaN. Исключение или таймаут — case не пройден.",
+      feedback:
+        "На каждый case: аргументы, СОБСТВЕННЫЙ результат ученика (или его исключение), вывод console и boolean. " +
+        "Эталон и текст solution наружу не уходят; причина провала — только «не совпало».",
+    },
+  ],
+  completion:
+    "Урок засчитывается, когда пройдены ВСЕ case. Задание без cases невалидно, поэтому самоотметки у этого типа нет.",
+};
+
 const POSTGRES_SANDBOX: SandboxTypeCapability = {
   type: "postgres",
   summary:
@@ -412,7 +511,7 @@ const CAPABILITIES_DOCUMENT: EngineCapabilities = {
     ],
   },
   sandboxTypes: [POSTGRES_SANDBOX],
-  practiceTypes: [SQL_PRACTICE, ANSWER_PRACTICE],
+  practiceTypes: [SQL_PRACTICE, ANSWER_PRACTICE, CODE_PRACTICE],
   limits: {
     /** Строк результата, отдаваемых клиенту (ограничение показа). */
     maxResultRows: MAX_RESULT_ROWS,
@@ -428,6 +527,16 @@ const CAPABILITIES_DOCUMENT: EngineCapabilities = {
     maxPracticeSqlLength: MAX_PRACTICE_SQL_LENGTH,
     /** Максимальная длина одного введённого ответа, символов. */
     maxAnswerValueLength: MAX_ANSWER_VALUE_LENGTH,
+    /** Максимальная длина кода попытки, символов. */
+    maxPracticeCodeLength: MAX_PRACTICE_CODE_LENGTH,
+    /** Таймаут одного прогона кода (solution или ученика), секунды. */
+    codeTimeoutSeconds: CODE_TIMEOUT_SECONDS,
+    /** Лимит кучи процесса с кодом, мегабайты. */
+    codeMemoryMb: CODE_MEMORY_MB,
+    /** Максимум case в одном задании. */
+    maxCodeCases: MAX_CODE_CASES,
+    /** Символов вывода console на один case. */
+    maxCodeOutputChars: MAX_CODE_OUTPUT_CHARS,
   },
 };
 

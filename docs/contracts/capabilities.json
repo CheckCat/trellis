@@ -84,7 +84,8 @@
           "required": false,
           "values": [
             "sql",
-            "answer"
+            "answer",
+            "code"
           ],
           "default": "sql",
           "summary": "Тип практики. Отсутствие поля означает \"sql\" — курсы, написанные до появления других типов, остаются валидными."
@@ -169,7 +170,8 @@
           "required": true,
           "values": [
             "sql",
-            "answer"
+            "answer",
+            "code"
           ],
           "summary": "Должен быть \"answer\" — для этого типа поле обязательно (умолчание — \"sql\")."
         },
@@ -234,6 +236,92 @@
         }
       ],
       "completion": "Урок засчитывается, когда верны ВСЕ поля. Повторная отправка разрешена; зачтённый урок не расзачитывается."
+    },
+    {
+      "type": "code",
+      "summary": "Задание выполняется как код: ученик пишет модуль на TypeScript или JavaScript, экспортирующий функцию, движок вызывает её в отдельном процессе Node на объявленных входах и сравнивает возвращённые значения с эталоном. Вывод в консоль показывается, но не проверяется.",
+      "requiresSandbox": false,
+      "submitPath": "practice/code",
+      "endpoint": "POST /courses/{courseId}/lessons/{lessonId}/practice/code",
+      "manifestFields": [
+        {
+          "name": "type",
+          "valueType": "string",
+          "required": true,
+          "values": [
+            "sql",
+            "answer",
+            "code"
+          ],
+          "summary": "Должен быть \"code\" — для этого типа поле обязательно (умолчание — \"sql\")."
+        },
+        {
+          "name": "language",
+          "valueType": "string",
+          "required": true,
+          "values": [
+            "typescript",
+            "javascript"
+          ],
+          "summary": "Язык модуля ученика. Оба исполняются Node: TypeScript — со стиранием типов (только «стираемый» синтаксис: без enum, namespace и parameter properties; типы не проверяются, только убираются)."
+        },
+        {
+          "name": "prompt",
+          "valueType": "string",
+          "required": true,
+          "summary": "Формулировка задания для ученика."
+        },
+        {
+          "name": "entry",
+          "valueType": "string",
+          "required": true,
+          "summary": "Имя именованного ESM-экспорта, который движок вызывает (`export function sum`). Идентификатор, не `default`."
+        },
+        {
+          "name": "starter",
+          "valueType": "string",
+          "required": false,
+          "summary": "Начальное содержимое редактора — сигнатура с пустым телом. Уходит клиенту как есть."
+        },
+        {
+          "name": "cases",
+          "valueType": "object[]",
+          "required": true,
+          "summary": "Вызовы функции, по которым ставится зачёт. От 1 до 50; проверяются все.",
+          "fields": [
+            {
+              "name": "args",
+              "valueType": "any[]",
+              "required": true,
+              "summary": "Аргументы вызова по порядку (любые JSON-значения)."
+            },
+            {
+              "name": "expected",
+              "valueType": "any",
+              "required": false,
+              "summary": "Ожидаемое возвращаемое значение (любое JSON-значение, null — тоже значение). Если поля нет, эталон берётся из solution; без solution поле обязательно. Клиенту не отдаётся никогда."
+            }
+          ]
+        },
+        {
+          "name": "solution",
+          "valueType": "string",
+          "required": false,
+          "summary": "Эталонное решение автора на том же language с тем же entry. Движок вызывает его на тех же args и берёт результат как эталон для каждого case без своего expected. Обязано быть детерминированным. Клиенту не отдаётся никогда."
+        }
+      ],
+      "mechanics": [
+        {
+          "name": "cases",
+          "manifestFields": [
+            "cases",
+            "solution"
+          ],
+          "summary": "Для каждого case движок вызывает функцию ученика с args, ждёт результат (Promise допустим) и сравнивает его с эталоном структурно: порядок ключей объектов не важен, порядок элементов массива важен, числа — точно, undefined и null различаются, NaN равен NaN. Исключение или таймаут — case не пройден.",
+          "feedback": "На каждый case: аргументы, СОБСТВЕННЫЙ результат ученика (или его исключение), вывод console и boolean. Эталон и текст solution наружу не уходят; причина провала — только «не совпало»."
+        }
+      ],
+      "completion": "Урок засчитывается, когда пройдены ВСЕ case. Задание без cases невалидно, поэтому самоотметки у этого типа нет."
     }
   ],
   "limits": {
@@ -243,6 +331,11 @@
     "numericTolerance": 1e-9,
     "sandboxStatementTimeoutSeconds": 30,
     "maxPracticeSqlLength": 50000,
-    "maxAnswerValueLength": 1000
+    "maxAnswerValueLength": 1000,
+    "maxPracticeCodeLength": 50000,
+    "codeTimeoutSeconds": 10,
+    "codeMemoryMb": 256,
+    "maxCodeCases": 50,
+    "maxCodeOutputChars": 16384
   }
 }

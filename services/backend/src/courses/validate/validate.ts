@@ -9,10 +9,12 @@ import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import type { ErrorObject } from "ajv";
 
-import { CAPABILITIES, practiceTypeCapability } from "../../capabilities/index.js";
+import { CAPABILITIES, CODE_LANGUAGES, practiceTypeCapability, type CodeLanguage } from "../../capabilities/index.js";
 import manifestSchema from "../manifest.schema.json" with { type: "json" };
 import type {
   CourseAnswerField,
+  CourseCodeCase,
+  CourseCodePractice,
   CourseSandbox,
   CourseQuiz,
   CourseQuizOption,
@@ -78,6 +80,16 @@ interface RawPractice {
   readonly ordered?: boolean;
   readonly solution?: string;
   readonly fields?: readonly RawAnswerField[];
+  readonly language?: CodeLanguage;
+  readonly entry?: string;
+  readonly starter?: string;
+  readonly cases?: readonly RawCodeCase[];
+}
+
+interface RawCodeCase {
+  readonly args: readonly unknown[];
+  /** Read with an `in` check, never `!== undefined`: `expected: null` is a value. */
+  readonly expected?: unknown;
 }
 
 interface RawLesson {
@@ -383,6 +395,10 @@ function validatePractice(
 
   rejectForeignFields(practice, type, practicePath, errors);
 
+  if (type === "code") {
+    return validateCodePractice(practice, practicePath, errors);
+  }
+
   if (type === "answer") {
     if (practice.fields === undefined) {
       errors.push({
@@ -426,6 +442,78 @@ function validatePractice(
     // already rejected an `ordered` without an `expected`, so there is
     // no manifest-declared value to drop here.
     ...(practice.expected === undefined ? {} : { ordered: practice.ordered ?? false }),
+  };
+}
+
+/**
+ * `type: code`. The schema already pinned the shapes (language enum,
+ * entry pattern, cases min/max, args is an array); what is left is what a
+ * schema cannot say: which fields this type REQUIRES (the schema's
+ * `required` is shared by all types, so it lists only `prompt`), that
+ * `default` is not an entry name, and that every case has SOME reference
+ * — its own `expected`, or the assignment's `solution`.
+ *
+ * Always returns a practice, even after pushing errors (same contract as
+ * validateAnswerFields: the model is about to be discarded, but the other
+ * lessons still get checked).
+ */
+function validateCodePractice(
+  practice: RawPractice,
+  practicePath: string,
+  errors: ValidationError[],
+): CourseCodePractice {
+  if (practice.language === undefined) {
+    errors.push({
+      path: `${practicePath}.language`,
+      message: `A practice of type "code" must declare "language" — one of: ${CODE_LANGUAGES.join(", ")}.`,
+    });
+  }
+  if (practice.entry === undefined) {
+    errors.push({
+      path: `${practicePath}.entry`,
+      message: `A practice of type "code" must declare "entry" — the name of the function the learner's module exports.`,
+    });
+  } else if (practice.entry === "default") {
+    errors.push({
+      path: `${practicePath}.entry`,
+      message: `"entry" must be a NAMED export; "default" is not one. Name the function ("export function sum") and write that name.`,
+    });
+  }
+  if (practice.cases === undefined) {
+    errors.push({
+      path: `${practicePath}.cases`,
+      message: `A practice of type "code" must declare "cases" — at least one set of arguments the function is called with.`,
+    });
+  }
+
+  const cases: CourseCodeCase[] = (practice.cases ?? []).map((rawCase, index) => {
+    // YAML has no undefined, so "the key is there" is the whole test —
+    // `expected: null` is a reference value, not a missing one.
+    const hasExpected = Object.hasOwn(rawCase, "expected");
+    if (!hasExpected && practice.solution === undefined) {
+      errors.push({
+        path: `${practicePath}.cases[${index}].expected`,
+        message:
+          `Case ${index + 1} has no "expected" and the assignment declares no "solution" — the engine would have ` +
+          `nothing to compare the learner's result with. Write the value, or add a "solution".`,
+      });
+    }
+    return {
+      args: rawCase.args,
+      reference: hasExpected ? { kind: "expected", value: rawCase.expected } : { kind: "solution" },
+    };
+  });
+
+  return {
+    type: "code",
+    // Placeholders for the missing-field cases above: an error was already
+    // recorded and this model is on its way to being discarded.
+    language: practice.language ?? "typescript",
+    prompt: practice.prompt,
+    entry: practice.entry ?? "",
+    ...(practice.starter === undefined ? {} : { starter: practice.starter }),
+    cases,
+    ...(practice.solution === undefined ? {} : { solution: practice.solution }),
   };
 }
 

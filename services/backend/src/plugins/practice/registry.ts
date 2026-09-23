@@ -11,12 +11,14 @@
 
 import type { CoursePracticeType } from "../../capabilities/index.js";
 import { answerPracticeStrategy } from "./answer/index.js";
+import { codePracticeStrategy } from "./code/index.js";
 import { sqlPracticeStrategy } from "./sql/index.js";
 import type { PracticeStrategy } from "./api.js";
 
 export const PRACTICE_STRATEGIES: Readonly<Record<CoursePracticeType, PracticeStrategy>> = {
   sql: sqlPracticeStrategy,
   answer: answerPracticeStrategy,
+  code: codePracticeStrategy,
 };
 
 /** The registered strategies, in `PRACTICE_TYPES` order. */

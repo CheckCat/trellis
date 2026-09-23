@@ -112,10 +112,31 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["sql", "answer"],
-          "description": "Absent means `sql` — courses written before the second mechanic existed stay valid unchanged."
+          "enum": ["sql", "answer", "code"],
+          "description": "Absent means `sql` — courses written before the second mechanic existed stay valid unchanged. `code` runs the learner's exported function in a child node process and compares each `cases[].args` call's return value with `cases[].expected` or with what `solution` returns."
         },
         "prompt": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "language": {
+          "type": "string",
+          "enum": ["typescript", "javascript"],
+          "description": "type: code only. What the learner writes. Both run on node; TypeScript is type-STRIPPED (erasable syntax only, no type checking)."
+        },
+        "entry": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$",
+          "description": "type: code only. Name of the named ESM export the engine calls. `default` is rejected in validate.ts."
+        },
+        "starter": {
+          "type": "string",
+          "description": "type: code only. Initial editor contents shown to the learner."
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "description": "type: code only. The calls the function is graded on — every one must pass.",
+          "items": { "$ref": "#/$defs/codeCase" }
+        },
         "sandbox": { "type": "string", "minLength": 1 },
         "check": { "type": "string", "minLength": 1 },
         "expected": {
@@ -132,13 +153,27 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S",
-          "description": "type: sql only. The author's own SQL solution to the exercise. The core runs it on the freshly seeded sandbox, runs the learner's SQL on an identical one, and compares the resulting database STATES. The strict mechanic for exercises that CHANGE data: it also catches damage the assignment never mentioned (an UPDATE without WHERE). Must be deterministic \u2014 no now()/random(), and no seed column whose DEFAULT varies per run. Never sent to the client."
+          "description": "type: sql or code. For `sql`: the author's own SQL solution to the exercise. The core runs it on the freshly seeded sandbox, runs the learner's SQL on an identical one, and compares the resulting database STATES. The strict mechanic for exercises that CHANGE data: it also catches damage the assignment never mentioned (an UPDATE without WHERE). Must be deterministic \u2014 no now()/random(), and no seed column whose DEFAULT varies per run. For `code`: the author's module on the same `language` with the same `entry`; its return value for a case's `args` is the reference of every case without its own `expected`. Never sent to the client."
         },
         "fields": {
           "type": "array",
           "minItems": 1,
           "description": "type: answer only. The values the learner is asked to report, in the order they are shown.",
           "items": { "$ref": "#/$defs/answerField" }
+        }
+      }
+    },
+    "codeCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["args"],
+      "properties": {
+        "args": {
+          "type": "array",
+          "description": "Arguments the function is called with, in order. Any JSON values."
+        },
+        "expected": {
+          "description": "The value the function must return for these args — any JSON value, `null` included (`expected: null` means \"must return null\"). Absent means \"graded by `solution`\"; validate.ts rejects an absent `expected` when the assignment has no `solution`. Never sent to the client."
         }
       }
     },

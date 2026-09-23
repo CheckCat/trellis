@@ -6,7 +6,7 @@ import test from "node:test";
 import { parse as parseYaml } from "yaml";
 
 import { practiceTypeCapability } from "../../capabilities/index.js";
-import type { CourseAnswerPractice, CourseSqlPractice, ValidationResult } from "../types.js";
+import type { CourseAnswerPractice, CourseCodePractice, CourseSqlPractice, ValidationResult } from "../types.js";
 import { resolveSafePath, validateManifest } from "./validate.js";
 import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeFixtureFiles } from "../test-support.js";
 
@@ -1005,5 +1005,220 @@ void test("validateManifest rejects fields on a sql practice, and a sql practice
         JSON.stringify(noSandbox.errors),
       );
     }
+  });
+});
+
+// --- practice.type: code -------------------------------------------------
+
+/** A manifest whose only lesson carries a code assignment built from
+ * `practiceLines` (already indented under `practice:`). */
+function codeManifest(practiceLines: readonly string[]): unknown {
+  return parseYaml(
+    [
+      "id: fixture-course",
+      "version: 1.0.0",
+      "title: Fixture",
+      "modules:",
+      "  - id: m",
+      "    title: M",
+      "    lessons:",
+      "      - id: first-lesson",
+      "        title: L",
+      "        content: lessons/first-lesson.md",
+      "        practice:",
+      ...practiceLines.map((line) => `          ${line}`),
+      "",
+    ].join("\n"),
+  );
+}
+
+const CODE_PRACTICE_LINES = [
+  "type: code",
+  "language: typescript",
+  "prompt: Add two numbers.",
+  "entry: sum",
+  "cases:",
+  "  - args: [2, 3]",
+  "    expected: 5",
+  "  - args: [-1, 1]",
+  "    expected: 0",
+];
+
+function codePracticeOf(result: ValidationResult): CourseCodePractice {
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const practice = result.ok ? result.manifest.modules[0]?.lessons[0]?.practice : undefined;
+  assert.equal(practice?.type, "code");
+  return practice as CourseCodePractice;
+}
+
+void test("validateManifest accepts a code practice with explicit expectations and normalizes each case's reference", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const practice = codePracticeOf(validateManifest(codeManifest(CODE_PRACTICE_LINES), dir));
+    assert.equal(practice.language, "typescript");
+    assert.equal(practice.entry, "sum");
+    assert.equal(practice.starter, undefined);
+    assert.equal(practice.solution, undefined);
+    assert.deepEqual(practice.cases, [
+      { args: [2, 3], reference: { kind: "expected", value: 5 } },
+      { args: [-1, 1], reference: { kind: "expected", value: 0 } },
+    ]);
+  });
+});
+
+void test("a case without expected is graded by the solution when one is declared", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const practice = codePracticeOf(
+      validateManifest(
+        codeManifest([
+          "type: code",
+          "language: javascript",
+          "prompt: Add.",
+          "entry: sum",
+          "starter: 'export function sum(a, b) {}'",
+          "cases:",
+          "  - args: [2, 3]",
+          "solution: 'export function sum(a, b) { return a + b; }'",
+        ]),
+        dir,
+      ),
+    );
+    assert.deepEqual(practice.cases, [{ args: [2, 3], reference: { kind: "solution" } }]);
+    assert.equal(practice.starter, "export function sum(a, b) {}");
+    assert.equal(practice.solution, "export function sum(a, b) { return a + b; }");
+  });
+});
+
+void test("expected: null is a reference value, not a missing reference (Review Focus 4)", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const practice = codePracticeOf(
+      validateManifest(
+        codeManifest([
+          "type: code",
+          "language: javascript",
+          "prompt: P.",
+          "entry: f",
+          "cases:",
+          "  - args: []",
+          "    expected: null",
+        ]),
+        dir,
+      ),
+    );
+    assert.deepEqual(practice.cases[0]?.reference, { kind: "expected", value: null });
+  });
+});
+
+void test("a case without expected in a practice without solution is rejected, naming the case", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const result = validateManifest(
+      codeManifest([
+        "type: code",
+        "language: javascript",
+        "prompt: P.",
+        "entry: f",
+        "cases:",
+        "  - args: [1]",
+        "    expected: 1",
+        "  - args: [2]",
+      ]),
+      dir,
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.deepEqual(
+      result.errors.map((e) => e.path),
+      ["modules[0].lessons[0].practice.cases[1].expected"],
+    );
+  });
+});
+
+void test("language, entry and cases are required for type: code, each error named separately", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const result = validateManifest(codeManifest(["type: code", "prompt: P."]), dir);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.deepEqual(result.errors.map((e) => e.path).sort(), [
+      "modules[0].lessons[0].practice.cases",
+      "modules[0].lessons[0].practice.entry",
+      "modules[0].lessons[0].practice.language",
+    ]);
+  });
+});
+
+void test("entry must be an identifier and may not be `default`", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    for (const entry of ["1abc", "my-fn", "default"]) {
+      const result = validateManifest(
+        codeManifest([
+          "type: code",
+          "language: javascript",
+          "prompt: P.",
+          `entry: "${entry}"`,
+          "cases:",
+          "  - args: []",
+          "    expected: 1",
+        ]),
+        dir,
+      );
+      assert.equal(result.ok, false, entry);
+      if (result.ok) return;
+      assert.ok(
+        result.errors.some((e) => e.path.endsWith(".practice.entry")),
+        `${entry}: ${JSON.stringify(result.errors)}`,
+      );
+    }
+  });
+});
+
+void test("sql fields on a code practice are foreign and rejected by name", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const result = validateManifest(codeManifest([...CODE_PRACTICE_LINES, "sandbox: main", "check: select true"]), dir);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    const paths = result.errors.map((e) => e.path);
+    assert.ok(paths.includes("modules[0].lessons[0].practice.sandbox"), JSON.stringify(result.errors));
+    assert.ok(paths.includes("modules[0].lessons[0].practice.check"));
+    // `solution` is shared by sql and code — declaring it on a code
+    // practice must NOT be flagged as foreign.
+    assert.ok(!paths.some((p) => p.endsWith(".solution")));
+  });
+});
+
+void test("args that is not an array, and an unknown language, are structural errors", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const badArgs = validateManifest(
+      codeManifest([
+        "type: code",
+        "language: javascript",
+        "prompt: P.",
+        "entry: f",
+        "cases:",
+        "  - args: 5",
+        "    expected: 1",
+      ]),
+      dir,
+    );
+    assert.equal(badArgs.ok, false);
+    const badLanguage = validateManifest(
+      codeManifest([
+        "type: code",
+        "language: python",
+        "prompt: P.",
+        "entry: f",
+        "cases:",
+        "  - args: []",
+        "    expected: 1",
+      ]),
+      dir,
+    );
+    assert.equal(badLanguage.ok, false);
   });
 });

@@ -385,6 +385,7 @@ export const VERIFY_MECHANICS: Readonly<Record<VerifyKind, { practiceType?: stri
   "sql-state": { practiceType: "sql", mechanic: "check" },
   "sql-result": { practiceType: "sql", mechanic: "expected" },
   answer: { practiceType: "answer", mechanic: "fields" },
+  code: { practiceType: "code", mechanic: "cases" },
   self: {},
 };
 
@@ -461,6 +462,8 @@ function describeActualVerification(lesson: CourseLesson): readonly VerifyKind[]
   if (practice !== undefined) {
     if (practice.type === "answer") {
       kinds.push("answer");
+    } else if (practice.type === "code") {
+      kinds.push("code");
     } else {
       if (practice.check !== undefined || practice.solution !== undefined) {
         // Both mechanics answer "did the database end up right": `check`

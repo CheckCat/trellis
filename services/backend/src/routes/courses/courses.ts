@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 
-import { ANSWER_FIELD_KINDS, PRACTICE_TYPES } from "../../capabilities/index.js";
+import { ANSWER_FIELD_KINDS, CODE_LANGUAGES, PRACTICE_TYPES } from "../../capabilities/index.js";
 import type { Course, CourseLesson, CoursePractice } from "../../courses/types.js";
 
 /**
@@ -181,6 +181,17 @@ function toPublicPractice(practice: CoursePractice) {
       };
     case "sql":
       return { type: practice.type, prompt: practice.prompt, sandbox: practice.sandbox };
+    case "code":
+      return {
+        type: practice.type,
+        prompt: practice.prompt,
+        language: practice.language,
+        entry: practice.entry,
+        // `cases` and `solution` stay behind on purpose: the reference
+        // values are the answer, and even the inputs are not needed to
+        // show the assignment — the run response carries them per case.
+        ...(practice.starter === undefined ? {} : { starter: practice.starter }),
+      };
     default: {
       const unhandled: never = practice;
       throw new Error(`no public shape for practice type ${JSON.stringify((unhandled as { type: string }).type)}`);
@@ -332,6 +343,9 @@ export const publicPracticeSchema = {
     prompt: { type: "string" },
     sandbox: { type: "string" },
     fields: { type: "array", items: publicAnswerFieldSchema },
+    language: { type: "string", enum: [...CODE_LANGUAGES] },
+    entry: { type: "string" },
+    starter: { type: "string" },
   },
 } as const;
 
