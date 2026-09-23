@@ -41,7 +41,7 @@
 
 import type { FastifyInstance } from "fastify";
 
-import { MAX_PRACTICE_SQL_LENGTH } from "../../../capabilities.js";
+import { MAX_PRACTICE_SQL_LENGTH } from "../../../capabilities/index.js";
 import type { CourseSqlPractice } from "../../../courses/types.js";
 import { isPracticeCheckError } from "./check.js";
 import { isPracticeExpectedError } from "./compare.js";
@@ -51,7 +51,7 @@ import {
   type SqlPracticeAttemptResult,
 } from "./run-sql.js";
 import { isPracticeSolutionError } from "./state.js";
-import { lessonCompletionMode } from "../../../progress/model.js";
+import { lessonCompletionMode } from "../../../progress/model/index.js";
 import { isPostgresSandboxDriver } from "../../postgres-sandbox/index.js";
 import { isSandboxError, SandboxError } from "../../../sandbox/types.js";
 import {
@@ -61,8 +61,8 @@ import {
   lessonParamsSchema,
   lessonProgressSchema,
   toLessonCompletionPayload,
-} from "../../../routes/progress.js";
-import { sendSandboxError } from "../../../routes/sandbox.js";
+} from "../../../routes/progress/index.js";
+import { sendSandboxError } from "../../../routes/sandbox/index.js";
 import { resolvePractice, type PracticeStrategy } from "../api.js";
 
 export const sqlPracticeStrategy: PracticeStrategy = {

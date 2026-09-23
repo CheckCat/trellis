@@ -10,14 +10,14 @@ import fs from "node:fs";
 
 import type { FastifyInstance } from "fastify";
 
-import { createCourseRegistry } from "../courses/registry.js";
+import { createCourseRegistry } from "../courses/registry/index.js";
 import { makeTempDir, writeCoursePackage, type FixtureFile } from "../courses/test-support.js";
 import type { Course } from "../courses/types.js";
-import type { AppPool } from "../db/pool.js";
-import { buildServer } from "../server.js";
-import { progressKey } from "./model.js";
-import type { ProgressRecord } from "./model.js";
-import type { ImportProgressRecord, MarkLessonCompletedInput, ProgressRepository } from "./repository.js";
+import type { AppPool } from "../db/pool/index.js";
+import { buildServer } from "../server/index.js";
+import { progressKey } from "./model/index.js";
+import type { ProgressRecord } from "./model/index.js";
+import type { ImportProgressRecord, MarkLessonCompletedInput, ProgressRepository } from "./repository/index.js";
 
 /**
  * An in-memory `ProgressRepository` with the same observable contract as the

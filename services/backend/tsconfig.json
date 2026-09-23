@@ -4,8 +4,8 @@
     "rootDir": "src",
     "outDir": "dist",
     "types": ["node"],
-    // Needed for `import manifestSchema from "./manifest.schema.json" with
-    // { type: "json" }` in courses/validate.ts: the schema is data, checked
+    // Needed for `import manifestSchema from "../manifest.schema.json" with
+    // { type: "json" }` in courses/validate/validate.ts: the schema is data, checked
     // into the repo as plain JSON (task-006 brief), not re-expressed as a
     // .ts module. With this + the "type": "json" import attribute, tsc both
     // type-checks the import and copies manifest.schema.json into dist/
@@ -26,7 +26,7 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/courses/test-support.ts",
-    "src/db/test-support.ts",
+    "src/db/test-support",
     "src/progress/test-support.ts",
     "src/sandbox/test-support.ts",
     "src/plugins/practice/test-support.ts"

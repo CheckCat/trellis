@@ -9,7 +9,7 @@
 // `practiceTypes`, a plugin folder beside sql/ and answer/, and one line
 // here. Nothing in index.ts, nothing in api.ts, nothing in the provisioner.
 
-import type { CoursePracticeType } from "../../capabilities.js";
+import type { CoursePracticeType } from "../../capabilities/index.js";
 import { answerPracticeStrategy } from "./answer/index.js";
 import { sqlPracticeStrategy } from "./sql/index.js";
 import type { PracticeStrategy } from "./api.js";

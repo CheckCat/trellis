@@ -10,10 +10,10 @@
 
 import type { FastifyInstance } from "fastify";
 
-import { MAX_ANSWER_VALUE_LENGTH } from "../../../capabilities.js";
+import { MAX_ANSWER_VALUE_LENGTH } from "../../../capabilities/index.js";
 import type { CourseAnswerPractice } from "../../../courses/types.js";
 import { gradeAnswers } from "./grade.js";
-import { lessonCompletionMode } from "../../../progress/model.js";
+import { lessonCompletionMode } from "../../../progress/model/index.js";
 import {
   buildTree,
   courseProgressSummarySchema,
@@ -21,7 +21,7 @@ import {
   lessonParamsSchema,
   lessonProgressSchema,
   toLessonCompletionPayload,
-} from "../../../routes/progress.js";
+} from "../../../routes/progress/index.js";
 import { resolvePractice, type PracticeStrategy } from "../api.js";
 
 export const answerPracticeStrategy: PracticeStrategy = {

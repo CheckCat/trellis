@@ -29,8 +29,8 @@ import test from "node:test";
 
 import type { FastifyInstance } from "fastify";
 
-import type { CoursePracticeType } from "./capabilities.js";
-import { createCourseRegistry } from "./courses/registry.js";
+import type { CoursePracticeType } from "./capabilities/index.js";
+import { createCourseRegistry } from "./courses/registry/index.js";
 import { makeTempDir, writeCoursePackage } from "./courses/test-support.js";
 import {
   createInMemoryProgressRepository,
@@ -38,10 +38,10 @@ import {
   progressFixtureFiles,
   progressFixtureManifestYaml,
 } from "./progress/test-support.js";
-import { createSandboxProvisioner } from "./sandbox/provisioner.js";
+import { createSandboxProvisioner } from "./sandbox/provisioner/index.js";
 import { SandboxError, type SandboxDriver, type SandboxSpec, type SandboxType } from "./sandbox/types.js";
 import { practiceStrategies, type PracticeStrategy } from "./plugins/practice/index.js";
-import { buildServer } from "./server.js";
+import { buildServer } from "./server/index.js";
 
 /** A sandbox kind that does not exist yet — see the header. */
 const FUTURE_SANDBOX_TYPE = "memory" as SandboxType;

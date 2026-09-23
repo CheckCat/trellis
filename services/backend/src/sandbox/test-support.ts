@@ -19,9 +19,9 @@ import path from "node:path";
 
 import type { PoolClient } from "pg";
 
-import { createCourseRegistry, type CourseRegistry } from "../courses/registry.js";
+import { createCourseRegistry, type CourseRegistry } from "../courses/registry/index.js";
 import { makeTempDir, writeCoursePackage, type FixtureFile } from "../courses/test-support.js";
-import type { AppPool } from "../db/pool.js";
+import type { AppPool } from "../db/pool/index.js";
 
 export interface RecordingPool {
   readonly pool: AppPool;

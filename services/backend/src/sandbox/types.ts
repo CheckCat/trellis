@@ -20,7 +20,7 @@
  * capability registry, which is where a kind comes into existence
  * (project invariant). The manifest's `sandboxes[].type` enum is checked
  * against the same list by capabilities.test.ts. */
-import type { SandboxType } from "../capabilities.js";
+import type { SandboxType } from "../capabilities/index.js";
 
 export type { SandboxType };
 

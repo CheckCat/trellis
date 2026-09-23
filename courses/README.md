@@ -21,7 +21,7 @@ Trellis (`services/backend`) сканирует эту директорию пр
 `docs/contracts/capabilities.json`**: типы песочниц, типы практики с их
 полями и умолчаниями, правила квиза, лимиты (строки результата, предел
 сравнения, таймаут запроса) и версия контракта манифеста. Он
-генерируется из `services/backend/src/capabilities.ts`, коммитится в
+генерируется из `services/backend/src/capabilities/capabilities.ts`, коммитится в
 репозиторий и проверяется в CI (`npm run capabilities:check`), так что
 отстать от кода он не может. Поднятый стек отдаёт ровно тот же документ
 по `GET /api/capabilities`.

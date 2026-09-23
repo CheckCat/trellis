@@ -37,9 +37,9 @@ export interface CourseQuiz {
  * kind exists only if it is registered there (project invariant), and two
  * declarations of the same union could disagree.
  */
-import type { AnswerFieldKind, SandboxType } from "../capabilities.js";
+import type { AnswerFieldKind, SandboxType } from "../capabilities/index.js";
 
-export type { AnswerFieldKind, CoursePracticeType, SandboxType } from "../capabilities.js";
+export type { AnswerFieldKind, CoursePracticeType, SandboxType } from "../capabilities/index.js";
 
 /**
  * A practice assignment done in a course SANDBOX: the learner writes SQL,

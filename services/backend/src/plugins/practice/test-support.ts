@@ -25,9 +25,9 @@ import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 import { DatabaseError, type PoolClient } from "pg";
 
-import { createCourseRegistry } from "../../courses/registry.js";
+import { createCourseRegistry } from "../../courses/registry/index.js";
 import { makeTempDir, writeCoursePackage } from "../../courses/test-support.js";
-import type { ProgressRecord } from "../../progress/model.js";
+import type { ProgressRecord } from "../../progress/model/index.js";
 import {
   createInMemoryProgressRepository,
   poolThatMustNotBeUsed,
@@ -36,8 +36,8 @@ import {
   type FakeProgressRepository,
 } from "../../progress/test-support.js";
 import type { PostgresSandboxDriver } from "../postgres-sandbox/index.js";
-import { createSandboxProvisioner } from "../../sandbox/provisioner.js";
-import { buildServer } from "../../server.js";
+import { createSandboxProvisioner } from "../../sandbox/provisioner/index.js";
+import { buildServer } from "../../server/index.js";
 
 /** One query as the code under test issued it. `rowMode` is recorded because
  * "rows come back positionally, not keyed by column name" is part of both
