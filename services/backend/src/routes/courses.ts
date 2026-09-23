@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 
+import { ANSWER_FIELD_KINDS, PRACTICE_TYPES } from "../capabilities.js";
 import type { Course, CourseLesson, CoursePractice } from "../courses/types.js";
 
 /**
@@ -305,7 +306,7 @@ export const publicAnswerFieldSchema = {
   properties: {
     id: { type: "string" },
     label: { type: "string" },
-    kind: { type: "string", enum: ["number", "text"] },
+    kind: { type: "string", enum: [...ANSWER_FIELD_KINDS] },
   },
 } as const;
 
@@ -315,9 +316,11 @@ export const publicAnswerFieldSchema = {
  * `sandbox` is present only for `sql`, `fields` only for `answer` — see
  * `toLessonResponse`.
  *
- * The enum is written out rather than spread from `PRACTICE_TYPES` because
- * these schemas are literals fast-json-stringify compiles once at startup;
- * courses.schema.test.ts is the seam that keeps it equal to the registry.
+ * `enum` is spread from `PRACTICE_TYPES` (capabilities.ts), not written out:
+ * fast-json-stringify still compiles this to one literal schema at startup
+ * (the spread runs once, at module load, same as any other `as const`
+ * value) — but a type the registry gains now shows up here automatically
+ * instead of depending on courses.schema.test.ts to catch the drift.
  * Getting it wrong is quiet in the worst way — `additionalProperties:
  * false` strips whatever the schema does not name. */
 export const publicPracticeSchema = {
@@ -325,7 +328,7 @@ export const publicPracticeSchema = {
   additionalProperties: false,
   required: ["type", "prompt"],
   properties: {
-    type: { type: "string", enum: ["sql", "answer"] },
+    type: { type: "string", enum: [...PRACTICE_TYPES] },
     prompt: { type: "string" },
     sandbox: { type: "string" },
     fields: { type: "array", items: publicAnswerFieldSchema },

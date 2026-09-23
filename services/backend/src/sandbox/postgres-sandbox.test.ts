@@ -5,7 +5,7 @@ import {
   createPostgresSandboxDriverFromPool,
   createUnconfiguredPostgresSandboxDriver,
 } from "./postgres-sandbox.js";
-import { createRecordingPool } from "./testSupport.js";
+import { createRecordingPool } from "./test-support.js";
 import { SandboxError, type SandboxSpec } from "./types.js";
 
 function spec(overrides: Partial<SandboxSpec> = {}): SandboxSpec {

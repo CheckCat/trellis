@@ -12,7 +12,7 @@ import {
   validCourseFixtureFiles,
   validManifestYaml,
   writeCoursePackage,
-} from "../courses/testSupport.js";
+} from "../courses/test-support.js";
 
 /** Builds a `buildServer({ pool, registry })` app over a temp `coursesDir`
  * with one valid + one broken course package already on disk, and hands it

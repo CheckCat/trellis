@@ -1,7 +1,7 @@
 // Test-only helpers for the sandbox layer, shared by
 // sandbox/postgres-sandbox.test.ts, sandbox/provisioner.test.ts and
 // routes/sandbox.test.ts. Kept out of the production build exactly like
-// courses/testSupport.ts, db/testSupport.ts and progress/testSupport.ts —
+// courses/test-support.ts, db/test-support.ts and progress/test-support.ts —
 // see tsconfig.json's `exclude`.
 //
 // The recording pool below is what lets the REAL Postgres driver be tested
@@ -20,7 +20,7 @@ import path from "node:path";
 import type { PoolClient } from "pg";
 
 import { createCourseRegistry, type CourseRegistry } from "../courses/registry.js";
-import { makeTempDir, writeCoursePackage, type FixtureFile } from "../courses/testSupport.js";
+import { makeTempDir, writeCoursePackage, type FixtureFile } from "../courses/test-support.js";
 import type { AppPool } from "../db/pool.js";
 
 export interface RecordingPool {

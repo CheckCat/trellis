@@ -23,14 +23,14 @@ import {
   resultSet,
   withPracticeApp,
   type ScriptedAnswer,
-} from "../practice/testSupport.js";
+} from "../practice/test-support.js";
 import {
   completedRecord,
   FIXTURE_COURSE_ID,
   FIXTURE_PRACTICE_LESSON_ID,
   FIXTURE_QUIZ_LESSON_ID,
   FIXTURE_UNCHECKED_PRACTICE_LESSON_ID,
-} from "../progress/testSupport.js";
+} from "../progress/test-support.js";
 
 /** The `check` the fixture course declares for its graded practice lesson —
  * the text that must never appear in any response. */

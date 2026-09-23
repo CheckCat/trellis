@@ -31,13 +31,13 @@ import type { FastifyInstance } from "fastify";
 
 import type { CoursePracticeType } from "./capabilities.js";
 import { createCourseRegistry } from "./courses/registry.js";
-import { makeTempDir, writeCoursePackage } from "./courses/testSupport.js";
+import { makeTempDir, writeCoursePackage } from "./courses/test-support.js";
 import {
   createInMemoryProgressRepository,
   poolThatMustNotBeUsed,
   progressFixtureFiles,
   progressFixtureManifestYaml,
-} from "./progress/testSupport.js";
+} from "./progress/test-support.js";
 import { createSandboxProvisioner } from "./sandbox/provisioner.js";
 import { SandboxError, type SandboxDriver, type SandboxSpec, type SandboxType } from "./sandbox/types.js";
 import { practiceStrategies, type PracticeStrategy } from "./routes/practice/index.js";

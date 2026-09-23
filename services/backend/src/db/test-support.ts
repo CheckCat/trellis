@@ -1,6 +1,6 @@
 // Shared test-only helper for connecting to a disposable test Postgres
 // database, or skipping. Not a *.test.ts file itself (same treatment as
-// courses/testSupport.ts — see tsconfig.json's `exclude`), because
+// courses/test-support.ts — see tsconfig.json's `exclude`), because
 // pool.test.ts and migrate.test.ts both need the exact same guard logic and
 // duplicating it would be duplicating real logic, not just similar lines
 // (backend-implementer role: SRP > DRY, but DRY still applies once it's

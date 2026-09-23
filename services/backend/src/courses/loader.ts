@@ -4,7 +4,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { validateManifest } from "./validate.js";
-import { describeError, isErrnoException } from "./fsErrors.js";
+import { describeError, isErrnoException } from "./fs-errors.js";
 import type { Course, CourseLesson, CourseModule, LoadResult, ValidationError } from "./types.js";
 
 const MANIFEST_FILENAME = "manifest.yaml";

@@ -4,7 +4,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createCourseRegistry } from "./registry.js";
-import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeCoursePackage } from "./testSupport.js";
+import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeCoursePackage } from "./test-support.js";
 
 function withTempDir(run: (dir: string) => void): void {
   const dir = makeTempDir();

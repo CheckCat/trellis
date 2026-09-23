@@ -9,7 +9,7 @@ import {
   type ComparableResult,
   type PracticeExpectedVerdict,
 } from "./compare.js";
-import { createScriptedSandboxDriver, databaseError, resultSet, type ScriptedAnswer } from "./testSupport.js";
+import { createScriptedSandboxDriver, databaseError, resultSet, type ScriptedAnswer } from "./test-support.js";
 
 // Postgres type OIDs, named so the tests read as types rather than numbers.
 const TEXT = 25;

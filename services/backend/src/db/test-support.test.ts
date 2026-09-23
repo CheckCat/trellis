@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { TestContext } from "node:test";
 
-import { connectToDisposableTestDbOrSkip } from "./testSupport.js";
+import { connectToDisposableTestDbOrSkip } from "./test-support.js";
 
 /**
  * A minimal stand-in for `TestContext` that only records `.skip()` calls

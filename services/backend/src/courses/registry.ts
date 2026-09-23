@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { scanCoursesDir, type RejectedCourse } from "./loader.js";
-import { describeError, isErrnoException } from "./fsErrors.js";
+import { describeError, isErrnoException } from "./fs-errors.js";
 import type { Course, ValidationError } from "./types.js";
 
 export interface CourseSummary {

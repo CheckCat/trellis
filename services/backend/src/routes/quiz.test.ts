@@ -13,7 +13,7 @@ import {
   FIXTURE_TEXT_LESSON_ID,
   FIXTURE_UNCHECKED_PRACTICE_LESSON_ID,
   withProgressApp,
-} from "../progress/testSupport.js";
+} from "../progress/test-support.js";
 
 const ANSWER_URL = `/courses/${FIXTURE_COURSE_ID}/lessons/${FIXTURE_QUIZ_LESSON_ID}/quiz/answer`;
 

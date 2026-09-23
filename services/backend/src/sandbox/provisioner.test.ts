@@ -11,7 +11,7 @@ import {
   FIXTURE_SEED_DATA_SQL,
   FIXTURE_SEED_SCHEMA,
   FIXTURE_SEED_SCHEMA_SQL,
-} from "./testSupport.js";
+} from "./test-support.js";
 import { SandboxError, type SandboxDriver, type SandboxProvisioner, type SandboxSpec } from "./types.js";
 
 /** A driver that records the specs it was handed instead of touching a

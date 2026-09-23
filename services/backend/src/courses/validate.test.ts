@@ -8,7 +8,7 @@ import { parse as parseYaml } from "yaml";
 import { practiceTypeCapability } from "../capabilities.js";
 import type { CourseAnswerPractice, CourseSqlPractice, ValidationResult } from "./types.js";
 import { resolveSafePath, validateManifest } from "./validate.js";
-import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeFixtureFiles } from "./testSupport.js";
+import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeFixtureFiles } from "./test-support.js";
 
 /** Runs `run` against a fresh temp package directory, always cleaning it up
  * afterwards — every test below needs a real directory because

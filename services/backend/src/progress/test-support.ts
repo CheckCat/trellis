@@ -1,6 +1,6 @@
 // Test-only helpers for the progress domain, shared by routes/progress.test.ts
 // and routes/quiz.test.ts (and reconcile.test.ts's fixtures). Kept out of the
-// production build exactly like courses/testSupport.ts and db/testSupport.ts
+// production build exactly like courses/test-support.ts and db/test-support.ts
 // — see tsconfig.json's `exclude`.
 //
 // Everything here is synthetic: no real course's ids, titles or content (the
@@ -11,7 +11,7 @@ import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 
 import { createCourseRegistry } from "../courses/registry.js";
-import { makeTempDir, writeCoursePackage, type FixtureFile } from "../courses/testSupport.js";
+import { makeTempDir, writeCoursePackage, type FixtureFile } from "../courses/test-support.js";
 import type { Course } from "../courses/types.js";
 import type { AppPool } from "../db/pool.js";
 import { buildServer } from "../server.js";

@@ -4,8 +4,8 @@ import path from "node:path";
 import test from "node:test";
 
 import { lintPackage, runLint } from "./course-lint-cli.js";
-import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeCoursePackage } from "./courses/testSupport.js";
-import { repoPath } from "./repoRoot.js";
+import { makeTempDir, validCourseFixtureFiles, validManifestYaml, writeCoursePackage } from "./courses/test-support.js";
+import { repoPath } from "./repo-root.js";
 
 /** Writes a package with the shared valid manifest plus an optional
  * skills.yaml, and hands back its directory. */

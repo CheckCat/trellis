@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { repoPath } from "../repoRoot.js";
+import { repoPath } from "../repo-root.js";
 import { LINT_RULES } from "./course.js";
 
 /**

@@ -1,6 +1,6 @@
 // Repository tests run against a REAL Postgres (the disposable
 // `TRELLIS_TEST_DATABASE_URL` one — never DATABASE_URL, see
-// db/testSupport.ts): the whole point of this module is its SQL, so a fake
+// db/test-support.ts): the whole point of this module is its SQL, so a fake
 // pool would test nothing. They take the exclusive test-db lock because
 // db/migrate.test.ts drops core.lesson_progress and test files run
 // concurrently.
@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 import test, { type TestContext } from "node:test";
 
 import { runMigrations } from "../db/migrate.js";
-import { connectToDisposableTestDbOrSkip } from "../db/testSupport.js";
+import { connectToDisposableTestDbOrSkip } from "../db/test-support.js";
 import { createProgressRepository, type ProgressRepository } from "./repository.js";
 
 const REASON =

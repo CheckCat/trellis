@@ -11,10 +11,11 @@ import { publicAnswerFieldSchema, publicPracticeSchema } from "./courses.js";
  * word, so a schema that has fallen behind the registry does not fail; it
  * quietly ships less than the course wrote.
  *
- * The enums here are literals on purpose (the schemas are compiled once at
- * startup, and a spread would make them unreadable standalone). These
- * assertions are what keeps the literals honest — the same arrangement
- * capabilities.test.ts uses for manifest.schema.json.
+ * The enums are spread from capabilities.ts's PRACTICE_TYPES/
+ * ANSWER_FIELD_KINDS, not written out by hand — so a type the registry
+ * gains shows up here without anyone touching courses.ts. These assertions
+ * are a regression guard (a future edit could still re-literal one by
+ * accident), not the only thing keeping the two in sync.
  */
 
 void test("the lesson response's practice.type enum is exactly the registered practice types", () => {

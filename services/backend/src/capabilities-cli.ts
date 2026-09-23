@@ -18,7 +18,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { CAPABILITIES } from "./capabilities.js";
-import { repoPath } from "./repoRoot.js";
+import { repoPath } from "./repo-root.js";
 
 /** Repo-relative, so the message a failing check prints matches what a
  * developer would type. */

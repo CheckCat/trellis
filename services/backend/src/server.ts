@@ -62,7 +62,7 @@ export interface BuildServerOptions {
   /**
    * Injects a progress repository (task 007) — same test pattern as `pool`
    * and `registry` above: route tests substitute an in-memory fake (see
-   * progress/testSupport.ts) and never touch Postgres, while the repository
+   * progress/test-support.ts) and never touch Postgres, while the repository
    * itself is tested directly against a disposable database. Defaults to a
    * real `createProgressRepository(pool)` over whichever pool this server
    * ended up with.
@@ -72,7 +72,7 @@ export interface BuildServerOptions {
    * Injects a practice-sandbox provisioner (task 008) — same test pattern
    * as `pool`/`registry`/`progress`: route tests build the real provisioner
    * over the real Postgres driver on top of a recording fake pool (see
-   * sandbox/testSupport.ts) and never touch a database. An injected
+   * sandbox/test-support.ts) and never touch a database. An injected
    * provisioner is the caller's own: `buildServer` does not close it.
    */
   readonly sandbox?: SandboxProvisioner;

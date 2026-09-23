@@ -19,7 +19,7 @@ import {
   resultSet,
   type RecordedQuery,
   type ScriptedAnswer,
-} from "./testSupport.js";
+} from "./test-support.js";
 
 /** Runs one statement against a scripted sandbox client, the way the route
  * does (driver-checked-out client, never a pool of its own). */

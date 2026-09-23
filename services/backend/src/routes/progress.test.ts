@@ -10,7 +10,7 @@ import {
   FIXTURE_TEXT_LESSON_ID,
   FIXTURE_UNCHECKED_PRACTICE_LESSON_ID,
   withProgressApp,
-} from "../progress/testSupport.js";
+} from "../progress/test-support.js";
 
 interface LessonBody {
   readonly id: string;

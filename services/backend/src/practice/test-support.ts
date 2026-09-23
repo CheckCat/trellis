@@ -1,6 +1,6 @@
 // Test-only helpers for the practice layer, shared by practice/execute.test.ts,
 // practice/check.test.ts and routes/practice.test.ts. Kept out of the
-// production build exactly like the other testSupport.ts files — see
+// production build exactly like the other test-support.ts files — see
 // tsconfig.json's `exclude`.
 //
 // What the scripted driver below buys: practice execution is defined by what
@@ -9,7 +9,7 @@
 // Postgres makes awkward to produce on demand (a multi-statement result
 // array, a check returning two columns, a `bytea` cell, a DatabaseError with
 // a `position`). It is a driver-level fake rather than a pool-level one
-// (sandbox/testSupport.ts's `createRecordingPool`) because this layer's
+// (sandbox/test-support.ts's `createRecordingPool`) because this layer's
 // contract is about query CONFIGS and RESULTS, not about statement order
 // inside a transaction.
 //
@@ -26,7 +26,7 @@ import type { FastifyInstance } from "fastify";
 import { DatabaseError, type PoolClient } from "pg";
 
 import { createCourseRegistry } from "../courses/registry.js";
-import { makeTempDir, writeCoursePackage } from "../courses/testSupport.js";
+import { makeTempDir, writeCoursePackage } from "../courses/test-support.js";
 import type { ProgressRecord } from "../progress/model.js";
 import {
   createInMemoryProgressRepository,
@@ -34,7 +34,7 @@ import {
   progressFixtureFiles,
   progressFixtureManifestYaml,
   type FakeProgressRepository,
-} from "../progress/testSupport.js";
+} from "../progress/test-support.js";
 import type { PostgresSandboxDriver } from "../sandbox/postgres-sandbox.js";
 import { createSandboxProvisioner } from "../sandbox/provisioner.js";
 import { buildServer } from "../server.js";

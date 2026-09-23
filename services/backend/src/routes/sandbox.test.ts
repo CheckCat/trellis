@@ -13,7 +13,7 @@ import {
   FIXTURE_SEED_SCHEMA,
   type CreateRecordingPoolOptions,
   type SandboxFixture,
-} from "../sandbox/testSupport.js";
+} from "../sandbox/test-support.js";
 import type { SandboxProvisioner } from "../sandbox/types.js";
 import { buildServer } from "../server.js";
 

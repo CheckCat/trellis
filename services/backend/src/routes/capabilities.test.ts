@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { buildServer } from "../server.js";
 import { CAPABILITIES, PRACTICE_TYPES, SANDBOX_TYPES } from "../capabilities.js";
-import { poolThatMustNotBeUsed } from "../progress/testSupport.js";
+import { poolThatMustNotBeUsed } from "../progress/test-support.js";
 
 async function withApp(run: (app: ReturnType<typeof buildServer>) => Promise<void>): Promise<void> {
   // No database, no courses directory, no sandbox: `GET /capabilities`

@@ -8,7 +8,7 @@ import {
   FIXTURE_QUIZ_LESSON_ID,
   FIXTURE_TEXT_LESSON_ID,
   withProgressApp,
-} from "../progress/testSupport.js";
+} from "../progress/test-support.js";
 import { PROGRESS_EXPORT_FORMAT } from "../transfer/format.js";
 
 /** A transfer file as a client would post it. */

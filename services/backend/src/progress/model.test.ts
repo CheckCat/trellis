@@ -4,7 +4,7 @@ import test from "node:test";
 import { CAPABILITIES } from "../capabilities.js";
 import type { CourseLesson, CoursePractice, CourseQuiz } from "../courses/types.js";
 import { findLesson, gradeQuizAnswer, lessonCompletionMode } from "./model.js";
-import { courseFixture } from "./testSupport.js";
+import { courseFixture } from "./test-support.js";
 
 const quiz: CourseQuiz = {
   question: "Which one?",

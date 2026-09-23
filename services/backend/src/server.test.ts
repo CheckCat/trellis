@@ -10,7 +10,7 @@ import test from "node:test";
 import type { AppPool } from "./db/pool.js";
 import { createPostgresSandboxDriverFromPool } from "./sandbox/postgres-sandbox.js";
 import { createSandboxProvisioner } from "./sandbox/provisioner.js";
-import { createRecordingPool, createSandboxFixture, FIXTURE_COURSE_ID } from "./sandbox/testSupport.js";
+import { createRecordingPool, createSandboxFixture, FIXTURE_COURSE_ID } from "./sandbox/test-support.js";
 import { buildServer } from "./server.js";
 
 /** The core db pool this test's server needs to satisfy `buildServer`'s

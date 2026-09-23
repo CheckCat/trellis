@@ -26,7 +26,7 @@ import path from "node:path";
 
 import type { CourseRegistry } from "../courses/registry.js";
 import type { Course, CourseSandbox } from "../courses/types.js";
-import { describeError } from "../courses/fsErrors.js";
+import { describeError } from "../courses/fs-errors.js";
 import { resolveSafePath } from "../courses/validate.js";
 import {
   SandboxError,

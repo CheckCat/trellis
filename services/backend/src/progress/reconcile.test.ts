@@ -4,7 +4,7 @@ import test from "node:test";
 import type { Course } from "../courses/types.js";
 import type { ProgressRecord } from "./model.js";
 import { reconcileCourseProgress } from "./reconcile.js";
-import { courseFixture } from "./testSupport.js";
+import { courseFixture } from "./test-support.js";
 
 function record(courseId: string, lessonId: string, overrides: Partial<ProgressRecord> = {}): ProgressRecord {
   return {

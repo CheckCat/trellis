@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createPool, redactPassword } from "./pool.js";
-import { connectToDisposableTestDbOrSkip } from "./testSupport.js";
+import { connectToDisposableTestDbOrSkip } from "./test-support.js";
 
 // Final review, backend fixes round: this file used to read `DATABASE_URL`
 // directly (a weaker guard than migrate.test.ts's `TRELLIS_TEST_DATABASE_URL`
@@ -13,7 +13,7 @@ import { connectToDisposableTestDbOrSkip } from "./testSupport.js";
 // behind `DATABASE_URL`, any test file copying this file's old pattern for a
 // *new*, actually-destructive check inherits the weaker guard by example.
 // Aligned to the same `connectToDisposableTestDbOrSkip` helper
-// migrate.test.ts uses, not duplicated — see db/testSupport.ts.
+// migrate.test.ts uses, not duplicated — see db/test-support.ts.
 
 void test("withTransaction rolls back on error and returns the client to the pool", async (t) => {
   const pool = await connectToDisposableTestDbOrSkip(t, "scratch-table pool test");

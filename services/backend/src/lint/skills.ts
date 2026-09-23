@@ -21,7 +21,7 @@ import type { ErrorObject } from "ajv";
 import { parse as parseYaml } from "yaml";
 
 import skillsSchema from "./skills.schema.json" with { type: "json" };
-import { describeError } from "../courses/fsErrors.js";
+import { describeError } from "../courses/fs-errors.js";
 import type { ValidationError } from "../courses/types.js";
 
 /** The file the lint looks for beside `manifest.yaml`. */

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { runMigrations } from "./migrate.js";
-import { connectToDisposableTestDbOrSkip } from "./testSupport.js";
+import { connectToDisposableTestDbOrSkip } from "./test-support.js";
 
 const DESTRUCTIVE_MIGRATION_TEST_REASON =
   "destructive migration test (this suite drops/recreates core.lesson_progress and " +

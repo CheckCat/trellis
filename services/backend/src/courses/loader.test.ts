@@ -10,7 +10,7 @@ import {
   validManifestYaml,
   writeCoursePackage,
   writeFixtureFiles,
-} from "./testSupport.js";
+} from "./test-support.js";
 
 function withTempDir(run: (dir: string) => void): void {
   const dir = makeTempDir();
@@ -105,7 +105,7 @@ void test(
       // permissions entirely, which would make this test assert nothing.
       // Skip rather than false-green in that case, same spirit as this
       // codebase's TRELLIS_TEST_DATABASE_URL-gated skips
-      // (db/testSupport.ts's connectToDisposableTestDbOrSkip).
+      // (db/test-support.ts's connectToDisposableTestDbOrSkip).
       fs.chmodSync(contentPath, 0o000);
       let permissionsAreEnforced = true;
       try {
