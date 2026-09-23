@@ -131,8 +131,8 @@ for (const [kind, result, pattern] of [
     { kind: "load_failed", durationMs: 3, error: { message: "SyntaxError: Unexpected token" } },
     /Unexpected token/,
   ],
-  ["entry_missing", { kind: "entry_missing", durationMs: 3, exported: ["Sum"] }, /exported: Sum/],
-  ["timeout", { kind: "timeout", durationMs: 10_000, cases: [] }, /10 seconds/],
+  ["entry_missing", { kind: "entry_missing", durationMs: 3, exported: ["Sum"] }, /«sum».*Экспортировано: Sum/],
+  ["timeout", { kind: "timeout", durationMs: 10_000, cases: [] }, /10 с/],
   [
     "crashed",
     { kind: "crashed", durationMs: 3, exitCode: 134, signal: null, stderr: "heap out of memory" },
@@ -171,7 +171,9 @@ void test("POST practice/code answers 422 solution_failed when the solution is b
       });
       assert.equal(response.statusCode, 422, response.body);
       assert.equal(response.json().error, "solution_failed");
-      assert.match(response.json().message, /SyntaxError: bad/);
+      // A fixed sentence — node's text (which quotes source) stays in the log.
+      assert.match(response.json().message, /could not be run \(the module did not load\)/);
+      assert.equal(response.body.includes("SyntaxError: bad"), false);
       assert.equal(response.body.includes(FIXTURE_CODE_SOLUTION), false);
       // The learner's code was never run.
       assert.equal(requests.length, 1);

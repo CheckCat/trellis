@@ -336,6 +336,7 @@
     "codeTimeoutSeconds": 10,
     "codeMemoryMb": 256,
     "maxCodeCases": 50,
-    "maxCodeOutputChars": 16384
+    "maxCodeOutputChars": 16384,
+    "maxCodeValueChars": 65536
   }
 }

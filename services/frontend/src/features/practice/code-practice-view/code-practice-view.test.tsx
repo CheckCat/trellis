@@ -139,6 +139,28 @@ describe("CodePracticeView", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
+  it("shows the cases that finished before a timeout, and which one hung (review #4)", async () => {
+    renderView(async () =>
+      jsonResponse({
+        ok: false,
+        failure: { kind: "timeout", message: "Выполнение превысило 10 с и было остановлено." },
+        durationMs: 10_000,
+        passed: false,
+        cases: [
+          { args: [1], passed: true, value: 1, output: "", truncated: false },
+          { args: [0], passed: false, output: "", truncated: false },
+        ],
+        ...lessonCourse(false),
+      }),
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Выполнить" }));
+
+    await waitFor(() => expect(screen.getByText("Превышено время выполнения")).toBeTruthy());
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getAllByText("пройден")).toHaveLength(1);
+    expect(screen.getAllByText("не пройден")).toHaveLength(1);
+  });
+
   it("explains a 422 from a broken solution as the course's fault, not the learner's", async () => {
     renderView(async () =>
       jsonResponse({ error: "solution_failed", message: "The solution of this assignment could not be run" }, 422),

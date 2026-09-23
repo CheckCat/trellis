@@ -19,11 +19,18 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import type { CodeLanguage } from "../../../capabilities/index.js";
 import type { EncodedValue } from "./compare.js";
 import { HARNESS_SOURCE } from "./harness.js";
-import { CODE_MEMORY_MB, CODE_TIMEOUT_SECONDS, MAX_CODE_OUTPUT_CHARS, MAX_CODE_PROCESS_OUTPUT_CHARS } from "./limits.js";
+import {
+  CODE_MEMORY_MB,
+  CODE_TIMEOUT_SECONDS,
+  MAX_CODE_OUTPUT_CHARS,
+  MAX_CODE_PROCESS_OUTPUT_CHARS,
+  MAX_CODE_VALUE_CHARS,
+} from "./limits.js";
 
 export interface CodeRunRequest {
   readonly language: CodeLanguage;
@@ -125,6 +132,7 @@ export function createNodeRunner(options: CreateNodeRunnerOptions = {}): CodeRun
             casesPath,
             resultPath,
             String(MAX_CODE_OUTPUT_CHARS),
+            String(MAX_CODE_VALUE_CHARS),
           ],
           dir,
           timeoutMs,
@@ -135,7 +143,12 @@ export function createNodeRunner(options: CreateNodeRunnerOptions = {}): CodeRun
           return { kind: "unavailable", message: outcome.message, durationMs };
         }
         const snapshot = readSnapshot(resultPath);
-        if (outcome.status === "timeout") {
+        // A complete result outranks the deadline: the harness exits as
+        // soon as it has written it, so hitting the deadline WITH a
+        // complete file means something the learner's code left behind
+        // held the process open — not that their function was slow.
+        const complete = snapshot !== undefined && (snapshot.kind !== "ran" || snapshot.complete);
+        if (outcome.status === "timeout" && !complete) {
           return { kind: "timeout", cases: snapshot?.kind === "ran" ? snapshot.cases : [], durationMs };
         }
         if (snapshot === undefined || (snapshot.kind === "ran" && !snapshot.complete)) {
@@ -149,7 +162,7 @@ export function createNodeRunner(options: CreateNodeRunnerOptions = {}): CodeRun
         }
         switch (snapshot.kind) {
           case "load_failed":
-            return { kind: "load_failed", error: snapshot.error, durationMs };
+            return { kind: "load_failed", error: tidyError(snapshot.error, dir, modulePath), durationMs };
           case "entry_missing":
             return { kind: "entry_missing", exported: snapshot.exported, durationMs };
           case "ran":
@@ -160,6 +173,31 @@ export function createNodeRunner(options: CreateNodeRunnerOptions = {}): CodeRun
       }
     },
   };
+}
+
+/**
+ * Node's stack, made about the learner's file: the temp directory (an
+ * implementation detail nobody can act on) becomes the module's bare
+ * name, and node's internal loader frames — which follow every syntax
+ * error and say nothing about the code — are dropped.
+ */
+function tidyError(error: CodeErrorInfo, dir: string, modulePath: string): CodeErrorInfo {
+  const strip = (text: string) =>
+    text
+      .split(pathToFileURL(dir).href + "/")
+      .join("")
+      .split(dir + path.sep)
+      .join("");
+  const message = strip(error.message);
+  if (error.stack === undefined) {
+    return { message };
+  }
+  const stack = strip(error.stack)
+    .split("\n")
+    .filter((line) => !/^\s+at .*node:internal/.test(line))
+    .join("\n");
+  void modulePath;
+  return { message, stack };
 }
 
 function readSnapshot(resultPath: string): HarnessResult | undefined {
@@ -187,10 +225,23 @@ function runProcess(
       }
     };
 
-    const child = spawn(execPath, args, { cwd, env: {}, stdio: ["ignore", "pipe", "pipe"] });
+    // `detached`: the child leads its own process group, so the kill below
+    // takes everything the learner's code spawned along with it. Without
+    // that, a grandchild outlives the deadline — and, holding our stdio
+    // pipes, would keep this promise from ever settling.
+    const child = spawn(execPath, args, { cwd, env: {}, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    const killGroup = () => {
+      if (child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          // Already gone.
+        }
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      killGroup();
     }, timeoutMs);
 
     // stdout is drained and dropped: the learner's console output reaches
@@ -206,9 +257,13 @@ function runProcess(
       clearTimeout(timer);
       settle({ status: "spawn_failed", exitCode: null, signal: null, stderr, message: err.message });
     });
-    child.once("close", (exitCode, signal) => {
+    // Settle on `exit`, not `close`: `close` waits for every stdio pipe to
+    // shut, and a grandchild that inherited them keeps them open forever.
+    // A short grace period lets stderr already in flight arrive.
+    child.once("exit", (exitCode, signal) => {
       clearTimeout(timer);
-      settle({ status: timedOut ? "timeout" : "exited", exitCode, signal, stderr, message: "" });
+      killGroup();
+      setTimeout(() => settle({ status: timedOut ? "timeout" : "exited", exitCode, signal, stderr, message: "" }), 50);
     });
   });
 }

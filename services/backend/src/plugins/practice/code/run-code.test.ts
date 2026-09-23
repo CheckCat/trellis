@@ -5,6 +5,7 @@ import type { CourseCodePractice } from "../../../courses/types.js";
 import { createScriptedCodeRunner, ranWith } from "../test-support.js";
 import { isCodeRunnerUnavailableError, isCodeSolutionError } from "./errors.js";
 import { runCodePracticeAttempt } from "./run-code.js";
+import { createNodeRunner } from "./run-node.js";
 
 const SOLUTION = "export function sum(a, b) { return a + b; }";
 
@@ -179,4 +180,31 @@ void test("a case that threw is failed and carries the learner's error", async (
   );
   assert.equal(attempt.cases[0]?.output, "hi\n");
   assert.equal(attempt.cases[1]?.error?.message, "negative");
+});
+
+// --- Final-review finding #1: the real runner must not leak the solution --
+
+void test("a broken solution's 422 message never carries the solution's source, even through node's own text", async () => {
+  // Non-erasable TypeScript: node's error message quotes the offending
+  // source lines — which, for a solution, is the answer.
+  const secret = "enum Secret { AuthorAnswer = 42 }\nexport function sum(a: number, b: number) { return Secret.AuthorAnswer; }";
+  const p = practice({ language: "typescript", solution: secret, cases: [{ args: [1, 2], reference: { kind: "solution" } }] });
+  await assert.rejects(runCodePracticeAttempt(createNodeRunner(), p, "export function sum() { return 0; }"), (err: Error) => {
+    assert.ok(isCodeSolutionError(err));
+    assert.ok(!err.message.includes("Secret"), err.message);
+    assert.ok(!err.message.includes("AuthorAnswer"), err.message);
+    return true;
+  });
+});
+
+void test("a solution that crashes the process (stderr path) does not leak its source either", async () => {
+  // An uncaught exception from a microtask brings the process down mid-run;
+  // node prints the throwing SOURCE LINE with a caret to stderr.
+  const secret = "export function sum(a, b) { queueMicrotask(() => { throw new Error('secret author bug'); }); return a + b; }";
+  const p = practice({ solution: secret, cases: [{ args: [1, 2], reference: { kind: "solution" } }] });
+  await assert.rejects(runCodePracticeAttempt(createNodeRunner(), p, "export function sum() { return 0; }"), (err: Error) => {
+    assert.ok(isCodeSolutionError(err));
+    assert.ok(!err.message.includes("secret author bug"), err.message);
+    return true;
+  });
 });

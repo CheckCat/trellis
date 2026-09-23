@@ -4,7 +4,7 @@
 // also why its `encode` duplicates compare.ts (run-node.test.ts keeps the
 // two in agreement).
 //
-// Protocol (argv): <modulePath> <entry> <casesPath> <resultPath> <maxOutput>.
+// Protocol (argv): <modulePath> <entry> <casesPath> <resultPath> <maxOutput> <maxValue>.
 // It never prints its result to stdout — the learner's own console.log
 // lives there — but writes result.json, atomically, after EVERY case, so
 // that a run killed by the timeout still leaves the cases that finished.
@@ -14,8 +14,9 @@ import fs from "node:fs";
 import { format } from "node:util";
 import { pathToFileURL } from "node:url";
 
-const [modulePath, entry, casesPath, resultPath, maxOutputArg] = process.argv.slice(2);
+const [modulePath, entry, casesPath, resultPath, maxOutputArg, maxValueArg] = process.argv.slice(2);
 const maxOutput = Number(maxOutputArg);
+const maxValue = Number(maxValueArg);
 const cases = JSON.parse(fs.readFileSync(casesPath, "utf8"));
 
 // A promise that never settles must be a TIMEOUT, not an exit: with an
@@ -105,7 +106,12 @@ for (const args of cases) {
   try {
     const value = await fn(...args);
     try {
-      outcome = { value: encode(value), output, truncated };
+      const encoded = encode(value);
+      const size = JSON.stringify(encoded).length;
+      outcome =
+        size > maxValue
+          ? { error: { message: "The returned value is too large to display: " + size + " characters, the limit is " + maxValue + "." }, output, truncated }
+          : { value: encoded, output, truncated };
     } catch (err) {
       outcome = { error: { message: "The returned value cannot be serialized: " + err.message }, output, truncated };
     }
@@ -119,4 +125,8 @@ for (const args of cases) {
 }
 writeResult({ kind: "ran", cases: done, complete: true });
 clearInterval(keepAlive);
+// Exit explicitly: a timer or a child the learner's code left behind would
+// otherwise keep the process alive until the runner's deadline — and a
+// finished, correct run must not be reported as a timeout.
+process.exit(0);
 `;

@@ -75,7 +75,7 @@ export function createCodePracticeStrategy(options: CreateCodePracticeStrategyOp
             attempt = await runCodePracticeAttempt(runner, practice, request.body.code);
           } catch (err) {
             if (isCodeSolutionError(err)) {
-              request.log.warn({ err }, "code practice solution is broken");
+              request.log.warn({ err, detail: err.detail }, "code practice solution is broken");
               return reply.code(422).send({ error: err.kind, message: err.message });
             }
             if (isCodeRunnerUnavailableError(err)) {
@@ -102,7 +102,9 @@ export function createCodePracticeStrategy(options: CreateCodePracticeStrategyOp
           const { run } = attempt;
           return {
             ok: run.kind === "ran",
-            ...(run.kind === "ran" ? {} : { failure: { kind: run.kind, message: describeFailure(run) } }),
+            ...(run.kind === "ran"
+              ? {}
+              : { failure: { kind: run.kind, message: describeFailure(run, practice.entry) } }),
             durationMs: run.durationMs,
             cases: attempt.cases.map((verdict) => ({
               args: verdict.args,

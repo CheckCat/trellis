@@ -35,6 +35,7 @@ import {
   CODE_TIMEOUT_SECONDS,
   MAX_CODE_CASES,
   MAX_CODE_OUTPUT_CHARS,
+  MAX_CODE_VALUE_CHARS,
 } from "../plugins/practice/code/limits.js";
 
 /**
@@ -537,6 +538,8 @@ const CAPABILITIES_DOCUMENT: EngineCapabilities = {
     maxCodeCases: MAX_CODE_CASES,
     /** Символов вывода console на один case. */
     maxCodeOutputChars: MAX_CODE_OUTPUT_CHARS,
+    /** Символов в JSON возвращённого значения одного case; больше — ошибка case. */
+    maxCodeValueChars: MAX_CODE_VALUE_CHARS,
   },
 };
 

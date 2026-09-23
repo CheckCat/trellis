@@ -212,3 +212,51 @@ void test("a node binary that cannot be started is unavailable", async () => {
   });
   assert.equal(result.kind, "unavailable");
 });
+
+// --- Final-review findings ------------------------------------------------
+
+void test("a grandchild holding the stdio pipes does not hang the run (review #2)", async () => {
+  const code = [
+    "import { spawn } from 'node:child_process';",
+    "export function f() { spawn('sleep', ['30'], { stdio: 'inherit' }); return 1; }",
+  ].join("\n");
+  const started = Date.now();
+  const result = await createNodeRunner({ timeoutMs: 3000 }).run({ language: "javascript", code, entry: "f", cases: [[]] });
+  assert.deepEqual(
+    ran(result).map((c) => c.value),
+    [1],
+  );
+  assert.ok(Date.now() - started < 2500, "the run waited for the grandchild");
+});
+
+void test("a correct submission that leaves an open handle is ran, not timeout (review #3)", async () => {
+  const code = "export function f(n) { setTimeout(() => {}, 30_000); return n * 2; }";
+  const started = Date.now();
+  const result = await createNodeRunner({ timeoutMs: 3000 }).run({ language: "javascript", code, entry: "f", cases: [[21]] });
+  assert.deepEqual(
+    ran(result).map((c) => c.value),
+    [42],
+  );
+  assert.ok(Date.now() - started < 2500, "the run waited for the timer");
+});
+
+void test("a returned value beyond the size limit is that case's error, not a giant result (review #5)", async () => {
+  const code = "export function f(n) { return n ? 'x'.repeat(200_000) : 'ok'; }";
+  const result = await createNodeRunner().run({ language: "javascript", code, entry: "f", cases: [[0], [1]] });
+  const cases = ran(result);
+  assert.equal(cases[0]?.value, "ok");
+  assert.equal(cases[1]?.value, undefined);
+  assert.match(cases[1]?.error?.message ?? "", /too large/);
+});
+
+void test("a load_failed stack names the module, not the temp path or node internals (review #7)", async () => {
+  const result = await createNodeRunner().run({ language: "javascript", code: "export function (", entry: "f", cases: [[]] });
+  assert.equal(result.kind, "load_failed");
+  const stack = result.kind === "load_failed" ? (result.error.stack ?? "") : "";
+  assert.ok(!stack.includes("node:internal"), stack);
+  assert.ok(!stack.includes("trellis-code-"), stack);
+  // Node does not put the file name into a module SyntaxError's own
+  // `stack` (the caret frame is stderr-only), so what is left is the
+  // error line itself — which is the useful part.
+  assert.match(stack, /^SyntaxError/);
+});

@@ -61,7 +61,13 @@ export function CodePracticeView({
           {execution.failure !== undefined && (
             <CodeFailureView kind={execution.failure.kind} message={execution.failure.message} />
           )}
-          {execution.ok && <CaseTable cases={execution.cases} />}
+          {/* The table is shown whenever any case actually ran — after a
+           * timeout too, so the learner sees which case hung (the harness
+           * saves every finished case for exactly this). Hidden only when
+           * nothing ran at all (the module did not load, no export). */}
+          {execution.cases.some((c) => c.value !== undefined || c.error !== undefined) && (
+            <CaseTable cases={execution.cases} />
+          )}
           {execution.ok && (
             <p
               className={
