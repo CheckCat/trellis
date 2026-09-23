@@ -13,10 +13,10 @@ modules:
     lessons:
       - id: what-is-sql
         title: "Что такое SQL"
-        content: lessons/what-is-sql.md
+        content: lessons/intro/what-is-sql.md
       - id: select-basics
         title: "SELECT: выбираем данные"
-        content: lessons/select-basics.md
+        content: lessons/intro/select-basics.md
         quiz:
           question: "Какая команда SQL используется, чтобы получить (выбрать) данные из таблицы?"
           options:
@@ -34,7 +34,7 @@ modules:
     lessons:
       - id: where-clause
         title: "WHERE: фильтруем строки"
-        content: lessons/where-clause.md
+        content: lessons/filtering/where-clause.md
         quiz:
           question: "Что делает условие в запросе SELECT * FROM books WHERE in_stock = true;?"
           options:
@@ -49,7 +49,7 @@ modules:
               explanation: "WHERE точно так же работает и в SELECT: он ограничивает набор возвращаемых строк по условию."
       - id: practice-instock
         title: "Практика: книги в наличии"
-        content: lessons/practice-instock.md
+        content: lessons/filtering/practice-instock.md
         practice:
           sandbox: main
           prompt: "Напишите запрос, который выбирает название (title) и автора (author) всех книг, которые сейчас есть в наличии (in_stock = true)."
@@ -62,7 +62,7 @@ modules:
           ordered: false
       - id: practice-add-book
         title: "Практика: добавить книгу"
-        content: lessons/practice-add-book.md
+        content: lessons/filtering/practice-add-book.md
         practice:
           sandbox: main
           prompt: "Добавьте в таблицу books новую книгу: title = 'Мастер и Маргарита', author = 'Михаил Булгаков', published_year = 1967, in_stock = true."
@@ -74,7 +74,7 @@ modules:
           solution: "insert into books (title, author, published_year, in_stock) values ('Мастер и Маргарита', 'Михаил Булгаков', 1967, true)"
       - id: practice-update-stock
         title: "Практика: обновить статус книги"
-        content: lessons/practice-update-stock.md
+        content: lessons/filtering/practice-update-stock.md
         practice:
           sandbox: main
           prompt: "Отметьте книгу с id = 1 («Война и мир») как отсутствующую в продаже: обновите in_stock на false."
@@ -85,7 +85,7 @@ modules:
           solution: "update books set in_stock = false where id = 1"
       - id: practice-by-year
         title: "Практика: книги по году издания"
-        content: lessons/practice-by-year.md
+        content: lessons/filtering/practice-by-year.md
         practice:
           sandbox: main
           prompt: "Напишите запрос, который выбирает название (title) и год издания (published_year) всех книг, отсортированные по году издания от самой старой к самой новой."
@@ -95,7 +95,7 @@ modules:
           ordered: true
       - id: self-check-books
         title: "Проверьте себя: что вы знаете о таблице books"
-        content: lessons/self-check-books.md
+        content: lessons/filtering/self-check-books.md
         practice:
           # Задание без песочницы: ученик считает сам (где угодно) и
           # вписывает результат, движок сверяет его с эталоном. Проверяется
@@ -119,4 +119,4 @@ modules:
               tolerance: 0.5
       - id: wrap-up
         title: "Что дальше"
-        content: lessons/wrap-up.md
+        content: lessons/filtering/wrap-up.md

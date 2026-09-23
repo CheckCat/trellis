@@ -9,7 +9,7 @@ description: Use when a Trellis lesson's exercise is done outside the platform (
 Движок не видит, что ученик делал в Excel или в дашборде, — он сверяет
 только вписанные значения. Поля и лимиты — в
 `docs/contracts/capabilities.json`, образец —
-`courses/pilot-sql/lessons/self-check-books.md`.
+`courses/pilot-sql/lessons/filtering/self-check-books.md`.
 
 Это единственный способ проверить работу во внешнем инструменте.
 Альтернатива — самоотметка, то есть урок, про который курс не знает,
