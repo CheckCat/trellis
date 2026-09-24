@@ -1,0 +1,1429 @@
+# План курса «Senior Backend на Node.js»: какие умения он строит, в каком
+# порядке и чем проверяется каждый урок. Движок этот файл не читает — он
+# нужен линту (`npm run course:lint -- courses/senior-backend-node`).
+# Формат — courses/README.md.
+#
+# Точка входа ученика (см. README.md курса): TypeScript, промисы, базовый
+# SQL, HTTP с клиентской стороны, JWT/CORS/cookies как потребитель, SOLID и
+# паттерны на фронте. Эти слова словарём не охраняются.
+version: 1
+
+skills:
+  # --- Node.js изнутри ---
+  - id: explain-runtime
+    title: "Объяснить, где в Node один поток, а где их много: V8, libuv, thread pool"
+  - id: trace-event-loop
+    title: "Предсказать порядок выполнения колбэков по фазам event loop"
+    requires: [explain-runtime]
+  - id: offload-cpu
+    title: "Выбрать, куда вынести CPU-работу: worker_threads, cluster, отдельный процесс, очередь"
+    requires: [trace-event-loop]
+  - id: implement-emitter
+    title: "Реализовать EventEmitter с once/off и корректной обработкой error"
+    requires: [trace-event-loop]
+  - id: use-streams
+    title: "Прогнать данные потоком с backpressure и пробросом ошибок через pipeline"
+    requires: [trace-event-loop]
+  - id: parse-chunked-input
+    title: "Собрать записи из потока чанков, не читая всё в память"
+    requires: [use-streams]
+  - id: diagnose-memory
+    title: "Найти утечку памяти по heap snapshot и объяснить лимиты процесса"
+    requires: [explain-runtime]
+  - id: shutdown-gracefully
+    title: "Спроектировать обработку ошибок процесса и graceful shutdown"
+    requires: [use-streams]
+
+  # --- HTTP-слой ---
+  - id: explain-http-server
+    title: "Объяснить путь запроса в http-сервере Node: парсер, keep-alive, таймауты, лимиты"
+    requires: [use-streams]
+  - id: compose-middleware
+    title: "Построить и объяснить цепочку middleware с обработкой ошибок"
+    requires: [explain-http-server]
+  - id: use-fastify
+    title: "Объяснить модель Fastify: схемы, инкапсуляция, хуки, откуда скорость"
+    requires: [compose-middleware]
+  - id: use-nest-di
+    title: "Спроектировать граф модулей и провайдеров NestJS и выбрать scope"
+    requires: [compose-middleware]
+  - id: use-nest-pipeline
+    title: "Разместить логику в конвейере Nest: guard, interceptor, pipe, filter"
+    requires: [use-nest-di]
+  - id: implement-di
+    title: "Реализовать DI-контейнер с разрешением графа и обнаружением циклов"
+    requires: [use-nest-di]
+  - id: design-errors
+    title: "Валидировать вход на границе и отдавать ошибки в едином формате без утечек"
+    requires: [compose-middleware]
+  - id: choose-framework
+    title: "Обосновать выбор фреймворка под задачу и команду"
+    requires: [use-fastify, use-nest-pipeline]
+
+  # --- API ---
+  - id: design-rest
+    title: "Спроектировать REST-контракт: ресурсы, методы, статус-коды"
+    requires: [design-errors]
+  - id: design-idempotency
+    title: "Сделать небезопасную операцию безопасной для повтора через ключ идемпотентности"
+    requires: [design-rest]
+  - id: design-pagination
+    title: "Выбрать и реализовать курсорную пагинацию"
+    requires: [design-rest]
+  - id: evolve-contract
+    title: "Изменить контракт, не сломав клиентов: версии, deprecation, contract-first"
+    requires: [design-rest]
+  - id: design-bff
+    title: "Спроектировать BFF: агрегация, частичные ответы, границы ответственности"
+    requires: [design-rest]
+  - id: compare-api-styles
+    title: "Выбрать между REST, GraphQL и gRPC и объяснить N+1 в GraphQL"
+    requires: [design-bff]
+  - id: implement-dataloader
+    title: "Реализовать батчинг запросов по образцу DataLoader"
+    requires: [compare-api-styles, trace-event-loop]
+  - id: design-realtime
+    title: "Выбрать транспорт реалтайма и масштабировать его на несколько инстансов"
+    requires: [design-bff]
+
+  # --- PostgreSQL ---
+  - id: model-schema
+    title: "Спроектировать схему: ключи, ограничения, типы, нормализация и осознанная денормализация"
+  - id: write-report-query
+    title: "Написать отчётный запрос с JOIN, агрегацией и учётом пустых групп"
+    requires: [model-schema]
+  - id: design-index
+    title: "Подобрать индекс под запрос и прочитать EXPLAIN"
+    requires: [write-report-query]
+  - id: explain-transactions
+    title: "Объяснить уровни изоляции, аномалии и MVCC"
+    requires: [model-schema]
+  - id: use-locks
+    title: "Выбрать блокировку: FOR UPDATE, SKIP LOCKED, оптимистичная, advisory; избежать deadlock"
+    requires: [explain-transactions]
+  - id: claim-without-race
+    title: "Изменить строку без гонки через оптимистичную блокировку"
+    requires: [use-locks]
+  - id: queue-in-postgres
+    title: "Раздать задачи воркерам через FOR UPDATE SKIP LOCKED"
+    requires: [use-locks]
+  - id: use-window-functions
+    title: "Выбрать последнюю запись на группу оконной функцией или DISTINCT ON"
+    requires: [write-report-query]
+  - id: use-orm-wisely
+    title: "Увидеть N+1, выбрать ORM и рассчитать пул соединений"
+    requires: [design-index]
+  - id: migrate-without-downtime
+    title: "Провести миграцию схемы без остановки сервиса"
+    requires: [use-locks]
+  - id: scale-postgres
+    title: "Объяснить репликацию, лаг, партиционирование, шардирование и pgbouncer"
+    requires: [use-orm-wisely]
+  - id: choose-storage
+    title: "Обосновать выбор хранилища под задачу"
+    requires: [scale-postgres]
+
+  # --- Auth ---
+  - id: explain-auth-basics
+    title: "Различать аутентификацию и авторизацию, хранить пароли, выбирать 401/403"
+  - id: choose-session-model
+    title: "Выбрать между серверной сессией и JWT и защитить токен на клиенте"
+    requires: [explain-auth-basics]
+  - id: design-multisession
+    title: "Спроектировать многосессионную авторизацию с ротацией refresh и отзывом"
+    requires: [choose-session-model]
+  - id: implement-sessions
+    title: "Реализовать менеджер сессий с ротацией и обнаружением повторного использования"
+    requires: [design-multisession]
+  - id: secure-service-calls
+    title: "Спроектировать межсервисную аутентификацию и передачу контекста пользователя"
+    requires: [choose-session-model]
+  - id: explain-oauth
+    title: "Объяснить OAuth 2.0, OIDC, PKCE и корпоративный SSO"
+    requires: [choose-session-model]
+  - id: model-access
+    title: "Выбрать модель доступа (RBAC/ABAC/ReBAC) и место проверки"
+    requires: [explain-auth-basics]
+  - id: implement-access-check
+    title: "Реализовать проверку доступа с ролями, отделами и особыми правилами"
+    requires: [model-access]
+  - id: harden-api
+    title: "Закрыть типовые уязвимости API по OWASP и защитить секреты"
+    requires: [model-access]
+
+  # --- Cache ---
+  - id: choose-cache-strategy
+    title: "Выбрать уровень и стратегию кэширования и TTL"
+  - id: invalidate-cache
+    title: "Спроектировать инвалидацию и защиту от cache stampede"
+    requires: [choose-cache-strategy]
+  - id: implement-singleflight
+    title: "Реализовать кэш с TTL и склейкой одновременных промахов"
+    requires: [invalidate-cache]
+  - id: use-redis
+    title: "Выбрать структуру Redis под задачу и объяснить его отказоустойчивость"
+    requires: [choose-cache-strategy]
+  - id: use-distributed-lock
+    title: "Взять распределённую блокировку без потери корректности"
+    requires: [use-redis]
+  - id: implement-lru
+    title: "Реализовать LRU-кэш с TTL"
+    requires: [choose-cache-strategy]
+
+  # --- Queues ---
+  - id: justify-queue
+    title: "Обосновать, что переносить в очередь, и назвать цену"
+  - id: use-rabbitmq
+    title: "Объяснить модель RabbitMQ и настроить ack, prefetch, DLX"
+    requires: [justify-queue]
+  - id: use-kafka
+    title: "Объяснить модель Kafka: партиции, offset, consumer group, retention"
+    requires: [justify-queue]
+  - id: reason-delivery
+    title: "Выбрать гарантию доставки и обеспечить порядок там, где он нужен"
+    requires: [use-rabbitmq, use-kafka]
+  - id: implement-idempotent-consumer
+    title: "Реализовать идемпотентный консьюмер с дедупликацией и версией"
+    requires: [reason-delivery]
+  - id: design-outbox
+    title: "Спроектировать transactional outbox и inbox"
+    requires: [reason-delivery, explain-transactions]
+  - id: write-outbox-transaction
+    title: "Записать агрегат и событие outbox одной транзакцией"
+    requires: [design-outbox]
+  - id: design-retries-dlq
+    title: "Спроектировать повторы, backoff и DLQ без потери порядка"
+    requires: [reason-delivery]
+  - id: schedule-with-key-order
+    title: "Распараллелить обработку с сохранением порядка внутри ключа"
+    requires: [design-retries-dlq]
+  - id: design-jobs
+    title: "Спроектировать фоновые задачи: состояния, повторы, cron, длинные операции"
+    requires: [design-retries-dlq]
+  - id: implement-job-scheduler
+    title: "Реализовать планировщик задач с приоритетом, задержкой и повторами"
+    requires: [design-jobs]
+
+  # --- Architecture ---
+  - id: apply-solid
+    title: "Объяснить ООП и SOLID серверными примерами"
+  - id: apply-principles
+    title: "Применять DRY, KISS, YAGNI, композицию и оценивать связность и зацепление"
+    requires: [apply-solid]
+  - id: apply-patterns
+    title: "Узнать и применить серверные паттерны GoF"
+    requires: [apply-principles]
+  - id: implement-chain
+    title: "Реализовать конвейер проверок на Chain of Responsibility и Strategy"
+    requires: [apply-patterns]
+  - id: layer-service
+    title: "Разложить сервис по слоям и объяснить порты и адаптеры"
+    requires: [apply-principles]
+  - id: model-domain
+    title: "Выделить агрегат, его инварианты и доменные события"
+    requires: [layer-service]
+  - id: implement-aggregate
+    title: "Реализовать агрегат с переходами состояний и событиями"
+    requires: [model-domain]
+  - id: choose-service-boundaries
+    title: "Выбрать между монолитом, модульным монолитом и микросервисами и провести границы"
+    requires: [model-domain]
+  - id: design-service-communication
+    title: "Выбрать способ связи сервисов и объяснить gateway, discovery, mesh"
+    requires: [choose-service-boundaries]
+  - id: reason-consistency
+    title: "Рассуждать о CAP, PACELC и eventual consistency"
+    requires: [design-service-communication]
+  - id: design-saga
+    title: "Спроектировать сагу с компенсациями"
+    requires: [reason-consistency]
+  - id: implement-saga
+    title: "Реализовать оркестратор саги"
+    requires: [design-saga]
+  - id: explain-cqrs-es
+    title: "Объяснить CQRS и Event Sourcing и когда они вредны"
+    requires: [model-domain]
+  - id: implement-projection
+    title: "Построить проекцию из потока событий идемпотентно"
+    requires: [explain-cqrs-es]
+  - id: migrate-legacy
+    title: "Спланировать переезд без остановки: strangler fig, ACL, toggles"
+    requires: [choose-service-boundaries]
+
+  # --- High load ---
+  - id: scale-horizontally
+    title: "Сделать сервис stateless и объяснить балансировку и health checks"
+  - id: estimate-capacity
+    title: "Оценить нагрузку через перцентили и закон Литтла"
+    requires: [scale-horizontally]
+  - id: compute-instances
+    title: "Посчитать число инстансов по профилю нагрузки"
+    requires: [estimate-capacity]
+  - id: design-timeouts-retries
+    title: "Задать таймауты и ретраи так, чтобы не добить лежащий сервис"
+    requires: [scale-horizontally]
+  - id: implement-retry
+    title: "Реализовать retry с экспоненциальным backoff, jitter и дедлайном"
+    requires: [design-timeouts-retries]
+  - id: design-resilience
+    title: "Применить circuit breaker, bulkhead, load shedding и деградацию"
+    requires: [design-timeouts-retries]
+  - id: implement-breaker
+    title: "Реализовать circuit breaker как конечный автомат"
+    requires: [design-resilience]
+  - id: design-rate-limiting
+    title: "Выбрать алгоритм rate limiting и провести backpressure по цепочке"
+    requires: [design-resilience]
+  - id: implement-limiter
+    title: "Реализовать лимитер скользящего окна"
+    requires: [design-rate-limiting]
+  - id: implement-consistent-hashing
+    title: "Реализовать кольцо consistent hashing"
+    requires: [scale-horizontally]
+  - id: analyze-failures
+    title: "Разобрать режимы отказа и говорить о SLO и бюджете ошибок"
+    requires: [design-resilience]
+
+  # --- Ops ---
+  - id: design-logging
+    title: "Настроить структурные логи с correlation id без персональных данных"
+  - id: design-observability
+    title: "Выбрать метрики RED/USE, гистограммы и трейсинг"
+    requires: [design-logging]
+  - id: compute-percentiles
+    title: "Посчитать перцентили и гистограмму по выборке"
+    requires: [design-observability]
+  - id: containerize-node
+    title: "Собрать образ Node и объяснить probes, лимиты и сигналы в Kubernetes"
+    requires: [design-logging]
+  - id: release-safely
+    title: "Спроектировать конфигурацию, CI/CD и безопасный релиз"
+    requires: [containerize-node]
+  - id: handle-incidents
+    title: "Вести инцидент и писать postmortem"
+    requires: [design-observability]
+  - id: test-backend
+    title: "Выстроить тесты бэкенда: интеграционные с БД, контрактные, что мокать"
+    requires: [release-safely]
+
+  # --- Interview ---
+  - id: pass-interview-format
+    title: "Понимать формат собеседования сеньора и управлять временем"
+  - id: tell-experience
+    title: "Рассказать об опыте честно и убедительно"
+    requires: [pass-interview-format]
+  - id: answer-system-design
+    title: "Отвечать на system design по методу"
+    requires: [pass-interview-format]
+  - id: implement-broker
+    title: "Реализовать брокер в памяти с партициями и consumer group"
+    requires: [answer-system-design]
+  - id: answer-behavioral
+    title: "Отвечать на поведенческие вопросы по STAR"
+    requires: [tell-experience]
+
+# Словарь курса: какое слово вводит какой урок. Линт читает тексты уроков
+# и не даёт употребить термин раньше, чем курс его объяснил. Термины
+# точки входа (TypeScript, промисы, SQL-базис, HTTP, JWT, CORS, cookie,
+# BFF, REST, GraphQL, Docker как слово) не охраняются намеренно.
+terms:
+  # --- Node ---
+  - term: event loop
+    forms: ["цикл событий"]
+    introduced_in: node-runtime
+    mentioned_before: [intro-course]
+  - term: libuv
+    introduced_in: node-runtime
+  - term: thread pool
+    forms: ["пул потоков"]
+    introduced_in: node-runtime
+  - term: nextTick
+    forms: ["process.nextTick"]
+    introduced_in: node-event-loop
+    mentioned_before: [node-runtime]
+  - term: setImmediate
+    introduced_in: node-event-loop
+  # Урок о рантайме перечисляет способы занять ядра и вынести работу
+  # (cluster, worker_threads) как анонс урока node-blocking.
+  - term: worker_threads
+    forms: ["worker threads", "воркер-поток"]
+    introduced_in: node-blocking
+    mentioned_before: [node-runtime]
+  - term: cluster
+    introduced_in: node-blocking
+    mentioned_before: [node-runtime]
+  - term: backpressure
+    introduced_in: node-streams
+  - term: pipeline
+    introduced_in: node-streams
+  - term: highWaterMark
+    introduced_in: node-streams
+  - term: heap snapshot
+    forms: ["снимок кучи"]
+    introduced_in: node-memory
+  - term: graceful shutdown
+    forms: ["graceful"]
+    introduced_in: node-errors-shutdown
+  - term: unhandledRejection
+    introduced_in: node-errors-shutdown
+  # Урок про остановку объясняет проблему keep-alive на месте; полный разбор
+  # заголовка и таймаутов — в http-server-anatomy.
+  - term: keep-alive
+    introduced_in: http-server-anatomy
+    mentioned_before: [node-errors-shutdown]
+
+  # --- HTTP ---
+  - term: middleware
+    introduced_in: express-middleware
+  - term: DI
+    forms: ["dependency injection", "внедрение зависимостей", "DI-контейнер"]
+    introduced_in: nest-di-modules
+    mentioned_before: [intro-course]
+  - term: guard
+    forms: ["guards"]
+    introduced_in: nest-pipeline
+  - term: interceptor
+    forms: ["interceptors"]
+    introduced_in: nest-pipeline
+  - term: JSON Schema
+    introduced_in: fastify-model
+  - term: problem details
+    forms: ["RFC 9457"]
+    introduced_in: http-validation-errors
+  # Конвейер Nest упоминает correlation id как пример работы interceptor и
+  # поясняет на месте; сквозной разбор — в уроке про формат ошибок и в
+  # ops-logging.
+  - term: correlation id
+    forms: ["request id", "trace id"]
+    introduced_in: http-validation-errors
+
+  # --- API ---
+  # Слово впервые объясняется на уровне HTTP-методов в api-rest-design;
+  # следующий урок раскрывает ключ идемпотентности.
+  - term: идемпотентность
+    forms: ["идемпотентный", "идемпотентен", "идемпотентна", "идемпотентно", "idempotency", "Idempotency-Key"]
+    introduced_in: api-rest-design
+    mentioned_before: [intro-course, intro-platform]
+  - term: keyset
+    forms: ["курсорная пагинация", "cursor pagination"]
+    introduced_in: api-pagination
+  # Fastify и обзор фреймворков анонсируют генерацию OpenAPI из схем;
+  # сам стандарт разбирается в api-evolution.
+  - term: OpenAPI
+    forms: ["Swagger"]
+    introduced_in: api-evolution
+    mentioned_before: [fastify-model, http-frameworks-choice]
+  - term: contract-first
+    introduced_in: api-evolution
+  - term: DataLoader
+    introduced_in: api-graphql-grpc
+  - term: gRPC
+    forms: ["protobuf"]
+    introduced_in: api-graphql-grpc
+    mentioned_before: [intro-course, http-server-anatomy]
+  # Таблица сравнения API-стилей упоминает SSE строкой раньше урока о нём.
+  - term: SSE
+    forms: ["Server-Sent Events"]
+    introduced_in: api-realtime
+    mentioned_before: [api-graphql-grpc]
+  - term: sticky sessions
+    forms: ["sticky session", "липкие сессии"]
+    introduced_in: api-realtime
+
+  # --- PostgreSQL ---
+  # Базовый SQL — точка входа; эти термины «напоминаются» в уроке о схеме
+  # и выдают права на конструкции, которыми пользуются задания модуля.
+  # Базовый SQL — точка входа; JOIN «переобъясняется» в pg-schema ради
+  # grants, а упоминание в разговоре про N+1 — не опережение.
+  - term: JOIN
+    introduced_in: pg-schema
+    mentioned_before: [api-graphql-grpc]
+    grants:
+      - sql:select
+      - sql:where
+      - sql:join
+      - sql:order-by
+      - sql:limit
+      - sql:distinct
+      - sql:null-check
+      - sql:in
+      - sql:case
+      - sql:subquery
+      - sql:between
+      - sql:like
+      - sql:union
+      - sql:having
+      - sql:insert
+      - sql:update
+      - sql:delete
+  - term: GROUP BY
+    introduced_in: pg-schema
+    grants: [sql:group-by, sql:aggregate]
+  - term: timestamptz
+    forms: ["interval", "date_trunc"]
+    introduced_in: pg-schema
+    grants: [sql:date-function]
+  - term: EXPLAIN
+    forms: ["EXPLAIN ANALYZE"]
+    introduced_in: pg-indexes
+  - term: CREATE INDEX
+    forms: ["CREATE INDEX CONCURRENTLY"]
+    introduced_in: pg-indexes
+    grants: [sql:ddl]
+  - term: частичный индекс
+    forms: ["partial index"]
+    introduced_in: pg-indexes
+  - term: транзакция
+    forms: ["transaction"]
+    introduced_in: pg-transactions
+    grants: [sql:transaction]
+    mentioned_before: [intro-course, intro-platform, api-idempotency, pg-indexes]
+  - term: уровень изоляции
+    forms: ["isolation level", "Read Committed", "Repeatable Read", "Serializable"]
+    introduced_in: pg-transactions
+  - term: MVCC
+    introduced_in: pg-transactions
+  - term: deadlock
+    forms: ["взаимная блокировка", "дедлок"]
+    introduced_in: pg-locks
+  # Урок про транзакции называет FOR UPDATE как анонс следующего урока.
+  - term: FOR UPDATE
+    forms: ["SELECT FOR UPDATE", "FOR NO KEY UPDATE"]
+    introduced_in: pg-locks
+    mentioned_before: [pg-transactions]
+  - term: SKIP LOCKED
+    introduced_in: pg-locks
+  - term: оптимистичная блокировка
+    forms: ["optimistic locking"]
+    introduced_in: pg-locks
+  - term: advisory lock
+    forms: ["advisory locks", "рекомендательная блокировка"]
+    introduced_in: pg-locks
+  - term: оконная функция
+    forms: ["window function", "OVER", "DISTINCT ON"]
+    introduced_in: pg-practice-latest
+    grants: [sql:window, sql:cte]
+  # «N+1» словарём не охраняется: линт разбирает его на «n» и «1» и
+  # находит в любом тексте. Порядок объяснения держит автор.
+  - term: пул соединений
+    forms: ["connection pool"]
+    introduced_in: pg-orm-n1-pool
+    mentioned_before: [node-errors-shutdown, nest-di-modules]
+  - term: expand/contract
+    forms: ["expand-contract"]
+    introduced_in: pg-migrations
+  # Без формы «реплика»: «реплики контейнеров» в уроках о Node — другое
+  # понятие. Урок про индексы упоминает WAL при репликации — анонс.
+  - term: репликация
+    forms: ["read replica", "streaming replication"]
+    introduced_in: pg-scaling
+    mentioned_before: [pg-indexes]
+  - term: партиционирование
+    forms: ["partitioning"]
+    introduced_in: pg-scaling
+  - term: шардирование
+    forms: ["sharding", "шард"]
+    introduced_in: pg-scaling
+  - term: pgbouncer
+    introduced_in: pg-scaling
+
+  # --- Auth ---
+  - term: bcrypt
+    forms: ["argon2"]
+    introduced_in: auth-basics
+    mentioned_before: [node-blocking]
+  # Rate limiting впервые объясняется как защита входа от перебора; алгоритмы
+  # — в hl-rate-limiting.
+  - term: rate limiting
+    forms: ["rate limiter", "rate limit", "лимитер"]
+    introduced_in: auth-basics
+    mentioned_before: [intro-course, express-middleware, http-server-anatomy]
+  - term: refresh-токен
+    forms: ["refresh token", "refresh"]
+    introduced_in: auth-sessions-jwt
+  - term: ротация refresh
+    forms: ["ротация токенов", "token rotation"]
+    introduced_in: auth-multisession
+  - term: семейство токенов
+    forms: ["token family"]
+    introduced_in: auth-multisession
+  - term: mTLS
+    introduced_in: auth-service-to-service
+  - term: PKCE
+    introduced_in: auth-oauth-oidc
+  - term: OIDC
+    forms: ["OpenID Connect"]
+    introduced_in: auth-oauth-oidc
+  - term: RBAC
+    introduced_in: auth-access-models
+  - term: ABAC
+    introduced_in: auth-access-models
+  - term: ReBAC
+    introduced_in: auth-access-models
+  - term: BOLA
+    forms: ["IDOR"]
+    introduced_in: auth-security
+  - term: SSRF
+    introduced_in: auth-security
+
+  # --- Cache ---
+  - term: cache-aside
+    forms: ["write-through", "write-behind", "read-through"]
+    introduced_in: cache-strategies
+  - term: LRU
+    introduced_in: cache-strategies
+    mentioned_before: [intro-course, node-memory]
+  - term: cache stampede
+    forms: ["stampede"]
+    introduced_in: cache-invalidation
+  - term: склейка запросов
+    forms: ["single-flight", "singleflight", "request coalescing"]
+    introduced_in: cache-invalidation
+  - term: sorted set
+    forms: ["ZSET"]
+    introduced_in: cache-redis
+  - term: распределённая блокировка
+    forms: ["distributed lock"]
+    introduced_in: cache-distributed-lock
+    mentioned_before: [intro-platform, cache-strategies]
+  - term: fencing token
+    introduced_in: cache-distributed-lock
+  - term: Redlock
+    introduced_in: cache-distributed-lock
+
+  # --- Queues ---
+  # «token exchange» в межсервисной аутентификации — другое употребление
+  # того же слова.
+  - term: exchange
+    forms: ["routing key", "binding"]
+    introduced_in: queues-rabbitmq
+    mentioned_before: [auth-service-to-service]
+  - term: ack
+    forms: ["nack"]
+    introduced_in: queues-rabbitmq
+  - term: prefetch
+    introduced_in: queues-rabbitmq
+  # PARTITION BY у оконных функций и партиционирование таблиц — те же
+  # буквы раньше урока про Kafka.
+  - term: партиция
+    forms: ["partition"]
+    introduced_in: queues-kafka
+    mentioned_before: [pg-practice-latest, pg-scaling]
+  - term: consumer group
+    introduced_in: queues-kafka
+  - term: retention
+    introduced_in: queues-kafka
+  # Уроки о брокерах называют гарантию по имени с пояснением на месте;
+  # разбор — в queues-guarantees.
+  - term: at-least-once
+    forms: ["at least once"]
+    introduced_in: queues-guarantees
+    mentioned_before: [queues-kafka]
+  # Урок про Redis честно называет гарантию pub/sub словом at-most-once
+  # до модуля очередей — это анонс с пояснением на месте.
+  - term: at-most-once
+    forms: ["at most once"]
+    introduced_in: queues-guarantees
+    mentioned_before: [cache-redis]  # at-most-once
+  - term: exactly-once
+    forms: ["exactly once"]
+    introduced_in: queues-guarantees
+  # Таблица outbox появляется в схеме песочницы (pg-schema) до модуля про
+  # очереди — там она названа и коротко объяснена как «событие для
+  # публикации», сам паттерн разбирается в queues-outbox.
+  - term: outbox
+    forms: ["transactional outbox"]
+    introduced_in: queues-outbox
+    mentioned_before: [intro-platform, pg-schema, pg-indexes, pg-storage-choice, queues-why]
+  - term: inbox
+    introduced_in: queues-outbox
+  - term: CDC
+    forms: ["Debezium", "change data capture"]
+    introduced_in: queues-outbox
+    mentioned_before: [cache-invalidation]
+  - term: DLQ
+    forms: ["dead letter", "dead-letter", "DLX"]
+    introduced_in: queues-retry-dlq
+    mentioned_before: [queues-rabbitmq]
+  - term: backoff
+    forms: ["exponential backoff", "экспоненциальная задержка"]
+    introduced_in: queues-retry-dlq
+    mentioned_before: [intro-course, api-realtime]
+  - term: jitter
+    introduced_in: queues-retry-dlq
+  - term: ядовитое сообщение
+    forms: ["poison message", "poison pill"]
+    introduced_in: queues-retry-dlq
+    mentioned_before: [queues-rabbitmq]
+  - term: BullMQ
+    introduced_in: queues-jobs
+    mentioned_before: [intro-platform, queues-retry-dlq]
+
+  # --- Architecture ---
+  - term: SOLID
+    introduced_in: arch-oop-solid
+    mentioned_before: [intro-course]
+  - term: YAGNI
+    introduced_in: arch-principles
+    mentioned_before: [arch-oop-solid]
+
+  - term: связность
+    forms: ["cohesion", "зацепление", "coupling"]
+    introduced_in: arch-principles
+  - term: Chain of Responsibility
+    forms: ["цепочка обязанностей"]
+    introduced_in: arch-patterns
+  - term: гексагональная архитектура
+    forms: ["порты и адаптеры", "hexagonal", "чистая архитектура"]
+    introduced_in: arch-layers
+  # «Агрегат» в SQL-уроках — агрегатные функции, другой смысл того же
+  # слова; стеммер их не различает.
+    mentioned_before: [arch-oop-solid, arch-patterns]
+
+  - term: агрегат
+    forms: ["aggregate root", "корень агрегата"]
+    introduced_in: arch-ddd
+    mentioned_before: [intro-platform, pg-schema, pg-practice-latest, arch-oop-solid]
+  - term: bounded context
+    forms: ["ограниченный контекст"]
+    introduced_in: arch-ddd
+  - term: доменное событие
+    forms: ["domain event"]
+    introduced_in: arch-ddd
+    mentioned_before: [intro-platform, queues-kafka, arch-patterns]
+  - term: модульный монолит
+    forms: ["modular monolith"]
+    introduced_in: arch-monolith-microservices
+  - term: service mesh
+    forms: ["sidecar"]
+    introduced_in: arch-communication
+    mentioned_before: [auth-service-to-service, arch-monolith-microservices]
+  - term: service discovery
+    introduced_in: arch-communication
+    mentioned_before: [arch-monolith-microservices]
+
+  - term: CAP
+    forms: ["PACELC"]
+    introduced_in: arch-consistency
+  # queues-why называет eventual consistency как цену очереди и поясняет на
+  # месте; разбор — в arch-consistency.
+  - term: eventual consistency
+    forms: ["согласованность в конечном счёте", "eventual"]
+    introduced_in: arch-consistency
+    mentioned_before: [queues-why, pg-scaling, arch-ddd, arch-monolith-microservices]
+  - term: 2PC
+    forms: ["двухфазный коммит", "two-phase commit"]
+    introduced_in: arch-consistency
+  - term: сага
+    forms: ["saga"]
+    introduced_in: arch-saga
+    mentioned_before: [intro-course, arch-consistency, arch-ddd, arch-communication]
+  - term: компенсация
+    forms: ["компенсирующая транзакция", "compensation"]
+    introduced_in: arch-saga
+    mentioned_before: [arch-consistency]
+
+  - term: CQRS
+    introduced_in: arch-cqrs-es
+    mentioned_before: [intro-course]
+  - term: Event Sourcing
+    forms: ["event-sourcing"]
+    introduced_in: arch-cqrs-es
+    mentioned_before: [intro-course, queues-outbox]
+  - term: проекция
+    forms: ["projection", "read model"]
+    introduced_in: arch-cqrs-es
+    mentioned_before: [queues-kafka, arch-ddd]
+  - term: strangler fig
+    forms: ["strangler"]
+    introduced_in: arch-migration-patterns
+    mentioned_before: [arch-monolith-microservices]
+
+  - term: anti-corruption layer
+    forms: ["ACL"]
+    introduced_in: arch-migration-patterns
+  - term: feature toggle
+    forms: ["feature flag", "feature flags", "feature toggles", "release toggles", "фича-флаг"]
+    introduced_in: arch-migration-patterns
+
+  # --- High load ---
+  - term: health check
+    forms: ["health checks", "healthcheck"]
+    introduced_in: hl-scaling
+  # Sharding упоминает consistent hashing как способ выбора шарда; сам
+  # алгоритм — в hl-scaling и практике hl-practice-hashing.
+  - term: consistent hashing
+    forms: ["консистентное хеширование"]
+    introduced_in: hl-scaling
+  - term: перцентиль
+    forms: ["p99", "p95", "p50", "percentile"]
+    introduced_in: hl-capacity
+    mentioned_before: [intro-platform]
+  - term: закон Литтла
+    forms: ["Little's law"]
+    introduced_in: hl-capacity
+  - term: retry storm
+    forms: ["шторм ретраев"]
+    introduced_in: hl-timeouts-retries
+  # gRPC-урок называет deadline как термин протокола и анонсирует разбор.
+  - term: дедлайн
+    forms: ["deadline"]
+    introduced_in: hl-timeouts-retries
+    mentioned_before: [api-graphql-grpc]
+  - term: circuit breaker
+    forms: ["предохранитель"]
+    introduced_in: hl-circuit-breaker
+    mentioned_before: [intro-course, arch-communication, arch-monolith-microservices, hl-timeouts-retries]
+  - term: bulkhead
+    introduced_in: hl-circuit-breaker
+  - term: load shedding
+    forms: ["сброс нагрузки"]
+    introduced_in: hl-circuit-breaker
+  - term: token bucket
+    forms: ["leaky bucket"]
+    introduced_in: hl-rate-limiting
+    mentioned_before: [arch-patterns]
+
+  # Окно исходов у circuit breaker-а называется тем же словом раньше
+  # урока про лимитеры.
+  - term: скользящее окно
+    forms: ["sliding window"]
+    introduced_in: hl-rate-limiting
+    mentioned_before: [hl-practice-breaker]
+  - term: thundering herd
+    introduced_in: hl-failure-modes
+  - term: SLO
+    forms: ["SLA", "SLI"]
+    introduced_in: hl-failure-modes
+    mentioned_before: [arch-communication, hl-capacity]
+
+  - term: бюджет ошибок
+    forms: ["error budget"]
+    introduced_in: hl-failure-modes
+
+  # --- Ops ---
+  - term: AsyncLocalStorage
+    introduced_in: ops-logging
+    mentioned_before: [nest-di-modules]
+  # Без формы «USE»: `app.use` в любом уроке про Express читается как это
+  # слово.
+  - term: RED
+    forms: ["метод RED"]
+    introduced_in: ops-metrics-tracing
+  - term: OpenTelemetry
+    forms: ["OTel"]
+    introduced_in: ops-metrics-tracing
+  - term: readiness probe
+    forms: ["readiness", "liveness", "liveness probe", "startup probe"]
+    introduced_in: ops-docker-k8s
+    mentioned_before: [node-errors-shutdown]
+  - term: canary
+    forms: ["канареечный релиз", "blue-green"]
+    introduced_in: ops-config-releases
+  - term: postmortem
+    forms: ["разбор инцидента"]
+    introduced_in: ops-incidents
+  - term: testcontainers
+    introduced_in: ops-testing
+  - term: контрактный тест
+    forms: ["contract test", "контрактные тесты"]
+    introduced_in: ops-testing
+    mentioned_before: [api-evolution, arch-communication]
+
+lessons:
+  # --- intro ---
+  - id: intro-course
+    verify: self
+    hours: 0.5
+  - id: intro-platform
+    requires: [intro-course]
+    verify: quiz
+    hours: 1
+
+  # --- node ---
+  - id: node-runtime
+    teaches: [explain-runtime]
+    requires: [intro-platform]
+    verify: quiz
+    hours: 0.75
+  - id: node-event-loop
+    teaches: [trace-event-loop]
+    requires: [node-runtime]
+    verify: quiz
+    hours: 1
+  - id: node-blocking
+    teaches: [offload-cpu]
+    requires: [node-event-loop]
+    verify: quiz
+    hours: 0.75
+  - id: node-practice-emitter
+    teaches: [implement-emitter]
+    requires: [node-event-loop]
+    verify: code
+    hours: 1
+  - id: node-streams
+    teaches: [use-streams]
+    requires: [node-event-loop]
+    verify: quiz
+    hours: 1
+  - id: node-practice-lines
+    teaches: [parse-chunked-input]
+    requires: [node-streams]
+    verify: code
+    hours: 1
+  - id: node-memory
+    teaches: [diagnose-memory]
+    requires: [node-streams]
+    verify: quiz
+    hours: 0.75
+  - id: node-errors-shutdown
+    teaches: [shutdown-gracefully]
+    requires: [node-memory]
+    verify: quiz
+    hours: 0.75
+  - id: node-practice-shutdown
+    requires: [node-errors-shutdown]
+    verify: code
+    hours: 1
+
+  # --- http ---
+  - id: http-server-anatomy
+    teaches: [explain-http-server]
+    requires: [node-errors-shutdown]
+    verify: quiz
+    hours: 0.75
+  - id: express-middleware
+    teaches: [compose-middleware]
+    requires: [http-server-anatomy]
+    verify: quiz
+    hours: 0.75
+  - id: express-practice-compose
+    requires: [express-middleware]
+    verify: code
+    hours: 1.25
+  - id: fastify-model
+    teaches: [use-fastify]
+    requires: [express-middleware]
+    verify: quiz
+    hours: 0.75
+  - id: nest-di-modules
+    teaches: [use-nest-di]
+    requires: [fastify-model]
+    verify: quiz
+    hours: 1
+  - id: nest-pipeline
+    teaches: [use-nest-pipeline]
+    requires: [nest-di-modules]
+    verify: quiz
+    hours: 0.75
+  - id: nest-practice-di
+    teaches: [implement-di]
+    requires: [nest-di-modules]
+    verify: code
+    hours: 1.5
+  - id: http-validation-errors
+    teaches: [design-errors]
+    requires: [nest-pipeline]
+    verify: quiz
+    hours: 0.75
+  - id: http-practice-errors
+    requires: [http-validation-errors]
+    verify: code
+    hours: 1
+  - id: http-frameworks-choice
+    teaches: [choose-framework]
+    requires: [http-validation-errors]
+    verify: quiz
+    hours: 0.5
+
+  # --- api ---
+  - id: api-rest-design
+    teaches: [design-rest]
+    requires: [http-frameworks-choice]
+    verify: quiz
+    hours: 0.75
+  - id: api-idempotency
+    teaches: [design-idempotency]
+    requires: [api-rest-design]
+    verify: quiz
+    hours: 0.75
+  - id: api-practice-idempotency
+    requires: [api-idempotency]
+    verify: code
+    hours: 1.25
+  - id: api-pagination
+    teaches: [design-pagination]
+    requires: [api-rest-design]
+    verify: quiz
+    hours: 0.75
+  - id: api-practice-cursor
+    requires: [api-pagination]
+    verify: code
+    hours: 1
+  - id: api-evolution
+    teaches: [evolve-contract]
+    requires: [api-pagination]
+    verify: quiz
+    hours: 0.75
+  - id: api-bff
+    teaches: [design-bff]
+    requires: [api-evolution]
+    verify: quiz
+    hours: 0.75
+  - id: api-graphql-grpc
+    teaches: [compare-api-styles]
+    requires: [api-bff]
+    verify: quiz
+    hours: 0.75
+  - id: api-practice-dataloader
+    teaches: [implement-dataloader]
+    requires: [api-graphql-grpc]
+    verify: code
+    hours: 1.25
+  - id: api-realtime
+    teaches: [design-realtime]
+    requires: [api-bff]
+    verify: quiz
+    hours: 0.75
+
+  # --- postgres ---
+  - id: pg-schema
+    teaches: [model-schema]
+    requires: [api-realtime]
+    verify: quiz
+    hours: 0.75
+  - id: pg-practice-report
+    teaches: [write-report-query]
+    requires: [pg-schema]
+    verify: sql-result
+    hours: 1
+  - id: pg-indexes
+    teaches: [design-index]
+    requires: [pg-practice-report]
+    verify: quiz
+    hours: 1
+  - id: pg-practice-index
+    requires: [pg-indexes]
+    verify: sql-state
+    hours: 0.75
+  - id: pg-transactions
+    teaches: [explain-transactions]
+    requires: [pg-schema]
+    verify: quiz
+    hours: 1
+  - id: pg-locks
+    teaches: [use-locks]
+    requires: [pg-transactions]
+    verify: quiz
+    hours: 1
+  - id: pg-practice-claim
+    teaches: [claim-without-race]
+    requires: [pg-locks]
+    verify: sql-state
+    hours: 1
+  - id: pg-practice-queue
+    teaches: [queue-in-postgres]
+    requires: [pg-locks]
+    verify: sql-result
+    hours: 1
+  - id: pg-practice-latest
+    teaches: [use-window-functions]
+    requires: [pg-practice-report]
+    verify: sql-result
+    hours: 1
+  - id: pg-orm-n1-pool
+    teaches: [use-orm-wisely]
+    requires: [pg-indexes]
+    verify: quiz
+    hours: 0.75
+  - id: pg-migrations
+    teaches: [migrate-without-downtime]
+    requires: [pg-locks]
+    verify: quiz
+    hours: 0.75
+  - id: pg-scaling
+    teaches: [scale-postgres]
+    requires: [pg-orm-n1-pool]
+    verify: quiz
+    hours: 0.75
+  - id: pg-storage-choice
+    teaches: [choose-storage]
+    requires: [pg-scaling]
+    verify: quiz
+    hours: 0.5
+
+  # --- auth ---
+  - id: auth-basics
+    teaches: [explain-auth-basics]
+    requires: [api-rest-design]
+    verify: quiz
+    hours: 0.5
+  - id: auth-sessions-jwt
+    teaches: [choose-session-model]
+    requires: [auth-basics]
+    verify: quiz
+    hours: 1
+  - id: auth-multisession
+    teaches: [design-multisession]
+    requires: [auth-sessions-jwt]
+    verify: quiz
+    hours: 1
+  - id: auth-practice-sessions
+    teaches: [implement-sessions]
+    requires: [auth-multisession]
+    verify: code
+    hours: 1.5
+  - id: auth-service-to-service
+    teaches: [secure-service-calls]
+    requires: [auth-sessions-jwt]
+    verify: quiz
+    hours: 0.75
+  - id: auth-oauth-oidc
+    teaches: [explain-oauth]
+    requires: [auth-service-to-service]
+    verify: quiz
+    hours: 0.75
+  - id: auth-access-models
+    teaches: [model-access]
+    requires: [auth-basics]
+    verify: quiz
+    hours: 0.75
+  - id: auth-practice-access
+    teaches: [implement-access-check]
+    requires: [auth-access-models]
+    verify: code
+    hours: 1
+  - id: auth-security
+    teaches: [harden-api]
+    requires: [auth-access-models]
+    verify: quiz
+    hours: 0.75
+
+  # --- cache ---
+  - id: cache-strategies
+    teaches: [choose-cache-strategy]
+    requires: [pg-storage-choice]
+    verify: quiz
+    hours: 0.75
+  - id: cache-invalidation
+    teaches: [invalidate-cache]
+    requires: [cache-strategies]
+    verify: quiz
+    hours: 0.75
+  - id: cache-practice-singleflight
+    teaches: [implement-singleflight]
+    requires: [cache-invalidation]
+    verify: code
+    hours: 1.25
+  - id: cache-redis
+    teaches: [use-redis]
+    requires: [cache-strategies]
+    verify: quiz
+    hours: 1
+  - id: cache-distributed-lock
+    teaches: [use-distributed-lock]
+    requires: [cache-redis]
+    verify: quiz
+    hours: 0.75
+  - id: cache-practice-lru
+    teaches: [implement-lru]
+    requires: [cache-strategies]
+    verify: code
+    hours: 1
+
+  # --- queues ---
+  - id: queues-why
+    teaches: [justify-queue]
+    requires: [cache-redis]
+    verify: quiz
+    hours: 0.5
+  - id: queues-rabbitmq
+    teaches: [use-rabbitmq]
+    requires: [queues-why]
+    verify: quiz
+    hours: 1
+  - id: queues-kafka
+    teaches: [use-kafka]
+    requires: [queues-why]
+    verify: quiz
+    hours: 1
+  - id: queues-guarantees
+    teaches: [reason-delivery]
+    requires: [queues-rabbitmq, queues-kafka]
+    verify: quiz
+    hours: 1
+  - id: queues-practice-idempotent-consumer
+    teaches: [implement-idempotent-consumer]
+    requires: [queues-guarantees]
+    verify: code
+    hours: 1.25
+  - id: queues-outbox
+    teaches: [design-outbox]
+    requires: [queues-guarantees, pg-transactions]
+    verify: quiz
+    hours: 0.75
+  - id: queues-practice-outbox
+    teaches: [write-outbox-transaction]
+    requires: [queues-outbox, pg-practice-claim]
+    verify: sql-state
+    hours: 1
+  - id: queues-retry-dlq
+    teaches: [design-retries-dlq]
+    requires: [queues-guarantees]
+    verify: quiz
+    hours: 0.75
+  - id: queues-practice-partitioner
+    teaches: [schedule-with-key-order]
+    requires: [queues-retry-dlq]
+    verify: code
+    hours: 1.25
+  - id: queues-jobs
+    teaches: [design-jobs]
+    requires: [queues-retry-dlq]
+    verify: quiz
+    hours: 1
+  - id: queues-practice-jobs
+    teaches: [implement-job-scheduler]
+    requires: [queues-jobs]
+    verify: code
+    hours: 1.5
+
+  # --- arch ---
+  - id: arch-oop-solid
+    teaches: [apply-solid]
+    requires: [queues-jobs]
+    verify: quiz
+    hours: 1
+  - id: arch-principles
+    teaches: [apply-principles]
+    requires: [arch-oop-solid]
+    verify: quiz
+    hours: 0.75
+  - id: arch-patterns
+    teaches: [apply-patterns]
+    requires: [arch-principles]
+    verify: quiz
+    hours: 1
+  - id: arch-practice-chain
+    teaches: [implement-chain]
+    requires: [arch-patterns]
+    verify: code
+    hours: 1.25
+  - id: arch-layers
+    teaches: [layer-service]
+    requires: [arch-principles]
+    verify: quiz
+    hours: 0.75
+  - id: arch-ddd
+    teaches: [model-domain]
+    requires: [arch-layers]
+    verify: quiz
+    hours: 1
+  - id: arch-practice-aggregate
+    teaches: [implement-aggregate]
+    requires: [arch-ddd]
+    verify: code
+    hours: 1.5
+  - id: arch-monolith-microservices
+    teaches: [choose-service-boundaries]
+    requires: [arch-ddd]
+    verify: quiz
+    hours: 0.75
+  - id: arch-communication
+    teaches: [design-service-communication]
+    requires: [arch-monolith-microservices]
+    verify: quiz
+    hours: 0.75
+  - id: arch-consistency
+    teaches: [reason-consistency]
+    requires: [arch-communication]
+    verify: quiz
+    hours: 0.75
+  - id: arch-saga
+    teaches: [design-saga]
+    requires: [arch-consistency]
+    verify: quiz
+    hours: 0.75
+  - id: arch-practice-saga
+    teaches: [implement-saga]
+    requires: [arch-saga]
+    verify: code
+    hours: 1.5
+  - id: arch-cqrs-es
+    teaches: [explain-cqrs-es]
+    requires: [arch-ddd]
+    verify: quiz
+    hours: 0.75
+  - id: arch-practice-projection
+    teaches: [implement-projection]
+    requires: [arch-cqrs-es]
+    verify: code
+    hours: 1.25
+  - id: arch-migration-patterns
+    teaches: [migrate-legacy]
+    requires: [arch-monolith-microservices]
+    verify: quiz
+    hours: 0.75
+
+  # --- highload ---
+  - id: hl-scaling
+    teaches: [scale-horizontally]
+    requires: [arch-communication]
+    verify: quiz
+    hours: 0.75
+  - id: hl-capacity
+    teaches: [estimate-capacity]
+    requires: [hl-scaling]
+    verify: quiz
+    hours: 0.75
+  - id: hl-practice-capacity
+    teaches: [compute-instances]
+    requires: [hl-capacity]
+    verify: answer
+    hours: 0.75
+  - id: hl-timeouts-retries
+    teaches: [design-timeouts-retries]
+    requires: [hl-scaling]
+    verify: quiz
+    hours: 0.75
+  - id: hl-practice-retry
+    teaches: [implement-retry]
+    requires: [hl-timeouts-retries]
+    verify: code
+    hours: 1.25
+  - id: hl-circuit-breaker
+    teaches: [design-resilience]
+    requires: [hl-timeouts-retries]
+    verify: quiz
+    hours: 0.75
+  - id: hl-practice-breaker
+    teaches: [implement-breaker]
+    requires: [hl-circuit-breaker]
+    verify: code
+    hours: 1.5
+  - id: hl-rate-limiting
+    teaches: [design-rate-limiting]
+    requires: [hl-circuit-breaker]
+    verify: quiz
+    hours: 0.75
+  - id: hl-practice-limiter
+    teaches: [implement-limiter]
+    requires: [hl-rate-limiting]
+    verify: code
+    hours: 1
+  - id: hl-practice-hashing
+    teaches: [implement-consistent-hashing]
+    requires: [hl-scaling]
+    verify: code
+    hours: 1.25
+  - id: hl-failure-modes
+    teaches: [analyze-failures]
+    requires: [hl-rate-limiting]
+    verify: quiz
+    hours: 1
+
+  # --- ops ---
+  - id: ops-logging
+    teaches: [design-logging]
+    requires: [hl-failure-modes]
+    verify: quiz
+    hours: 0.75
+  - id: ops-metrics-tracing
+    teaches: [design-observability]
+    requires: [ops-logging]
+    verify: quiz
+    hours: 0.75
+  - id: ops-practice-percentiles
+    teaches: [compute-percentiles]
+    requires: [ops-metrics-tracing]
+    verify: code
+    hours: 1
+  - id: ops-docker-k8s
+    teaches: [containerize-node]
+    requires: [ops-logging]
+    verify: quiz
+    hours: 1
+  - id: ops-config-releases
+    teaches: [release-safely]
+    requires: [ops-docker-k8s]
+    verify: quiz
+    hours: 0.75
+  - id: ops-incidents
+    teaches: [handle-incidents]
+    requires: [ops-metrics-tracing]
+    verify: quiz
+    hours: 0.75
+  - id: ops-testing
+    teaches: [test-backend]
+    requires: [ops-config-releases]
+    verify: quiz
+    hours: 1
+
+  # --- interview ---
+  - id: iv-format
+    teaches: [pass-interview-format]
+    requires: [ops-testing]
+    verify: self
+    hours: 0.5
+  - id: iv-story
+    teaches: [tell-experience]
+    requires: [iv-format]
+    verify: self
+    hours: 0.75
+  - id: iv-design-method
+    teaches: [answer-system-design]
+    requires: [iv-format]
+    verify: quiz
+    hours: 0.75
+  - id: iv-design-operator-platform
+    requires: [iv-design-method]
+    verify: quiz
+    hours: 1.5
+  - id: iv-design-bulk-ops
+    requires: [iv-design-method]
+    verify: quiz
+    hours: 1
+  - id: iv-design-marketplace
+    requires: [iv-design-method]
+    verify: quiz
+    hours: 1
+  - id: iv-practice-broker
+    teaches: [implement-broker]
+    requires: [iv-design-method, queues-kafka]
+    verify: code
+    hours: 2
+  - id: iv-question-bank
+    requires: [iv-design-marketplace]
+    verify: self
+    hours: 2
+  - id: iv-behavioral
+    teaches: [answer-behavioral]
+    requires: [iv-story]
+    verify: self
+    hours: 0.5
+
+modules:
+  - id: intro
+    budget_hours: 2
+  - id: node
+    budget_hours: 9
+  - id: http
+    budget_hours: 10
+  - id: api
+    budget_hours: 9
+  - id: postgres
+    budget_hours: 12
+  - id: auth
+    budget_hours: 9
+  - id: cache
+    budget_hours: 6
+  - id: queues
+    budget_hours: 12
+  - id: arch
+    budget_hours: 15
+  - id: highload
+    budget_hours: 11
+  - id: ops
+    budget_hours: 7
+  - id: interview
+    budget_hours: 10
