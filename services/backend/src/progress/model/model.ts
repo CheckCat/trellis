@@ -243,3 +243,49 @@ export function gradeQuizAnswer(quiz: CourseQuiz, optionId: string): QuizVerdict
   }
   return { correct: chosen.correct, explanation: chosen.explanation };
 }
+
+/** One chosen option's share of a multi-select verdict: was picking IT
+ * right, and (when it wasn't) its own explanation. Same disclosure rule as
+ * `QuizVerdict` — nothing about options the learner did not pick. */
+export interface MultiQuizOptionVerdict {
+  readonly id: string;
+  readonly correct: boolean;
+  readonly explanation?: string;
+}
+
+export interface MultiQuizVerdict {
+  /** True exactly when the chosen set IS the correct set — every correct
+   * option picked, nothing else. */
+  readonly correct: boolean;
+  /** Per-option verdicts for the CHOSEN options only, in submission order.
+   * A caller can meet `correct: false` with every entry `correct: true` —
+   * that is the "all picks right, but not all right options picked" case,
+   * and deliberately the only hint this verdict gives about it. */
+  readonly options: readonly MultiQuizOptionVerdict[];
+}
+
+/**
+ * Grades one multi-select quiz submission — the whole set at once. Returns
+ * `undefined` when ANY submitted id isn't one of this quiz's options (same
+ * malformed-request contract as `gradeQuizAnswer`). Pure, same as above:
+ * records nothing, touches no progress.
+ */
+export function gradeMultiQuizAnswer(
+  quiz: CourseQuiz,
+  optionIds: readonly string[],
+): MultiQuizVerdict | undefined {
+  const byId = new Map(quiz.options.map((option) => [option.id, option]));
+  const options: MultiQuizOptionVerdict[] = [];
+  for (const optionId of optionIds) {
+    const chosen = byId.get(optionId);
+    if (chosen === undefined) {
+      return undefined;
+    }
+    options.push({ id: chosen.id, correct: chosen.correct, explanation: chosen.explanation });
+  }
+
+  const chosenIds = new Set(optionIds);
+  const correct =
+    quiz.options.every((option) => option.correct === chosenIds.has(option.id));
+  return { correct, options };
+}

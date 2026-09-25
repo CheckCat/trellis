@@ -3,14 +3,25 @@ import test from "node:test";
 
 import { CAPABILITIES } from "../../capabilities/index.js";
 import type { CourseLesson, CoursePractice, CourseQuiz } from "../../courses/types.js";
-import { findLesson, gradeQuizAnswer, lessonCompletionMode } from "./model.js";
+import { findLesson, gradeMultiQuizAnswer, gradeQuizAnswer, lessonCompletionMode } from "./model.js";
 import { courseFixture } from "../test-support.js";
 
 const quiz: CourseQuiz = {
   question: "Which one?",
+  multiple: false,
   options: [
     { id: "right", text: "The right one", correct: true },
     { id: "wrong", text: "The wrong one", correct: false, explanation: "Because of a specific mistake." },
+  ],
+};
+
+const multiQuiz: CourseQuiz = {
+  question: "Which ones?",
+  multiple: true,
+  options: [
+    { id: "insert", text: "INSERT", correct: true },
+    { id: "update", text: "UPDATE", correct: true },
+    { id: "create", text: "CREATE", correct: false, explanation: "That one is DDL." },
   ],
 };
 
@@ -99,6 +110,43 @@ void test("gradeQuizAnswer returns the chosen option's verdict and only its own 
 void test("gradeQuizAnswer returns undefined for an id that is not one of the options (error path)", () => {
   assert.equal(gradeQuizAnswer(quiz, "not-an-option"), undefined);
   assert.equal(gradeQuizAnswer(quiz, ""), undefined);
+});
+
+void test("gradeMultiQuizAnswer passes exactly the full correct set", () => {
+  const verdict = gradeMultiQuizAnswer(multiQuiz, ["insert", "update"]);
+  assert.deepEqual(verdict, {
+    correct: true,
+    options: [
+      { id: "insert", correct: true, explanation: undefined },
+      { id: "update", correct: true, explanation: undefined },
+    ],
+  });
+});
+
+void test("gradeMultiQuizAnswer fails a wrong inclusion and reveals only the chosen options", () => {
+  const verdict = gradeMultiQuizAnswer(multiQuiz, ["insert", "create"]);
+  assert.deepEqual(verdict, {
+    correct: false,
+    options: [
+      { id: "insert", correct: true, explanation: undefined },
+      { id: "create", correct: false, explanation: "That one is DDL." },
+    ],
+  });
+  // The verdict must never name an option the learner did not pick.
+  assert.equal(JSON.stringify(verdict).includes("update"), false);
+});
+
+void test("gradeMultiQuizAnswer fails a correct-but-incomplete set with every chosen option marked correct", () => {
+  const verdict = gradeMultiQuizAnswer(multiQuiz, ["insert"]);
+  assert.deepEqual(verdict, {
+    correct: false,
+    options: [{ id: "insert", correct: true, explanation: undefined }],
+  });
+});
+
+void test("gradeMultiQuizAnswer returns undefined when any id is not one of the options (error path)", () => {
+  assert.equal(gradeMultiQuizAnswer(multiQuiz, ["insert", "not-an-option"]), undefined);
+  assert.equal(gradeMultiQuizAnswer(multiQuiz, [""]), undefined);
 });
 
 void test("findLesson finds a lesson in any module by id, and nothing for an unknown id", () => {

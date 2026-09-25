@@ -100,6 +100,19 @@ export const api = {
       },
     ),
 
+  // Same endpoint as answerQuiz — the body's field tells the backend which
+  // quiz kind is being answered, and a mismatch with the course's own
+  // declaration is a 400 (routes/quiz.ts, `wrong_answer_shape`).
+  answerMultiQuiz: (courseId: string, lessonId: string, optionIds: string[]): Promise<QuizAnswerResponse> =>
+    apiFetch<QuizAnswerResponse>(
+      `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/quiz/answer`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionIds }),
+      },
+    ),
+
   runPractice: (courseId: string, lessonId: string, sql: string): Promise<PracticeRunResponse> =>
     apiFetch<PracticeRunResponse>(
       `/courses/${encodeURIComponent(courseId)}/lessons/${encodeURIComponent(lessonId)}/practice/run`,

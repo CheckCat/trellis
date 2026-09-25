@@ -154,6 +154,8 @@ function toLessonResponse(lesson: CourseLesson) {
         ? undefined
         : {
             question: lesson.quiz.question,
+            // Not an answer, needed to render: radio buttons vs checkboxes.
+            multiple: lesson.quiz.multiple,
             options: lesson.quiz.options.map((option) => ({ id: option.id, text: option.text })),
           },
     practice: lesson.practice === undefined ? undefined : toPublicPractice(lesson.practice),
@@ -299,9 +301,10 @@ const publicQuizOptionSchema = {
 const publicQuizSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["question", "options"],
+  required: ["question", "multiple", "options"],
   properties: {
     question: { type: "string" },
+    multiple: { type: "boolean" },
     options: { type: "array", items: publicQuizOptionSchema },
   },
 } as const;

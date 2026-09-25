@@ -11,6 +11,7 @@ afterEach(() => {
 
 const QUIZ = {
   question: "Which query selects everything from t?",
+  multiple: false,
   options: [
     { id: "a", text: "SELECT * FROM t;" },
     { id: "b", text: "DROP TABLE t;" },

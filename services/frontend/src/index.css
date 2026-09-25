@@ -996,6 +996,14 @@ a {
   border-color: var(--color-status-error);
 }
 
+/* Чекбокс + текст мультивыборного варианта — одной группой слева, чтобы
+   бейдж «Верно/Неверно» прижимался вправо, как у одиночного квиза. */
+.answer-option-main {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .answer-option-status {
   font-size: 0.8rem;
   color: var(--color-text-muted);

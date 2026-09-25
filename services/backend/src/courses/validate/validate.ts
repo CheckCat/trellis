@@ -51,6 +51,7 @@ interface RawQuizOption {
 
 interface RawQuiz {
   readonly question: string;
+  readonly multiple?: boolean;
   readonly options: readonly RawQuizOption[];
 }
 
@@ -583,6 +584,9 @@ function validateAnswerFields(
 
 function validateQuiz(quiz: RawQuiz, quizPath: string, errors: ValidationError[]): CourseQuiz {
   const seenOptionIds = new Set<string>();
+  // Same normalization as an option's `correct`: the manifest may omit it,
+  // the domain model always carries a boolean.
+  const multiple = quiz.multiple === true;
   let correctCount = 0;
 
   const options: CourseQuizOption[] = quiz.options.map((option, index) => {
@@ -609,14 +613,35 @@ function validateQuiz(quiz: RawQuiz, quizPath: string, errors: ValidationError[]
     return { id: option.id, text: option.text, correct, explanation: option.explanation };
   });
 
-  if (correctCount !== 1) {
+  if (multiple) {
+    // A multi-select quiz needs both sides to mean anything: no correct
+    // option = nothing to submit, no incorrect option = "check everything".
+    if (correctCount === 0) {
+      errors.push({
+        path: `${quizPath}.options`,
+        message: `A multiple: true quiz must have at least one option with correct: true, found 0.`,
+      });
+    }
+    if (correctCount === quiz.options.length) {
+      errors.push({
+        path: `${quizPath}.options`,
+        message:
+          `A multiple: true quiz must have at least one incorrect option — ` +
+          `"check every box" grades nothing.`,
+      });
+    }
+  } else if (correctCount !== 1) {
+    // Deliberately NOT relaxed by the mere presence of several correct
+    // options: a second correct: true without multiple: true is far more
+    // likely a typo than an intent, and silently switching the quiz kind
+    // would hide it.
     errors.push({
       path: `${quizPath}.options`,
       message: `Quiz must have exactly one option with correct: true, found ${correctCount}.`,
     });
   }
 
-  return { question: quiz.question, options };
+  return { question: quiz.question, multiple, options };
 }
 
 export type SafePathResult =

@@ -24,6 +24,11 @@ export interface CourseQuizOption {
 
 export interface CourseQuiz {
   readonly question: string;
+  /** Always present in the validated domain model (the manifest may omit
+   * it — defaults to false, same normalization as an option's `correct`).
+   * `true` = multi-select: the learner checks a SET of options and the
+   * whole set is graded at once; `false` = classic single choice. */
+  readonly multiple: boolean;
   readonly options: readonly CourseQuizOption[];
 }
 

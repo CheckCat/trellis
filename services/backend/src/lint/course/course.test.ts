@@ -14,6 +14,7 @@ import { parseSkillsDocument, type SkillsDocument } from "../skills/index.js";
 
 const QUIZ: CourseQuiz = {
   question: "Which one?",
+  multiple: false,
   options: [
     { id: "a", text: "A", correct: true },
     { id: "b", text: "B", correct: false, explanation: "Because." },
@@ -925,9 +926,40 @@ void test("a quiz whose correct option is visibly the longest is a warning", () 
           id: "quizzed",
           quiz: {
             question: "Why?",
+            multiple: false,
             options: [
               {
                 id: "long",
+                text: "Потому что метрика считается за период и сравнивается со средней численностью",
+                correct: true,
+              },
+              { id: "a", text: "Просто так", correct: false, explanation: "Нет." },
+              { id: "b", text: "Не знаю", correct: false, explanation: "Нет." },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(of(findings, "quiz-answer-guessable").length, 1);
+});
+
+void test("a multi-select quiz where any correct option stands out by length is a warning", () => {
+  // The first correct option is inconspicuous; the second gives itself
+  // away. Checking only the first would miss it.
+  const findings = lintCourse(
+    course({
+      m: [
+        {
+          id: "quizzed",
+          quiz: {
+            question: "Which apply?",
+            multiple: true,
+            options: [
+              { id: "short-right", text: "Да", correct: true },
+              {
+                id: "long-right",
                 text: "Потому что метрика считается за период и сравнивается со средней численностью",
                 correct: true,
               },

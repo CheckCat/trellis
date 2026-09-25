@@ -257,6 +257,95 @@ void test("validateManifest rejects a content path that does not exist on disk (
   });
 });
 
+// --- multiple-choice quizzes (quiz.multiple: true) -----------------------
+
+/** The fixture quiz rewritten as a multi-select one: `multiple: true`, two
+ * correct options, one incorrect (with explanation, as always). */
+function multiQuizYaml(): string {
+  return validManifestYaml().replace(
+    '        quiz:\n          question: "2 + 2 = ?"\n          options:\n            - id: a\n              text: "4"\n              correct: true\n',
+    '        quiz:\n          question: "2 + 2 = ?"\n          multiple: true\n          options:\n            - id: a\n              text: "4"\n              correct: true\n            - id: c\n              text: "IV"\n              correct: true\n',
+  );
+}
+
+void test("validateManifest accepts a multiple: true quiz with several correct options (happy path)", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const result = validateManifest(parseYaml(multiQuizYaml()), dir);
+
+    assert.equal(result.ok, true, JSON.stringify(!result.ok ? result.errors : []));
+    if (!result.ok) return;
+    const quiz = result.manifest.modules[0]?.lessons[0]?.quiz;
+    assert.equal(quiz?.multiple, true);
+    assert.equal(quiz?.options.filter((option) => option.correct).length, 2);
+  });
+});
+
+void test("validateManifest normalizes an omitted quiz.multiple to false in the domain model", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const result = validateManifest(parseYaml(validManifestYaml()), dir);
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.manifest.modules[0]?.lessons[0]?.quiz?.multiple, false);
+  });
+});
+
+void test("validateManifest rejects a multiple: true quiz with no correct option (error path)", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const yamlText = multiQuizYaml()
+      .replace('              text: "4"\n              correct: true\n', '              text: "4"\n              explanation: Not four.\n')
+      .replace('              text: "IV"\n              correct: true\n', '              text: "IV"\n              explanation: Not four either.\n');
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(
+      result.errors.some(
+        (err) => err.path === "modules[0].lessons[0].quiz.options" && /at least one.*correct/i.test(err.message),
+      ),
+    );
+  });
+});
+
+void test("validateManifest rejects a multiple: true quiz where every option is correct (error path)", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    const yamlText = multiQuizYaml().replace(
+      '              text: "5"\n              explanation: Simple arithmetic mistake.\n',
+      '              text: "5"\n              correct: true\n',
+    );
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(
+      result.errors.some(
+        (err) => err.path === "modules[0].lessons[0].quiz.options" && /at least one incorrect/i.test(err.message),
+      ),
+    );
+  });
+});
+
+void test("validateManifest still rejects several correct options when multiple is absent (typo guard)", () => {
+  withPackageDir((dir) => {
+    writeFixtureFiles(dir, validCourseFixtureFiles());
+    // Same as multiQuizYaml() but WITHOUT the multiple: true line.
+    const yamlText = multiQuizYaml().replace("          multiple: true\n", "");
+    const result = validateManifest(parseYaml(yamlText), dir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(
+      result.errors.some(
+        (err) => err.path === "modules[0].lessons[0].quiz.options" && /exactly one/i.test(err.message),
+      ),
+    );
+  });
+});
+
 void test("validateManifest rejects a lesson with none of content/quiz/practice (edge case)", () => {
   withPackageDir((dir) => {
     const yamlText = [

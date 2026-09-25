@@ -99,6 +99,22 @@ void test("GET /courses/:courseId returns module/lesson structure with hasConten
   });
 });
 
+void test("GET /courses/:courseId/lessons/:lessonId serves quiz.multiple: true for a multi-select quiz", async () => {
+  await withApp(async (app, coursesDir) => {
+    const multiYaml = validManifestYaml("multi-course").replace(
+      '          question: "2 + 2 = ?"\n',
+      '          question: "2 + 2 = ?"\n          multiple: true\n',
+    );
+    writeCoursePackage(coursesDir, "multi-course", multiYaml, validCourseFixtureFiles());
+    const rescan = await app.inject({ method: "POST", url: "/courses/rescan" });
+    assert.equal(rescan.json().accepted, 2);
+
+    const response = await app.inject({ method: "GET", url: "/courses/multi-course/lessons/first-lesson" });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().quiz.multiple, true);
+  });
+});
+
 void test("GET /courses/:courseId responds 404 with a descriptive body for an unknown course (error path)", async () => {
   await withApp(async (app) => {
     const response = await app.inject({ method: "GET", url: "/courses/unknown-course" });
@@ -125,6 +141,9 @@ void test("GET /courses/:courseId/lessons/:lessonId never leaks quiz answers or 
     assert.equal(body.content, "# First lesson\n\nHello.");
     assert.deepEqual(body.quiz, {
       question: "2 + 2 = ?",
+      // `multiple` is not an answer — the client needs it to render radio
+      // buttons vs checkboxes; the fixture quiz is single-choice.
+      multiple: false,
       options: [
         { id: "a", text: "4" },
         { id: "b", text: "5" },

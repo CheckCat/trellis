@@ -83,6 +83,7 @@
       "required": ["question", "options"],
       "properties": {
         "question": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "multiple": { "type": "boolean" },
         "options": {
           "type": "array",
           "minItems": 2,

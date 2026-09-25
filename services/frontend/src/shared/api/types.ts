@@ -67,6 +67,10 @@ export interface PublicQuizOption {
 
 export interface PublicQuiz {
   question: string;
+  /** `true` — мультивыбор: чекбоксы и проверка всего набора разом
+   * (`answerMultiQuiz`); `false` — классический одиночный выбор
+   * (`answerQuiz`). Приходит с бэка всегда (routes/courses.ts). */
+  multiple: boolean;
   options: PublicQuizOption[];
 }
 
@@ -197,17 +201,32 @@ export interface LessonCompletionResponse {
   };
 }
 
+/** One CHOSEN option's share of a multi-select quiz verdict. The backend
+ * only ever describes options the caller itself submitted — an option the
+ * learner didn't check never appears here (routes/quiz.ts). */
+export interface QuizOptionVerdict {
+  id: string;
+  correct: boolean;
+  /** Present only when the chosen option itself has an explanation. */
+  explanation?: string;
+}
+
 /** POST /courses/:courseId/lessons/:lessonId/quiz/answer — routes/quiz.ts's
- * `quizAnswerResponseSchema`. Deliberately carries no way to learn which
- * option is correct beyond `correct`/`explanation` for the option the
- * caller itself submitted (the endpoint's own docstring: "the client learns
- * exactly one bit... plus that option's own explanation") — never widen
- * this type with a per-option verdict map or the correct option's id. */
+ * `quizAnswerResponseSchema`, both quiz kinds. Deliberately carries nothing
+ * about options the caller did NOT submit: single-choice answers get
+ * `correct`/`explanation` for the one submitted option, multi-select ones
+ * get `options` — per-option verdicts for the chosen set only. Never widen
+ * this type with the correct option's id or a verdict on an unchosen
+ * option. */
 export interface QuizAnswerResponse {
   correct: boolean;
-  /** Present only when the submitted option itself has an explanation
-   * (`CourseQuizOption.explanation` is optional server-side). */
+  /** Single-choice answers only; present when the submitted option itself
+   * has an explanation (`CourseQuizOption.explanation` is optional
+   * server-side). */
   explanation?: string;
+  /** Multi-select answers only: verdicts for the chosen options, in
+   * submission order. */
+  options?: QuizOptionVerdict[];
   lesson: LessonProgress;
   course: LessonCompletionResponse["course"];
 }

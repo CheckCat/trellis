@@ -698,21 +698,25 @@ function checkQuizGuessable(lessons: readonly PositionedLesson[], findings: Lint
     if (quiz === undefined) {
       continue;
     }
-    const correct = quiz.options.find((option) => option.correct === true);
+    // Every correct option is held to the limit: in a multi-select quiz
+    // one conspicuous right answer betrays part of the set just as surely.
+    const correctOnes = quiz.options.filter((option) => option.correct === true);
     const others = quiz.options.filter((option) => option.correct !== true);
-    if (correct === undefined || others.length === 0) {
+    if (correctOnes.length === 0 || others.length === 0) {
       continue;
     }
     const longestWrong = Math.max(...others.map((option) => option.text.length));
-    if (
-      correct.text.length >= longestWrong * GUESSABLE_RATIO &&
-      correct.text.length - longestWrong >= GUESSABLE_MARGIN
-    ) {
+    const standout = correctOnes.find(
+      (option) =>
+        option.text.length >= longestWrong * GUESSABLE_RATIO &&
+        option.text.length - longestWrong >= GUESSABLE_MARGIN,
+    );
+    if (standout !== undefined) {
       findings.push({
         severity: "warning",
         rule: "quiz-answer-guessable",
         path: `${entry.path}.quiz`,
-        message: `The correct option is ${correct.text.length} characters against ${longestWrong} for the longest wrong one — it can be picked without knowing the answer.`,
+        message: `The correct option is ${standout.text.length} characters against ${longestWrong} for the longest wrong one — it can be picked without knowing the answer.`,
       });
     }
   }

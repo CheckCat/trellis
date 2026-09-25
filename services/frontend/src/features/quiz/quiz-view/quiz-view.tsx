@@ -1,5 +1,6 @@
 import type { PublicQuiz, PublicQuizOption } from "../../../shared/api/types";
 import { AnswerOption, type AnswerOptionStatus } from "../answer-option";
+import { MultiQuizView } from "../multi-quiz-view";
 import { useQuiz, type QuizVerdict } from "../use-quiz";
 
 function optionStatus(
@@ -27,6 +28,17 @@ function optionStatus(
  * tree it already has.
  */
 export function QuizView({ courseId, lessonId, quiz }: { courseId: string; lessonId: string; quiz: PublicQuiz }) {
+  // A multi-select quiz is a different interaction (check a set, then
+  // submit) with its own hook and view — delegated whole rather than
+  // branched per render step. This component stays the single entry point
+  // for "render this lesson's quiz".
+  if (quiz.multiple) {
+    return <MultiQuizView courseId={courseId} lessonId={lessonId} quiz={quiz} />;
+  }
+  return <SingleQuizView courseId={courseId} lessonId={lessonId} quiz={quiz} />;
+}
+
+function SingleQuizView({ courseId, lessonId, quiz }: { courseId: string; lessonId: string; quiz: PublicQuiz }) {
   const { verdict, pendingOptionId, isError, submit } = useQuiz(courseId, lessonId);
   const disabled = pendingOptionId !== undefined;
 

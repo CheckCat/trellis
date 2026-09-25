@@ -231,6 +231,7 @@ export function courseFixture(id = "structure-fixture", version = "1.0.0"): Cour
             title: "Lesson a2",
             quiz: {
               question: "Which one?",
+              multiple: false,
               options: [
                 { id: "yes", text: "Yes", correct: true },
                 { id: "no", text: "No", correct: false, explanation: "No is wrong here." },
