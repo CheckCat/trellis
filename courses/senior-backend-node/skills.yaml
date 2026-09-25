@@ -59,6 +59,9 @@ skills:
   - id: choose-framework
     title: "Обосновать выбор фреймворка под задачу и команду"
     requires: [use-fastify, use-nest-pipeline]
+  - id: compare-runtimes
+    title: "Объяснить Bun и Hono: рантайм против фреймворка и когда их выбирать"
+    requires: [choose-framework]
 
   # --- API ---
   - id: design-rest
@@ -203,6 +206,26 @@ skills:
   - id: implement-job-scheduler
     title: "Реализовать планировщик задач с приоритетом, задержкой и повторами"
     requires: [design-jobs]
+
+  # --- Fintech ---
+  - id: explain-fintech-domain
+    title: "Объяснить устройство необанка на стейблкоинах: кастодиальная модель, карта сервисов, инварианты денег"
+    requires: [design-idempotency, reason-delivery]
+  - id: design-ledger
+    title: "Спроектировать ledger: неизменяемые проводки, двойная бухгалтерская запись, идемпотентность операций, гонки на счёте"
+    requires: [explain-fintech-domain, explain-transactions, use-locks]
+  - id: design-kyc-flow
+    title: "Спроектировать асинхронный KYC-флоу с внешним провайдером и гейтинг операций по уровню проверки"
+    requires: [explain-fintech-domain]
+  - id: design-limits-antifraud
+    title: "Спроектировать лимиты и антифрод: атомарные счётчики за окно, правила, три исхода решения"
+    requires: [design-kyc-flow]
+  - id: integrate-psp
+    title: "Интегрировать платёжного провайдера: идемпотентные вызовы, таймаут как «неизвестно», подписи вебхуков, сверка"
+    requires: [design-ledger]
+  - id: implement-ledger
+    title: "Реализовать идемпотентную обработку вебхуков поверх ledger с балансом из проводок"
+    requires: [design-ledger, integrate-psp]
 
   # --- Architecture ---
   - id: apply-solid
@@ -390,6 +413,11 @@ terms:
   - term: problem details
     forms: ["RFC 9457"]
     introduced_in: http-validation-errors
+  - term: Bun
+    forms: ["JavaScriptCore"]
+    introduced_in: http-bun-hono
+  - term: Hono
+    introduced_in: http-bun-hono
   # Конвейер Nest упоминает correlation id как пример работы interceptor и
   # поясняет на месте; сквозной разбор — в уроке про формат ошибок и в
   # ops-logging.
@@ -608,9 +636,10 @@ terms:
   - term: партиция
     forms: ["partition"]
     introduced_in: queues-kafka
-    mentioned_before: [pg-practice-latest, pg-scaling]
+    mentioned_before: [scr-format, pg-practice-latest, pg-scaling]
   - term: consumer group
     introduced_in: queues-kafka
+    mentioned_before: [scr-format]
   - term: retention
     introduced_in: queues-kafka
   # Уроки о брокерах называют гарантию по имени с пояснением на месте;
@@ -658,6 +687,43 @@ terms:
   - term: BullMQ
     introduced_in: queues-jobs
     mentioned_before: [intro-platform, queues-retry-dlq]
+
+  # --- Fintech ---
+  - term: стейблкоин
+    forms: ["stablecoin"]
+    introduced_in: fin-domain
+  - term: кастодиальный
+    forms: ["custodial", "некастодиальный"]
+    introduced_in: fin-domain
+  # Урок о домене называет ledger и объясняет его роль на месте; полный
+  # разбор — в fin-ledger.
+  - term: ledger
+    forms: ["леджер"]
+    introduced_in: fin-ledger
+    mentioned_before: [fin-domain]
+  # «Проводки» в intro-platform — то же банковское значение, поясняемое
+  # контекстом; квиз fin-domain говорит «сумма проводок» как анонс.
+  - term: проводка
+    forms: ["posting", "проводок"]
+    introduced_in: fin-ledger
+    mentioned_before: [intro-platform, fin-domain]
+  - term: double-entry
+    forms: ["двойная бухгалтерская запись"]
+    introduced_in: fin-ledger
+  # Карта сервисов «Монеты» в fin-domain называет KYC с пояснением на
+  # месте; сам процесс — в fin-kyc.
+  - term: KYC
+    forms: ["Know Your Customer"]
+    introduced_in: fin-kyc
+    mentioned_before: [fin-domain]
+  # Урок про Kafka приводит антифрод как пример потребителя потока
+  # событий; fin-domain называет слой в карте сервисов.
+  - term: антифрод
+    forms: ["anti-fraud", "antifraud"]
+    introduced_in: fin-limits
+    mentioned_before: [queues-kafka, fin-domain]
+  - term: reconciliation
+    introduced_in: fin-providers
 
   # --- Architecture ---
   - term: SOLID
@@ -717,11 +783,11 @@ terms:
   - term: сага
     forms: ["saga"]
     introduced_in: arch-saga
-    mentioned_before: [intro-course, arch-consistency, arch-ddd, arch-communication]
+    mentioned_before: [scr-queues, intro-course, arch-consistency, arch-ddd, arch-communication]
   - term: компенсация
     forms: ["компенсирующая транзакция", "compensation"]
     introduced_in: arch-saga
-    mentioned_before: [arch-consistency]
+    mentioned_before: [scr-queues, arch-consistency]
 
   - term: CQRS
     introduced_in: arch-cqrs-es
@@ -773,7 +839,7 @@ terms:
   - term: circuit breaker
     forms: ["предохранитель"]
     introduced_in: hl-circuit-breaker
-    mentioned_before: [intro-course, arch-communication, arch-monolith-microservices, hl-timeouts-retries]
+    mentioned_before: [scr-format, intro-course, arch-communication, arch-monolith-microservices, hl-timeouts-retries]
   - term: bulkhead
     introduced_in: hl-circuit-breaker
   - term: load shedding
@@ -831,10 +897,20 @@ terms:
     mentioned_before: [api-evolution, arch-communication]
 
 lessons:
+  # Уроки scr-* («пункты рассказа о себе») не преподают новых умений
+  # курса: это подготовка рассказа о собственном опыте — по одному
+  # уроку-пункту в конце модуля соответствующей темы. Рамку задаёт
+  # scr-format во введении; полноценное введение каждой темы остаётся
+  # за уроками её модуля.
+
   # --- intro ---
   - id: intro-course
     verify: self
     hours: 0.5
+  - id: scr-format
+    requires: [intro-course]
+    verify: quiz
+    hours: 0.25
   - id: intro-platform
     requires: [intro-course]
     verify: quiz
@@ -935,6 +1011,11 @@ lessons:
     requires: [http-validation-errors]
     verify: quiz
     hours: 0.5
+  - id: http-bun-hono
+    teaches: [compare-runtimes]
+    requires: [http-frameworks-choice]
+    verify: quiz
+    hours: 0.5
 
   # --- api ---
   - id: api-rest-design
@@ -951,6 +1032,10 @@ lessons:
     requires: [api-idempotency]
     verify: code
     hours: 1.25
+  - id: scr-crowdwiz
+    requires: [scr-format, api-idempotency]
+    verify: quiz
+    hours: 0.25
   - id: api-pagination
     teaches: [design-pagination]
     requires: [api-rest-design]
@@ -970,6 +1055,10 @@ lessons:
     requires: [api-evolution]
     verify: quiz
     hours: 0.75
+  - id: scr-bff
+    requires: [scr-format, api-bff]
+    verify: quiz
+    hours: 0.5
   - id: api-graphql-grpc
     teaches: [compare-api-styles]
     requires: [api-bff]
@@ -980,6 +1069,10 @@ lessons:
     requires: [api-graphql-grpc]
     verify: code
     hours: 1.25
+  - id: scr-innotech
+    requires: [scr-format, api-graphql-grpc]
+    verify: quiz
+    hours: 0.25
   - id: api-realtime
     teaches: [design-realtime]
     requires: [api-bff]
@@ -1098,6 +1191,10 @@ lessons:
     requires: [auth-access-models]
     verify: quiz
     hours: 0.75
+  - id: scr-foundation
+    requires: [scr-format, pg-transactions, auth-multisession]
+    verify: quiz
+    hours: 0.5
 
   # --- cache ---
   - id: cache-strategies
@@ -1187,6 +1284,42 @@ lessons:
     requires: [queues-jobs]
     verify: code
     hours: 1.5
+  - id: scr-queues
+    requires: [scr-format, queues-retry-dlq]
+    verify: quiz
+    hours: 0.5
+
+  # --- fintech ---
+  - id: fin-domain
+    teaches: [explain-fintech-domain]
+    requires: [queues-outbox]
+    verify: quiz
+    hours: 0.75
+  - id: fin-ledger
+    teaches: [design-ledger]
+    requires: [fin-domain]
+    verify: quiz
+    hours: 1
+  - id: fin-kyc
+    teaches: [design-kyc-flow]
+    requires: [fin-domain]
+    verify: quiz
+    hours: 0.75
+  - id: fin-limits
+    teaches: [design-limits-antifraud]
+    requires: [fin-kyc]
+    verify: quiz
+    hours: 0.75
+  - id: fin-providers
+    teaches: [integrate-psp]
+    requires: [fin-ledger]
+    verify: quiz
+    hours: 0.75
+  - id: fin-practice-ledger
+    teaches: [implement-ledger]
+    requires: [fin-ledger, fin-providers]
+    verify: code
+    hours: 1.5
 
   # --- arch ---
   - id: arch-oop-solid
@@ -1264,6 +1397,10 @@ lessons:
     requires: [arch-monolith-microservices]
     verify: quiz
     hours: 0.75
+  - id: scr-migration
+    requires: [scr-format, arch-migration-patterns]
+    verify: quiz
+    hours: 0.25
 
   # --- highload ---
   - id: hl-scaling
@@ -1321,6 +1458,10 @@ lessons:
     requires: [hl-rate-limiting]
     verify: quiz
     hours: 1
+  - id: scr-resilience
+    requires: [scr-format, hl-practice-limiter]
+    verify: quiz
+    hours: 0.5
 
   # --- ops ---
   - id: ops-logging
@@ -1401,29 +1542,35 @@ lessons:
     requires: [iv-story]
     verify: self
     hours: 0.5
+  - id: scr-qa
+    requires: [scr-format, iv-behavioral]
+    verify: quiz
+    hours: 0.25
 
 modules:
   - id: intro
-    budget_hours: 2
+    budget_hours: 2.5
   - id: node
     budget_hours: 9
   - id: http
     budget_hours: 10
   - id: api
-    budget_hours: 9
+    budget_hours: 10
   - id: postgres
     budget_hours: 12
   - id: auth
-    budget_hours: 9
+    budget_hours: 9.5
   - id: cache
     budget_hours: 6
   - id: queues
-    budget_hours: 12
+    budget_hours: 12.5
+  - id: fintech
+    budget_hours: 5.5
   - id: arch
-    budget_hours: 15
+    budget_hours: 15.5
   - id: highload
-    budget_hours: 11
+    budget_hours: 11.5
   - id: ops
     budget_hours: 7
   - id: interview
-    budget_hours: 10
+    budget_hours: 10.5
