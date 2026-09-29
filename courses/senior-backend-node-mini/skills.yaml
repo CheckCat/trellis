@@ -1,0 +1,195 @@
+version: 1
+
+skills:
+  - id: screening-frame
+    title: "Выбрать глубину ответа по собеседнику: галочки вслух, механику приберечь"
+  - id: pitch-solo
+    title: "Рассказать соло-проект как полный цикл: данные, API, платежи, прод"
+    requires: [screening-frame]
+  - id: pitch-bff
+    title: "Защитить BFF как серверный опыт: агрегация, контракты, деградация, периметр"
+    requires: [screening-frame]
+  - id: pitch-contracts
+    title: "Рассказать GraphQL-контракты и кодогенерацию как соавторство контракта"
+    requires: [screening-frame]
+  - id: pitch-migration
+    title: "Назвать переводы без остановки именами паттернов: фасад, адаптеры, откат"
+    requires: [screening-frame]
+  - id: explain-resilience
+    title: "Объяснить на салфетке таймауты, ретраи, circuit breaker и лимитер"
+    requires: [screening-frame]
+  - id: explain-foundation
+    title: "Объяснить транзакции, ротацию refresh и DI-контейнер одним предложением каждый"
+    requires: [screening-frame]
+  - id: explain-queues
+    title: "Объяснить партиции, consumer groups и идемпотентного потребителя"
+    requires: [explain-foundation]
+  - id: tell-story
+    title: "Произнести 90-секундный рассказ о себе, не глядя в текст"
+    requires:
+      [
+        pitch-solo,
+        pitch-bff,
+        pitch-contracts,
+        pitch-migration,
+        explain-resilience,
+        explain-foundation,
+        explain-queues,
+      ]
+  - id: answer-behavioral
+    title: "Ответить на поведенческий вопрос историей по STAR с выводом"
+    requires: [tell-story]
+  - id: answer-hard
+    title: "Ответить на неудобные вопросы и рассказать инцидент по четырём тактам"
+    requires: [tell-story]
+  - id: blitz-checkboxes
+    title: "Закрыть галочку вакансии одной уверенной фразой или честным мостиком"
+    requires: [screening-frame]
+
+terms:
+  - term: вебхук
+    forms: ["webhook"]
+    introduced_in: scr-crowdwiz
+  - term: идемпотентность
+    forms:
+      [
+        "идемпотентный",
+        "идемпотентен",
+        "идемпотентна",
+        "идемпотентно",
+        "idempotency",
+      ]
+    introduced_in: scr-crowdwiz
+  - term: BFF
+    introduced_in: scr-bff
+  - term: WebSocket
+    introduced_in: scr-bff
+  - term: GraphQL
+    introduced_in: scr-innotech
+    mentioned_before: [scr-format]
+  - term: кодогенерация
+    introduced_in: scr-innotech
+  - term: strangler fig
+    forms: ["strangler"]
+    introduced_in: scr-migration
+  - term: circuit breaker
+    forms: ["предохранитель"]
+    introduced_in: scr-resilience
+    mentioned_before: [scr-format]
+  - term: token bucket
+    introduced_in: scr-resilience
+  - term: rate limiting
+    forms: ["rate limiter", "rate limit", "лимитер"]
+    introduced_in: scr-resilience
+  - term: транзакция
+    forms: ["transaction"]
+    introduced_in: scr-foundation
+  - term: уровень изоляции
+    forms: ["isolation level"]
+    introduced_in: scr-foundation
+  - term: оптимистичная блокировка
+    forms: ["optimistic locking"]
+    introduced_in: scr-foundation
+  - term: refresh-токен
+    forms: ["refresh token", "refresh"]
+    introduced_in: scr-foundation
+  - term: ротация refresh
+    forms: ["ротация", "ротация токенов"]
+    introduced_in: scr-foundation
+  - term: DI
+    forms: ["dependency injection", "внедрение зависимостей", "DI-контейнер"]
+    introduced_in: scr-foundation
+  - term: партиция
+    forms: ["partition"]
+    introduced_in: scr-queues
+    mentioned_before: [scr-format]
+  - term: consumer group
+    introduced_in: scr-queues
+    mentioned_before: [scr-format]
+  - term: outbox
+    forms: ["transactional outbox"]
+    introduced_in: scr-queues
+  - term: сага
+    forms: ["saga"]
+    introduced_in: scr-queues
+  - term: компенсация
+    forms: ["компенсирующая транзакция", "compensation"]
+    introduced_in: scr-queues
+
+lessons:
+  - id: scr-format
+    teaches: [screening-frame]
+    verify: quiz
+    hours: 0.75
+  - id: scr-crowdwiz
+    teaches: [pitch-solo]
+    requires: [scr-format]
+    verify: quiz
+    hours: 0.75
+  - id: scr-bff
+    teaches: [pitch-bff]
+    requires: [scr-format]
+    verify: quiz
+    hours: 1
+  - id: scr-innotech
+    teaches: [pitch-contracts]
+    requires: [scr-format]
+    verify: quiz
+    hours: 0.75
+  - id: scr-migration
+    teaches: [pitch-migration]
+    requires: [scr-format]
+    verify: quiz
+    hours: 0.75
+  - id: scr-resilience
+    teaches: [explain-resilience]
+    requires: [scr-format]
+    verify: quiz
+    hours: 1
+  - id: scr-foundation
+    teaches: [explain-foundation]
+    requires: [scr-format]
+    verify: quiz
+    hours: 1
+  - id: scr-queues
+    teaches: [explain-queues]
+    requires: [scr-foundation, scr-crowdwiz]
+    verify: quiz
+    hours: 1
+  - id: scr-story
+    teaches: [tell-story]
+    requires:
+      [
+        scr-crowdwiz,
+        scr-bff,
+        scr-innotech,
+        scr-migration,
+        scr-resilience,
+        scr-foundation,
+        scr-queues,
+      ]
+    verify: self
+    hours: 1
+  - id: scr-behavioral
+    teaches: [answer-behavioral]
+    requires: [scr-story]
+    verify: quiz
+    hours: 0.75
+  - id: scr-qa
+    teaches: [answer-hard]
+    requires: [scr-story]
+    verify: quiz
+    hours: 0.75
+  - id: scr-blitz
+    teaches: [blitz-checkboxes]
+    requires: [scr-qa]
+    verify: self
+    hours: 0.75
+
+modules:
+  - id: legend
+    budget_hours: 4
+  - id: depth
+    budget_hours: 3
+  - id: screening
+    budget_hours: 3.5
