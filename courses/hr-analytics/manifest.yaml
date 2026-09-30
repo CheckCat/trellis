@@ -1,0 +1,1322 @@
+id: hr-analytics
+version: "1.0.0"
+title: "HR-аналитика с нуля"
+description: "Курс по HR-аналитике для человека без аналитического опыта: метрики, Excel, SQL, визуализация в DataLens, автоматизация и приватность данных. Сквозной пример — вымышленная компания ООО «Ромашка»: одни и те же данные в таблицах уроков, CSV-файлах и SQL-песочнице."
+sandboxes:
+  - id: romashka
+    type: postgres
+    seed:
+      - sandbox/seed.sql
+modules:
+  - id: intro
+    title: "Введение. Как устроен курс"
+    lessons:
+      - id: intro-how-it-works
+        title: "Как устроен курс и как по нему двигаться"
+        content: lessons/intro/intro-how-it-works.md
+        quiz:
+          question: "Вы ответили на вопрос квиза неверно. Что произойдёт?"
+          options:
+            - id: retry
+              text: "Платформа объяснит, почему вариант неверный, и можно сразу ответить снова"
+              correct: true
+            - id: attempt-lost
+              text: "Попытка потрачена: вернуться к вопросу получится только после перепрохождения урока"
+              explanation: "Логика «попыток» знакома по экзаменам, но здесь её нет: отвечать можно сколько угодно раз, ничего не сгорает."
+            - id: progress-reset
+              text: "Прогресс по модулю обнулится, и его уроки придётся проходить заново"
+              explanation: "Стереть прогресс может только кнопка «Перепройти курс» — целиком по курсу, по вашей явной просьбе и с подтверждением; неверный ответ в квизе на прогресс не влияет."
+            - id: marked-stats
+              text: "Урок будет засчитан, но с пометкой о неверном ответе в статистике"
+              explanation: "Пометок и статистики ошибок в курсе нет: урок засчитывается, когда вы ответите верно, а история неудачных попыток нигде не хранится."
+      - id: intro-romashka
+        title: "Знакомимся с ООО «Ромашка» — компания, которую будем анализировать"
+        content: lessons/intro/intro-romashka.md
+  - id: metrics
+    title: "Модуль 1. HR-метрики и статистика"
+    lessons:
+      - id: metrics-case
+        title: "Кейс: «У нас нормальная текучесть?»"
+        content: lessons/metrics/metrics-case.md
+      - id: metrics-what-is-metric
+        title: "Что такое HR-метрика и почему её нужно определить до расчёта"
+        content: lessons/metrics/metrics-what-is-metric.md
+        quiz:
+          question: "Два HR-специалиста честно посчитали текучесть одной и той же компании за один и тот же год и получили 18 % и 30 %. Что это, скорее всего, значит?"
+          options:
+            - id: different-definition
+              text: "Они по-разному определили, кого считать уволившимся и кого включать в численность"
+              correct: true
+            - id: arithmetic-error
+              text: "Один из них ошибся в вычислениях — на одинаковых данных честный расчёт даёт одно число"
+              explanation: "Арифметика тут ни при чём: без общего определения (кого считать уволившимся, кого включать в численность) честных чисел получается несколько."
+            - id: data-changed
+              text: "Данные успели измениться в промежутке между двумя расчётами"
+              explanation: "Год закрыт, увольнения задним числом не появляются — на одних и тех же данных разойтись можно только в определении метрики."
+            - id: take-average
+              text: "Правильное число лежит посередине — нужно взять среднее, 24 %"
+              explanation: "Усреднение расчётов с разными определениями не даёт «правильный» ответ — оно даёт число, определения которого не знает уже никто."
+      - id: metrics-headcount
+        title: "Численность: списочная, среднесписочная, FTE"
+        content: lessons/metrics/metrics-headcount.md
+        quiz:
+          question: "В отделе 10 сотрудников, двое из них работают на половине ставки. Чему равны списочная численность отдела и его FTE?"
+          options:
+            - id: ten-nine
+              text: "Списочная численность 10, FTE 9"
+              correct: true
+            - id: nine-ten
+              text: "Списочная численность 9, FTE 10"
+              explanation: "Перепутано местами: списочная считает людей по головам (их 10), а FTE суммирует ставки (8 × 1,0 + 2 × 0,5 = 9)."
+            - id: ten-ten
+              text: "Списочная численность 10, FTE 10"
+              explanation: "FTE совпадает с числом людей, только когда все на полной ставке: здесь двое на полставки дают 1,0 FTE на двоих."
+            - id: eight-nine
+              text: "Списочная численность 8, FTE 9"
+              explanation: "Сотрудник на полставки — всё равно сотрудник: в списочную численность он входит целиком, поэтому людей 10, а не 8."
+      - id: metrics-turnover
+        title: "Текучесть: формула, виды, период"
+        content: lessons/metrics/metrics-turnover.md
+        quiz:
+          question: "Компания N выросла за год со 100 до 200 сотрудников; за год уволилось 30 человек. Почему неверно считать текучесть как 30 / 200?"
+          options:
+            - id: avg-denominator
+              text: "Большую часть года в компании было меньше 200 человек — деление на итог занижает текучесть"
+              correct: true
+            - id: start-headcount
+              text: "Неверно другое: делить нужно на 100 — численность на начало года"
+              explanation: "Начало года ничем не честнее конца: компанией из ста человек она была только в январе, а увольнялись люди весь год — поэтому в знаменателе среднесписочная."
+            - id: everyone-ever
+              text: "Неверно другое: делить нужно на 230 — всех, кто хоть один день проработал за год"
+              explanation: "Такой знаменатель тоже встречается, но это другая метрика с другим определением; классическая формула текучести делит на среднесписочную численность."
+            - id: voluntary-only
+              text: "Неверно другое: в числителе должны стоять только добровольные увольнения, а не все 30"
+              explanation: "Раскладка на добровольные и вынужденные — отдельный выбор определения; ошибка в формуле «30 / 200» сидит в знаменателе, а не в числителе."
+      - id: metrics-turnover-practice
+        title: "Практика: считаем текучесть «Ромашки» за год"
+        content: lessons/metrics/metrics-turnover-practice.md
+        practice:
+          type: answer
+          prompt: >-
+            Посчитайте по таблице урока три показателя «Ромашки» за 2025 год.
+            Каждый ответ округлите до одного знака после запятой; десятичный
+            разделитель — точка или запятая, как вам удобно.
+          fields:
+            - id: avg-headcount
+              label: "Среднесписочная численность за 2025 год"
+              kind: number
+              expected: 119.6
+              tolerance: 0.2
+            - id: turnover
+              label: "Текучесть за 2025 год, %"
+              kind: number
+              expected: 19.2
+              tolerance: 0.3
+            - id: voluntary-turnover
+              label: "Добровольная текучесть за 2025 год, %"
+              kind: number
+              expected: 12.5
+              tolerance: 0.3
+      - id: metrics-recruiting
+        title: "Метрики найма: воронка, time-to-fill, time-to-hire, cost-per-hire"
+        content: lessons/metrics/metrics-recruiting.md
+        quiz:
+          question: "Вакансию открыли 1 марта. Будущий сотрудник откликнулся 20 марта и вышел на работу 28 апреля. Чему равны time-to-fill и time-to-hire?"
+          options:
+            - id: fill-58-hire-39
+              text: "time-to-fill — 58 дней, time-to-hire — 39 дней"
+              correct: true
+            - id: fill-39-hire-58
+              text: "time-to-fill — 39 дней, time-to-hire — 58 дней"
+              explanation: "Метрики перепутаны местами: time-to-fill стартует с открытия вакансии (1 марта), а time-to-hire — с отклика нанятого кандидата (20 марта)."
+            - id: both-58
+              text: "Обе метрики равны 58 дням"
+              explanation: "Они совпали бы, только если бы нанятый откликнулся в день открытия вакансии; здесь между открытием и его откликом прошло 19 дней."
+            - id: fill-19-hire-39
+              text: "time-to-fill — 19 дней, time-to-hire — 39 дней"
+              explanation: "19 дней — срок от открытия вакансии до отклика кандидата; time-to-fill же меряется от открытия до выхода человека и здесь равен 58 дням."
+      - id: metrics-onboarding
+        title: "Адаптация: испытательный срок и ранняя текучесть"
+        content: lessons/metrics/metrics-onboarding.md
+        quiz:
+          question: "За год ранняя текучесть компании N выросла вдвое. Какое объяснение стоит проверять первым?"
+          options:
+            - id: process-changed
+              text: "Что-то изменилось в найме или во вводе новичков в работу"
+              correct: true
+            - id: weak-candidates
+              text: "На рынке стало больше слабых кандидатов — от компании это не зависит"
+              explanation: "«Слабые люди» — самое соблазнительное и наименее проверяемое объяснение: систематический уход новичков почти всегда указывает на процесс, а не на невезение с кандидатами."
+            - id: normal-for-newbies
+              text: "Новички всегда уходят чаще остальных, поэтому рост ничего не значит"
+              explanation: "Новички и правда уходят чаще, но здесь сама метрика выросла вдвое за год — такое изменение сигналит, что что-то поменялось."
+            - id: blame-department
+              text: "Виноват отдел, который за год нанял больше всего людей"
+              explanation: "Может быть — а может и нет: прежде чем назначать виноватого, раннюю текучесть нужно разложить по отделам, а не показывать на самый нанимающий."
+      - id: metrics-engagement
+        title: "Вовлечённость, eNPS, абсентеизм"
+        content: lessons/metrics/metrics-engagement.md
+        quiz:
+          question: "В опросе компании N 20 ответов: 10 промоутеров, 6 нейтралов, 4 критика. Чему равен eNPS?"
+          options:
+            - id: thirty
+              text: "30"
+              correct: true
+            - id: fifty
+              text: "50"
+              explanation: "50 — это только доля промоутеров в процентах; из неё ещё нужно вычесть долю критиков (20 %), иначе недовольные не учтены вовсе."
+            - id: twenty
+              text: "20"
+              explanation: "Похоже, вычтены нейтралы — но они в формуле не участвуют: вычитается доля критиков, а нейтралы лишь входят в общее число ответов."
+            - id: six
+              text: "6"
+              explanation: "6 — разность промоутеров и критиков в людях; eNPS считается из долей от всех ответивших: (50 % − 20 %) × 100 = 30."
+      - id: metrics-training
+        title: "Обучение: завершаемость, оценка, ROI"
+        content: lessons/metrics/metrics-training.md
+        quiz:
+          question: "После тренинга переговоров выручка отдела продаж выросла на 10 %. Можно ли записать этот рост в эффект тренинга?"
+          options:
+            - id: cannot-isolate
+              text: "Нет: одновременно могло измениться что-то ещё, и долю тренинга из общего роста не выделить"
+              correct: true
+            - id: post-hoc
+              text: "Да: рост случился сразу после тренинга — значит, вызван именно проведённым тренингом"
+              explanation: "«После» не значит «из-за»: в тот же период могли смениться цены, реклама или состав отдела — по одной итоговой цифре причину не установить."
+            - id: roi-positive
+              text: "Да, но только если рост в деньгах превышает затраты на проведение этого тренинга"
+              explanation: "Сравнение с затратами осмысленно, лишь когда сам эффект уже честно измерен; здесь неизвестен именно эффект, а не его окупаемость."
+            - id: revenue-not-hr
+              text: "Нет: выручка отдела в принципе не годится мерилом эффекта обучения"
+              explanation: "Годится — это четвёртый уровень модели Киркпатрика, «результат»; проблема не в выручке, а в том, что рост нужно отделить от других причин."
+      - id: metrics-stats-basics
+        title: "Описательная статистика: среднее, медиана, разброс, перцентили"
+        content: lessons/metrics/metrics-stats-basics.md
+        practice:
+          type: answer
+          prompt: >-
+            Посчитайте среднее и медиану окладов отдела Финансы по списку из
+            урока. Ответы — в рублях, целым числом; с пробелами между разрядами
+            или без — неважно.
+          fields:
+            - id: mean-salary
+              label: "Средний оклад отдела Финансы, ₽"
+              kind: number
+              expected: 94625
+              tolerance: 50
+            - id: median-salary
+              label: "Медианный оклад отдела Финансы, ₽"
+              kind: number
+              expected: 87250
+              tolerance: 50
+      - id: metrics-stats-traps
+        title: "Ловушки: малые выборки, сравнение периодов, корреляция ≠ причина"
+        content: lessons/metrics/metrics-stats-traps.md
+        quiz:
+          multiple: true
+          question: "Отметьте все выводы, которые из данных делать нельзя."
+          options:
+            - id: small-dept
+              text: "В отделе из 5 человек за год одно увольнение — 20 % текучести, значит, у отдела серьёзная проблема с удержанием"
+              correct: true
+            - id: training-causes
+              text: "Прошедшие обучение увольняются реже — значит, обучение снижает текучесть"
+              correct: true
+            - id: december-worse
+              text: "В декабре откликов на вакансии меньше, чем в сентябре, — значит, вакансии компании стали привлекать хуже"
+              correct: true
+            - id: stable-difference
+              text: "Текучесть отдела продаж (22 человека) три года подряд заметно выше, чем у производства (38 человек), — разница устойчива, стоит искать причины"
+              explanation: "Это как раз корректный вывод: десятки людей и повторение три года подряд исключают случайный выброс — такую разницу можно и нужно исследовать."
+            - id: mean-above-median
+              text: "Средний оклад отдела выше медианного — значит, есть оклады, заметно оттягивающие среднее вверх"
+              explanation: "Это прямо следует из определений среднего и медианы, ловушки здесь нет — вывод корректен."
+      - id: metrics-ru-specifics
+        title: "Российская специфика: ТК РФ, основания увольнения, декрет, срочные договоры"
+        content: lessons/metrics/metrics-ru-specifics.md
+        quiz:
+          question: "Сотрудница «Ромашки» ушла в отпуск по уходу за ребёнком. Как это событие отразится на текучести за год, посчитанной по формуле курса?"
+          options:
+            - id: no-effect
+              text: "Никак: это не увольнение, сотрудница остаётся в штате и в численности"
+              correct: true
+            - id: counts-as-quit
+              text: "Попадёт в числитель как увольнение по инициативе сотрудницы"
+              explanation: "Отпуск по уходу за ребёнком — не расторжение договора: в число уволившихся такое событие не попадает никогда."
+            - id: excluded-from-avg
+              text: "Уменьшит знаменатель: из среднесписочной численности она исключается"
+              explanation: "Так по правилам Росстата, но в упрощённой формуле курса находящиеся в отпуске по уходу остаются в численности — урок оговаривает эту разницу явно."
+            - id: depends-on-length
+              text: "Попадёт в числитель, но только если отпуск продлится дольше года"
+              explanation: "Длительность отпуска ничего не меняет: пока трудовой договор не расторгнут, увольнения нет — ни через год, ни через три."
+      - id: metrics-practice-set
+        title: "Практика: считаем метрики «Ромашки»"
+        content: lessons/metrics/metrics-practice-set.md
+        practice:
+          type: answer
+          prompt: >-
+            Пять расчётов по данным из текста урока. Округление указано у
+            каждого поля; десятичный разделитель — точка или запятая, как вам
+            удобно.
+          fields:
+            - id: fte
+              label: "FTE пункта выдачи (до одного знака после запятой)"
+              kind: number
+              expected: 8.5
+              tolerance: 0.1
+            - id: conv-hired
+              label: "Конверсия отклик → нанят, % (до одного знака)"
+              kind: number
+              expected: 5.2
+              tolerance: 0.1
+            - id: conv-screen-interview
+              label: "Конверсия скрининг → интервью, % (до одного знака)"
+              kind: number
+              expected: 46.8
+              tolerance: 0.3
+            - id: avg-ttf
+              label: "Средний time-to-fill по восьми вакансиям, дней (до одного знака)"
+              kind: number
+              expected: 49.9
+              tolerance: 0.5
+            - id: enps
+              label: "eNPS весеннего опроса (целое число)"
+              kind: number
+              expected: 12
+              tolerance: 0
+  - id: excel
+    title: "Модуль 2. Excel для аналитика"
+    lessons:
+      - id: excel-case
+        title: "Кейс: выгрузка из ATS на 500 строк"
+        content: lessons/excel/excel-case.md
+      - id: excel-tidy-data
+        title: "Таблица как база данных: одна строка — одна запись"
+        content: lessons/excel/excel-tidy-data.md
+        quiz:
+          question: "Рекрутер ведёт учёт откликов «по листу на месяц»: на каждом листе своя шапка с объединёнными ячейками и строка «Итого» внизу. Что нужно сделать, чтобы по этим данным можно было считать?"
+          options:
+            - id: flat
+              text: "Собрать все листы в одну плоскую таблицу: одна строка — один отклик, месяц — отдельный столбец"
+              correct: true
+            - id: align-sheets
+              text: "Оставить листы как есть, но выровнять шапки, чтобы столбцы на всех листах шли в одном порядке"
+              explanation: "Одинаковый порядок столбцов помогает глазам, но данные остаются разрезанными на двенадцать кусков с итогами внутри — формуле по-прежнему негде взять все отклики разом."
+            - id: merge-cells
+              text: "Объединить ячейки с повторяющимися значениями (вакансия, источник), чтобы таблица легче читалась"
+              explanation: "Объединённая ячейка хранит значение только в первой строке — сортировка и фильтры на таких данных ломаются, а не упрощаются."
+            - id: add-totals
+              text: "Добавить на каждый лист итоговые строки по источникам, чтобы результат был виден сразу"
+              explanation: "Итог внутри данных сам становится строкой данных: первая же сортировка или подсчёт строк захватит его как обычный отклик."
+      - id: excel-cleaning
+        title: "Чистка: фильтры, сортировка, дубликаты, ошибки в датах"
+        content: lessons/excel/excel-cleaning.md
+        practice:
+          type: answer
+          prompt: >-
+            Откройте courses/hr-analytics/data/ats_raw.csv (путь — от каталога, куда
+            распакована платформа). Первое и третье число посчитайте по исходному листу;
+            для второго скопируйте лист и выполните «Удалить дубликаты» на копии,
+            отметив все столбцы, — ответ возьмите из отчёта Excel об удалении.
+          fields:
+            - id: rows-total
+              label: "Сколько в файле строк данных (строка заголовков не в счёт)?"
+              kind: number
+              expected: 47
+            - id: duplicate-rows
+              label: "Сколько полных строк-дублей удалил «Удалить дубликаты»?"
+              kind: number
+              expected: 3
+            - id: empty-stage
+              label: "В скольких строках исходного файла (до удаления дублей) пуст столбец «этап»?"
+              kind: number
+              expected: 7
+      - id: excel-formulas
+        title: "Формулы для счёта: СЧЁТЕСЛИМН, СУММЕСЛИМН, работа с датами"
+        content: lessons/excel/excel-formulas.md
+        practice:
+          type: answer
+          prompt: >-
+            Посчитайте по courses/hr-analytics/data/employees.csv (путь — от каталога,
+            куда распакована платформа). Работающий сотрудник — тот, у кого пуста
+            «дата увольнения». Перед третьим ответом проверьте, что значения «0,5» в
+            столбце «ставка» распознались числами (прижаты к правому краю ячейки), —
+            иначе сумма молча их потеряет.
+          fields:
+            - id: active-count
+              label: "Сколько сотрудников работает сейчас?"
+              kind: number
+              expected: 120
+            - id: active-dept3
+              label: "Сколько из работающих — в отделе с отдел_id = 3?"
+              kind: number
+              expected: 38
+            - id: active-fte-sum
+              label: "Суммарная ставка всех работающих (один знак после запятой)"
+              kind: number
+              expected: 118.5
+              tolerance: 0.01
+      - id: excel-lookup
+        title: "ВПР и ИНДЕКС/ПОИСКПОЗ: соединяем таблицы"
+        content: lessons/excel/excel-lookup.md
+        quiz:
+          question: "В формуле =ВПР(отдел_id; справочник; 2) четвёртый аргумент не указан, а справочник не отсортирован. Чем это обернётся?"
+          options:
+            - id: silent-wrong
+              text: "Формула может вернуть значение из чужой строки, не показав никакой ошибки"
+              correct: true
+            - id: visible-error
+              text: "Формула вернёт #Н/Д, так что ошибка сразу будет видна"
+              explanation: "#Н/Д гарантирован только при точном поиске (ЛОЖЬ); интервальный просмотр вместо ошибки берёт «последнее подходящее» значение и молчит."
+            - id: auto-sort
+              text: "ВПР сам отсортирует справочник и найдёт точное совпадение"
+              explanation: "ВПР никогда не меняет данные — он лишь предполагает, что справочник уже отсортирован, и именно это предположение здесь нарушено."
+            - id: just-slower
+              text: "Поиск просто пройдёт медленнее, а результат будет тот же"
+              explanation: "Всё наоборот: интервальный режим быстрее точного, но на несортированных данных его результат непредсказуем."
+      - id: excel-pivots
+        title: "Сводные таблицы: текучесть по отделам за минуту"
+        content: lessons/excel/excel-pivots.md
+        quiz:
+          question: "По courses/hr-analytics/data/applications.csv нужна таблица: по каждому источнику — сколько откликов дошло до каждого этапа. Как разложить поля сводной таблицы?"
+          options:
+            - id: rows-cols-count
+              text: "«Источник» — в строки, «этап» — в столбцы, «кандидат» — в значения как количество"
+              correct: true
+            - id: sum-of-id
+              text: "«Источник» — в строки, «этап» — в столбцы, «id» — в значения как сумму"
+              explanation: "Сумма порядковых номеров — большое число без смысла; Excel предлагает сумму для любого числового поля сам, но здесь нужно количество строк."
+            - id: stage-in-filter
+              text: "«Источник» — в строки, «этап» — в фильтры, «кандидат» — в значения как количество"
+              explanation: "Поле в фильтре показывает один этап за раз — разреза «источник × этап» на одном экране не получится."
+            - id: swap-areas
+              text: "«Источник» и «этап» — в значения, «кандидат» — в строки"
+              explanation: "В области значений считают, а группируют в строках и столбцах: с кандидатом в строках выйдет по строке на человека и никакого свода."
+      - id: excel-formatting-charts
+        title: "Условное форматирование и простые диаграммы"
+        content: lessons/excel/excel-formatting-charts.md
+        quiz:
+          question: "Нужно сравнить число увольнений в восьми отделах за 2025 год на одной картинке для встречи. Какой вид выбрать?"
+          options:
+            - id: bar-chart
+              text: "Столбчатую диаграмму: по столбцу на отдел, высота — число увольнений"
+              correct: true
+            - id: line-chart
+              text: "Линейный график: отделы по горизонтали, число увольнений — точками на линии"
+              explanation: "Линия рассказывает про развитие во времени, а у отделов нет естественного порядка — наклон линии между «ИТ» и «Финансами» ничего не означает."
+            - id: pie-chart
+              text: "Круговую диаграмму: по сектору на отдел, размер сектора — доля увольнений"
+              explanation: "Восемь секторов, часть из которых почти одинаковы, глаз сравнить не может — круговая терпима при двух-трёх долях."
+            - id: sparklines
+              text: "Спарклайны: по мини-графику в ячейке напротив каждого отдела"
+              explanation: "Спарклайн показывает динамику одного ряда внутри его ячейки, а для сравнения отделов между собой нужна общая ось."
+      - id: excel-power-query
+        title: "Power Query: повторяемая чистка данных"
+        content: lessons/excel/excel-power-query.md
+        quiz:
+          question: "Чем чистка выгрузки в Power Query принципиально отличается от той же чистки руками на листе?"
+          options:
+            - id: recorded-steps
+              text: "Шаги очистки записаны и применяются к новой выгрузке одной кнопкой «Обновить»"
+              correct: true
+            - id: auto-magic
+              text: "Power Query сам находит и исправляет ошибки в данных, без указаний"
+              explanation: "Power Query выполняет ровно те шаги, которые вы задали: что считать ошибкой и как её чинить, по-прежнему решаете вы."
+            - id: fixes-source
+              text: "Power Query исправляет сам исходный CSV-файл, поэтому грязь исчезает навсегда"
+              explanation: "Исходный файл Power Query не трогает вовсе — он читает его и строит очищенную копию; следующая выгрузка придёт такой же грязной."
+            - id: just-faster
+              text: "Power Query выполняет те же действия, что и вы, просто заметно быстрее"
+              explanation: "На полусотне строк разница в скорости неощутима: отличие не в темпе тех же действий, а в том, что действия сохраняются и повторяются."
+      - id: excel-practice-hiring
+        title: "Практика: свод по найму «Ромашки»"
+        content: lessons/excel/excel-practice-hiring.md
+        practice:
+          type: answer
+          prompt: >-
+            Посчитайте по courses/hr-analytics/data/vacancies.csv и
+            courses/hr-analytics/data/applications.csv (пути — от каталога, куда
+            распакована платформа). «Закрытая в 2025 году» — вакансия с датой в
+            столбце «закрыта» с 1 января по 31 декабря 2025 года. Срок закрытия —
+            разность дат «закрыта» и «открыта» в днях. Для третьего ответа подтяните
+            дату закрытия к откликам по «вакансия_id».
+          fields:
+            - id: closed-2025
+              label: "Сколько вакансий закрыто в 2025 году?"
+              kind: number
+              expected: 26
+            - id: avg-days-to-close
+              label: "Средний срок закрытия по закрытым в 2025 году, в днях (один знак после запятой)"
+              kind: number
+              expected: 44.6
+              tolerance: 0.5
+            - id: apps-on-closed
+              label: "Сколько всего откликов пришло на вакансии, закрытые в 2025 году?"
+              kind: number
+              expected: 500
+      - id: excel-practice-turnover
+        title: "Практика: текучесть по отделам сводной таблицей"
+        content: lessons/excel/excel-practice-turnover.md
+        practice:
+          type: answer
+          prompt: >-
+            Соберите сводную таблицу увольнений 2025 года по отделам:
+            courses/hr-analytics/data/terminations.csv плюс подтянутые ВПР-ом отдел из
+            courses/hr-analytics/data/employees.csv и
+            courses/hr-analytics/data/departments.csv (пути — от каталога, куда
+            распакована платформа). Название отдела пишите так, как оно записано в
+            departments.csv. Доля считается от всех увольнений 2025 года, в процентах.
+          fields:
+            - id: top-department
+              label: "В каком отделе больше всего увольнений за 2025 год? (название отдела)"
+              kind: text
+              expected: "Продажи"
+            - id: production-2025
+              label: "Сколько увольнений в отделе «Производство» за 2025 год?"
+              kind: number
+              expected: 6
+            - id: voluntary-share
+              label: "Доля увольнений «по собственному желанию» среди всех за 2025 год, % (один знак после запятой)"
+              kind: number
+              expected: 65.2
+              tolerance: 0.5
+  - id: sql
+    title: "Модуль 3. SQL и базы данных"
+    lessons:
+      - id: sql-case
+        title: "Кейс: данные лежат в базе, а не в Excel"
+        content: lessons/sql/sql-case.md
+      - id: sql-db-basics
+        title: "Реляционная база: таблицы, ключи, связи"
+        content: lessons/sql/sql-db-basics.md
+        quiz:
+          question: "В таблице employees у каждого сотрудника хранится department_id — число, а не название отдела. Почему база устроена именно так?"
+          options:
+            - id: reference
+              text: "Это ссылка на первичный ключ departments: название хранится один раз, и при переименовании отдела правится одна строка"
+              correct: true
+            - id: storage
+              text: "Число занимает меньше места на диске, чем текст, и экономия места — главная причина такой замены"
+              explanation: "Место число действительно экономит, но суть не в этом: department_id — связь по ключу, которая избавляет от дублирования и защищает от несуществующих отделов."
+            - id: security
+              text: "Так база прячет названия отделов от посторонних: без отдельного доступа к departments их не прочитать"
+              explanation: "Доступ к данным ограничивают права пользователя, а не замена названия числом — department_id ничего не шифрует, это открытая ссылка на строку departments."
+            - id: accident
+              text: "Это особенность конкретной выгрузки: в исходной системе в этом столбце хранится обычное название отдела"
+              explanation: "Это не случайность выгрузки, а стандартное устройство реляционной базы: столбец-ссылка на первичный ключ другой таблицы называется внешним ключом."
+      - id: sql-romashka-schema
+        title: "Схема данных «Ромашки»: семь таблиц, ключи и связи"
+        content: lessons/sql/sql-romashka-schema.md
+        quiz:
+          question: "Директор спрашивает, из каких отделов сотрудники чаще увольнялись по собственному желанию. В какой таблице лежит основание увольнения и как от него добраться до отдела?"
+          options:
+            - id: terminations-chain
+              text: "В terminations: по employee_id находим сотрудника в employees, а его department_id ведёт к названию отдела в departments"
+              correct: true
+            - id: employees-only
+              text: "В employees: основание увольнения записано там же, рядом с termination_date, а отдел — в соседнем столбце"
+              explanation: "В employees есть только дата увольнения — основание и признак добровольности хранятся отдельной записью-событием в terminations."
+            - id: departments-agg
+              text: "В departments: там по каждому отделу уже хранится сводка увольнений, остаётся отфильтровать её по основанию"
+              explanation: "В departments всего два столбца — id и название; готовых сводок база не хранит, их каждый раз считает запрос по таблицам-событиям."
+            - id: ats-raw
+              text: "В ats_raw: это выгрузка всех кадровых событий компании, включая увольнения с основаниями и отделами"
+              explanation: "ats_raw — грязная выгрузка откликов кандидатов из ATS, без ключей и без событий увольнения; к вопросу директора она отношения не имеет."
+      - id: sql-select
+        title: "SELECT: выбираем столбцы"
+        content: lessons/sql/sql-select.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Выведите ФИО (full_name) и должность (position) всех сотрудников из
+            таблицы employees — ровно два столбца, в этом порядке. Порядок строк
+            не важен. В таблице 185 строк, платформа покажет их целиком.
+          expected: "select full_name, position from employees"
+          ordered: false
+      - id: sql-where
+        title: "WHERE: фильтруем строки"
+        content: lessons/sql/sql-where.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Выведите ФИО (full_name) и дату приёма (hire_date) всех сотрудников
+            отдела с department_id = 5 (это ИТ), которые работают в компании
+            сейчас, то есть не уволены. Два столбца в этом порядке; порядок
+            строк не важен.
+          expected: "select full_name, hire_date from employees where department_id = 5 and termination_date is null"
+          ordered: false
+      - id: sql-order-limit
+        title: "ORDER BY и LIMIT"
+        content: lessons/sql/sql-order-limit.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Выведите 10 сотрудников, нанятых последними: ФИО (full_name) и дату
+            приёма (hire_date), от самых свежих дат к более ранним. Два столбца
+            в этом порядке; порядок строк — часть задания.
+          expected: "select full_name, hire_date from employees order by hire_date desc limit 10"
+          ordered: true
+      - id: sql-aggregates
+        title: "Агрегаты: COUNT, SUM, AVG, MIN, MAX"
+        content: lessons/sql/sql-aggregates.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Одним запросом и одной строкой ответьте: сколько сотрудников
+            работает в компании сейчас и какова сумма их ставок (fte)?
+            Два столбца в этом порядке: количество работающих, сумма ставок.
+          expected: "select count(*), sum(fte) from employees where termination_date is null"
+          ordered: false
+      - id: sql-group-by
+        title: "GROUP BY и HAVING: разрезы по отделам"
+        content: lessons/sql/sql-group-by.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            По каждому отделу посчитайте число работающих сейчас сотрудников и
+            покажите только отделы, где таких не меньше 10. Два столбца в этом
+            порядке: department_id и количество. Порядок строк не важен.
+          expected: "select department_id, count(*) from employees where termination_date is null group by department_id having count(*) >= 10"
+          ordered: false
+      - id: sql-dates
+        title: "Даты: стаж, периоды, DATE_TRUNC"
+        content: lessons/sql/sql-dates.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Постройте помесячную картину увольнений 2025 года по таблице
+            terminations: первый столбец — месяц (дата term_date, усечённая к
+            началу месяца), второй — число увольнений в этом месяце. Строки —
+            по возрастанию месяца; порядок строк — часть задания.
+          expected: "select date_trunc('month', term_date) as month, count(*) from terminations where term_date between date '2025-01-01' and date '2025-12-31' group by 1 order by 1"
+          ordered: true
+      - id: sql-joins
+        title: "JOIN: соединяем таблицы"
+        content: lessons/sql/sql-joins.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Все увольнения 2025 года (term_date с 1 января по 31 декабря 2025
+            включительно): выведите ФИО сотрудника (full_name), название отдела
+            (name из departments), дату увольнения (term_date) и основание
+            (reason) — ровно четыре столбца. Порядок строк не важен.
+          expected: >-
+            select e.full_name, d.name, t.term_date, t.reason
+            from terminations t
+            join employees e on e.id = t.employee_id
+            join departments d on d.id = e.department_id
+            where t.term_date between date '2025-01-01' and date '2025-12-31'
+          ordered: false
+      - id: sql-case-null
+        title: "CASE и NULL: категории и пустые значения"
+        content: lessons/sql/sql-case-null.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Для каждого сотрудника из employees (все 185 строк) выведите два
+            столбца: full_name и status — текст 'работает', если дата увольнения
+            (termination_date) пуста, иначе 'уволен'. Порядок строк не важен.
+          expected: >-
+            select full_name,
+                   case when termination_date is null then 'работает'
+                        else 'уволен' end as status
+            from employees
+          ordered: false
+      - id: sql-subqueries-cte
+        title: "Подзапросы и CTE (WITH)"
+        content: lessons/sql/sql-subqueries-cte.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            С помощью CTE: посчитайте по каждому отделу число работающих
+            сотрудников (termination_date пуста), а затем выведите department_id
+            и это число только для отделов, где работающих больше, чем в среднем
+            по отделам, — ровно два столбца: department_id, cnt. Порядок строк
+            не важен.
+          expected: >-
+            with per_dept as (
+              select department_id, count(*) as cnt
+              from employees
+              where termination_date is null
+              group by department_id
+            )
+            select department_id, cnt
+            from per_dept
+            where cnt > (select avg(cnt) from per_dept)
+          ordered: false
+      - id: sql-turnover-query
+        title: "Считаем текучесть одним запросом"
+        content: lessons/sql/sql-turnover-query.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Одним запросом посчитайте текучесть 2025 года по упрощённой формуле:
+            число увольнений за 2025 год разделите на среднее из двух
+            численностей — на 1 января 2025 и на 31 декабря 2025 (сотрудник
+            числится на дату D, если hire_date <= D и termination_date пуста или
+            >= D), — умножьте на 100 и округлите до одного знака. Ровно один
+            столбец turnover_pct и одна строка. Следите за целочисленным
+            делением.
+          expected: >-
+            with h_jan as (
+              select count(*) as n from employees
+              where hire_date <= date '2025-01-01'
+                and (termination_date is null or termination_date >= date '2025-01-01')
+            ), h_dec as (
+              select count(*) as n from employees
+              where hire_date <= date '2025-12-31'
+                and (termination_date is null or termination_date >= date '2025-12-31')
+            )
+            select round(
+              (select count(*) from terminations
+                where term_date between date '2025-01-01' and date '2025-12-31')
+              / (((select n from h_jan) + (select n from h_dec)) / 2.0) * 100, 1) as turnover_pct
+          ordered: false
+      - id: sql-recruiting-query
+        title: "Считаем time-to-fill и воронку"
+        content: lessons/sql/sql-recruiting-query.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            По каждому отделу: название отдела (name), средний срок закрытия
+            вакансии в днях (closed_on − opened_on, округлите до одного знака)
+            и число вакансий — по вакансиям, закрытым с 1 января по 31 декабря
+            2025 включительно. Ровно три столбца. Отсортируйте от самого долгого
+            среднего срока к самому быстрому; порядок строк — часть задания.
+          expected: >-
+            select d.name, round(avg(v.closed_on - v.opened_on), 1), count(*)
+            from vacancies v
+            join departments d on d.id = v.department_id
+            where v.closed_on between date '2025-01-01' and date '2025-12-31'
+            group by d.name
+            order by 2 desc
+          ordered: true
+      - id: sql-data-quality
+        title: "Ищем грязь: дубли, пропуски, аномалии"
+        content: lessons/sql/sql-data-quality.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Найдите телефоны, которые встречаются в ats_raw больше одного раза:
+            выведите telefon и число вхождений — ровно два столбца. Порядок
+            строк не важен.
+          expected: >-
+            select telefon, count(*)
+            from ats_raw
+            group by telefon
+            having count(*) > 1
+          ordered: false
+      - id: sql-modify
+        title: "INSERT и UPDATE: аккуратно меняем данные"
+        content: lessons/sql/sql-modify.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Специалист по кадрам ошибся при вводе: у сотрудника с id = 132
+            (Осипов Иван Валерьевич, отдел «Производство») в таблице employees
+            указана неверная должность. На самом деле он — мастер смены.
+            Исправьте значение position на 'мастер смены'. Измениться должна
+            ровно одна строка.
+          solution: >-
+            update employees set position = 'мастер смены' where id = 132
+      - id: sql-with-ai
+        title: "SQL + ИИ: ускоряем и проверяем"
+        content: lessons/sql/sql-with-ai.md
+        quiz:
+          question: >-
+            ИИ-ассистент написал по вашему описанию схемы запрос для отчёта.
+            Отметьте всё, что аналитик обязан сделать, прежде чем использовать
+            его результат.
+          multiple: true
+          options:
+            - id: read-through
+              text: "Прочитать запрос и убедиться, что понимает, зачем в нём каждая строка"
+              correct: true
+            - id: small-run
+              text: "Прогнать запрос на небольшом срезе и сверить число строк с ожиданием"
+              correct: true
+            - id: no-real-data
+              text: "Проверить, что в текст запроса к сервису не попали настоящие данные сотрудников — только названия таблиц и столбцов"
+              correct: true
+            - id: ask-ai-confirm
+              text: "Попросить ИИ подтвердить, что запрос верный, и считать это проверкой"
+              explanation: "ИИ так же уверенно подтверждает и свои ошибки — проверкой считается ваш прогон на данных, а не второе мнение той же модели."
+            - id: replace-joins
+              text: "Заменить в запросе все LEFT JOIN на обычный JOIN на всякий случай"
+              explanation: "Выбор соединения зависит от вопроса «кого нельзя терять», и механическая замена молча выбросит строки без пары."
+            - id: run-full
+              text: "Сразу запустить запрос на всей базе: если в нём ошибка, она проявится сама"
+              explanation: "Самые опасные ошибки — забытый период или не тот JOIN — не роняют запрос, а молча возвращают правдоподобный неверный результат."
+      - id: sql-final-practice
+        title: "Итоговая практика: отчёт по увольнениям за квартал"
+        content: lessons/sql/sql-final-practice.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            Отчёт для директора: все увольнения с 1 октября по 31 декабря 2025
+            включительно. Ровно пять столбцов: ФИО сотрудника (full_name),
+            название отдела (name), дата увольнения (term_date), основание
+            (reason) и стаж в днях (term_date − hire_date). Отсортируйте от
+            самых свежих увольнений к ранним, при одинаковой дате — по id
+            сотрудника по возрастанию; порядок строк — часть задания.
+          expected: >-
+            select e.full_name, d.name, t.term_date, t.reason,
+                   t.term_date - e.hire_date as tenure_days
+            from terminations t
+            join employees e on e.id = t.employee_id
+            join departments d on d.id = e.department_id
+            where t.term_date between date '2025-10-01' and date '2025-12-31'
+            order by t.term_date desc, e.id
+          ordered: true
+  - id: viz
+    title: "Модуль 4. Визуализация в DataLens"
+    lessons:
+      - id: viz-case
+        title: "Кейс: один экран для директора"
+        content: lessons/viz/viz-case.md
+      - id: viz-principles
+        title: "Какой график для какого вопроса"
+        content: lessons/viz/viz-principles.md
+        quiz:
+          question: "На дашборде нужно показать, в каком из восьми отделов «Ромашки» больше всего увольнений; подписи отделов длинные, вроде «Склад и логистика». Какой график выбрать?"
+          options:
+            - id: bars-horizontal
+              text: "Столбчатый график, развёрнутый горизонтально, — по столбцу на отдел"
+              correct: true
+            - id: line-by-depts
+              text: "Линейный график, где отделы отложены по горизонтальной оси"
+              explanation: "Линия отвечает на вопрос про время: между соседними отделами нет ничего промежуточного, и наклон линии между ними — мнимая динамика."
+            - id: pie-eight
+              text: "Круговая диаграмма, где у каждого отдела своя доля"
+              explanation: "Восемь долей — больше пяти: сравнить соседние куски на глаз не выйдет, да и вопрос тут про сравнение категорий, а не про долю от целого."
+            - id: indicator-total
+              text: "Индикатор с общим числом увольнений крупным шрифтом"
+              explanation: "Одно число не покажет разницы между отделами: индикатор хорош для точного значения, а вопрос — про сравнение."
+      - id: viz-datalens-start
+        title: "DataLens: начало работы и подключение данных"
+        content: lessons/viz/viz-datalens-start.md
+        quiz:
+          question: "Зачем DataLens ведёт от файла к экрану по цепочке «подключение → датасет → чарт → дашборд», а не строит график прямо из загруженного CSV?"
+          options:
+            - id: shared-layer
+              text: "Все графики опираются на общий слой данных: исправили его в одном месте — обновились все чарты сразу"
+              correct: true
+            - id: compression
+              text: "Так данные занимают меньше места: каждая ступень цепочки заново сжимает загруженный файл"
+              explanation: "Цепочка не про хранение: данные лежат в подключении один раз, остальные ступени их только описывают и показывают."
+            - id: paid-tariff
+              text: "Это ограничение бесплатного тарифа: на платном график строится из файла напрямую"
+              explanation: "Цепочка одинакова на любом тарифе — это устройство инструмента, разделяющее данные и их представление, а не платная опция."
+            - id: error-checks
+              text: "Каждая ступень — обязательная проверка данных на ошибки, без всех четырёх график не построится"
+              explanation: "Проверок на ошибки цепочка не выполняет: разделитель и типы полей вы проверяете сами при загрузке и в датасете."
+      - id: viz-datasets
+        title: "Датасеты и вычисляемые поля"
+        content: lessons/viz/viz-datasets.md
+        quiz:
+          question: "Вы собрали датасет по courses/hr-analytics/data/employees.csv. Какое из полей — показатель, а не измерение?"
+          options:
+            - id: fte
+              text: "ставка"
+              correct: true
+            - id: dept-id
+              text: "отдел_id"
+              explanation: "Это число, но складывать id бессмысленно: оно только помечает категорию — значит, это измерение."
+            - id: position
+              text: "должность"
+              explanation: "Текстовая категория: по должности группируют и фильтруют, а не считают её сумму или среднее."
+            - id: hire-date
+              text: "дата приёма"
+              explanation: "По дате фильтруют и группируют — например, по годам найма, — но сумма дат смысла не имеет: это измерение."
+      - id: viz-charts
+        title: "Чарты: линии, столбцы, таблицы, индикаторы"
+        content: lessons/viz/viz-charts.md
+        quiz:
+          question: "Собираем столбчатый чарт «Увольнения 2025 года по отделам». Как разложить поля по секциям?"
+          options:
+            - id: dept-count-desc
+              text: "Отдел — на ось X, количество увольнений — на ось Y, в сортировку — количество по убыванию"
+              correct: true
+            - id: dept-count-alpha
+              text: "Отдел — на ось X, количество увольнений — на ось Y, в сортировку — отделы по алфавиту"
+              explanation: "Оси разложены верно, но алфавит прячет ответ: смотрящий будет искать самый высокий столбец глазами, вместо того чтобы увидеть его первым."
+            - id: month-color-dept
+              text: "Месяц — на ось X, количество увольнений — на ось Y, отдел — в цвет"
+              explanation: "Получится ответ на другой вопрос — про динамику: восемь цветных серий по месяцам не дают сравнить отделы одним взглядом."
+            - id: dept-fte-desc
+              text: "Отдел — на ось X, ставка — на ось Y, в сортировку — ставка по убыванию"
+              explanation: "Показатель не тот: сумма ставок говорит о численности работающих, а вопрос был про число увольнений."
+      - id: viz-dashboard
+        title: "Дашборд: компоновка, фильтры, селекторы"
+        content: lessons/viz/viz-dashboard.md
+        quiz:
+          question: "На дашборде текучести — четыре чарта над общим датасетом и селектор «Отдел». Смотрящий выбирает в нём «Продажи». Что произойдёт?"
+          options:
+            - id: all-linked
+              text: "Все связанные с селектором чарты пересчитаются по строкам отдела «Продажи»"
+              correct: true
+            - id: nearest-only
+              text: "Пересчитается только ближайший к селектору чарт, остальные не изменятся"
+              explanation: "Сила селектора в обратном: он действует на все связанные с ним чарты сразу, поэтому экран остаётся согласованным."
+            - id: rows-deleted
+              text: "Строки остальных отделов удалятся из датасета до повторной загрузки файла"
+              explanation: "Селектор ничего не удаляет: датасет цел, фильтруется только то, что показано на экране, и только для этого смотрящего."
+            - id: highlight-only
+              text: "Столбцы «Продаж» подсветятся цветом на всех чартах, но числа останутся прежними"
+              explanation: "Селектор — фильтр, а не подсветка: чарты пересчитываются по отобранным строкам, и числа меняются."
+      - id: viz-practice-turnover
+        title: "Практика: дашборд текучести"
+        content: lessons/viz/viz-practice-turnover.md
+        practice:
+          type: answer
+          prompt: >-
+            Соберите в DataLens дашборд текучести по файлам
+            courses/hr-analytics/data/terminations.csv, employees.csv и
+            departments.csv (шаги — в тексте урока): индикатор увольнений
+            2025 года, столбцы по отделам, линия по месяцам, селектор года.
+            Ответы снимите с готового дашборда: числа — целые, отдел —
+            названием как в данных.
+          fields:
+            - id: terminations-2025
+              label: "Сколько увольнений за 2025 год показывает индикатор?"
+              kind: number
+              expected: 23
+            - id: top-department
+              label: "Отдел с наибольшим числом увольнений в 2025 году"
+              kind: text
+              expected: "Продажи"
+            - id: january-2025
+              label: "Сколько увольнений пришлось на январь 2025 года?"
+              kind: number
+              expected: 4
+      - id: viz-practice-recruiting
+        title: "Практика: дашборд найма"
+        content: lessons/viz/viz-practice-recruiting.md
+        practice:
+          type: answer
+          prompt: >-
+            Соберите в DataLens дашборд найма по файлам
+            courses/hr-analytics/data/vacancies.csv и applications.csv
+            (шаги — в тексте урока): индикатор среднего срока закрытия,
+            столбцы по этапам, средний срок по отделам, селектор периода.
+            Все три ответа — по вакансиям, закрытым в 2025 году.
+          fields:
+            - id: avg-time-to-fill
+              label: "Средний срок закрытия вакансий, закрытых в 2025 году, в днях (один знак после запятой)"
+              kind: number
+              expected: 44.6
+              tolerance: 0.5
+            - id: slowest-department
+              label: "Отдел с самым долгим средним сроком закрытия в 2025 году"
+              kind: text
+              expected: "ИТ"
+            - id: offer-and-beyond
+              label: "Сколько кандидатов дошло до этапа «оффер» и дальше? Этап в данных — максимальный достигнутый: считайте строки с этапом «оффер» или «нанят»"
+              kind: number
+              expected: 33
+      - id: viz-storytelling
+        title: "Как рассказывать по дашборду: три вывода, а не тридцать графиков"
+        content: lessons/viz/viz-storytelling.md
+        quiz:
+          multiple: true
+          question: "Вы готовите семь минут для совета директоров по дашбордам «Ромашки». Отметьте всё, что сформулировано как вывод, а не как пересказ графика."
+          options:
+            - id: sales-turnover
+              text: "Текучесть Продаж — 30,5 % против 19,2 % по компании; предлагаем начать с выходных интервью в этом отделе"
+              correct: true
+            - id: tallest-bar
+              text: "На диаграмме текучести по отделам восемь столбцов, и столбец Продаж заметно выше остальных семи"
+              explanation: "Это описание картинки, которую слушатели и так видят: нет ни опоры для сравнения, ни предложения, что делать."
+            - id: it-time-to-fill
+              text: "ИТ закрывает вакансию за 91,5 дня против 44,6 в среднем; предлагаем пересмотреть требования и каналы поиска ИТ-кандидатов"
+              correct: true
+            - id: line-wiggles
+              text: "Линия увольнений по месяцам колеблется: в январе поднимается до четырёх, к лету опускается до одного"
+              explanation: "Числа есть, но это пересказ линии: не сказано, с чем сравнивать колебания и какое действие из них следует."
+            - id: funnel-conversion
+              text: "До найма доходит 26 кандидатов из 500 откликнувшихся; если хотим нанимать больше, расширяем вход воронки"
+              correct: true
+  - id: automation
+    title: "Модуль 5. Автоматизация HR-процессов"
+    lessons:
+      - id: auto-case
+        title: "Кейс: отчёт руками каждый месяц"
+        content: lessons/automation/auto-case.md
+      - id: auto-hr-systems
+        title: "Карта HR-систем: откуда берутся данные"
+        content: lessons/automation/auto-hr-systems.md
+        quiz:
+          question: "В пятницу кандидат принял оффер, в понедельник вышел на работу. Через месяц вам нужны его точная дата приёма и оклад по договору. В какой системе источник истины?"
+          options:
+            - id: kadr
+              text: "Кадровый учёт (1С ЗУП)"
+              correct: true
+            - id: ats
+              text: "ATS"
+              explanation: "В ATS человек живёт как кандидат: дата выхода и условия из оффера могут разойтись с приказом — с момента приёма источник истины смещается в кадровый учёт."
+            - id: kedo
+              text: "КЭДО"
+              explanation: "В КЭДО лежит сам документ с подписями, а структурированные поля «дата приёма» и «оклад», по которым считают, — в кадровом учёте."
+            - id: tabel
+              text: "Табель рабочего времени"
+              explanation: "Табель отвечает на вопрос, сколько человек отработал, а не когда он принят и на каких условиях."
+      - id: auto-what-to-automate
+        title: "Что автоматизировать, а что нет"
+        content: lessons/automation/auto-what-to-automate.md
+        quiz:
+          multiple: true
+          question: "Отметьте все задачи, которые стоит автоматизировать."
+          options:
+            - id: monthly-report
+              text: "Ежемесячный отчёт по текучести по одной и той же форме для руководителей"
+              correct: true
+            - id: ats-export
+              text: "Еженедельный перенос новых откликов из ATS в общую таблицу рекрутёров"
+              correct: true
+            - id: exit-analysis
+              text: "Разовый разбор причин ухода трёх руководителей в этом квартале"
+              explanation: "Задача важная, но не повторяется и требует суждения — вложение в автоматизацию разового анализа не вернётся."
+            - id: offer-decision
+              text: "Выбор, кому из двух финалистов на вакансию сделать оффер"
+              explanation: "Решения о людях требуют суждения: автоматизировать можно подготовку данных к выбору, но не сам выбор."
+            - id: board-preso
+              text: "Квартальная презентация для директора, каждый раз с новой структурой по его запросу"
+              explanation: "Повторяется только календарно: стабильной формы нет, а значит, нет правил, которые можно записать и автоматизировать."
+      - id: auto-requirements
+        title: "Как написать ТЗ: функциональные требования"
+        content: lessons/automation/auto-requirements.md
+        quiz:
+          question: "Какое из требований к автоматическому отчёту сформулировано правильно?"
+          options:
+            - id: deadline
+              text: "Отчёт формируется автоматически к 9:00 первого рабочего дня месяца"
+              correct: true
+            - id: fast
+              text: "Отчёт формируется быстро и без лишних задержек"
+              explanation: "«Быстро» у каждого своё: проверить выполнение такого требования нельзя — нужен конкретный срок."
+            - id: usable
+              text: "Отчёт должен быть удобным и наглядным для руководителей"
+              explanation: "Удобство — пожелание, а не требование: пока оно не переписано в проверяемые признаки, спор «удобно или нет» не решается."
+            - id: python
+              text: "Отчёт формируется скриптом на Python, который берёт данные из базы"
+              explanation: "Это решение, а не требование: как реализовать — выбор исполнителя, а требование описывает результат и способ его проверить."
+      - id: auto-integrations
+        title: "Интеграции и выгрузки без кода: API, экспорт по расписанию"
+        content: lessons/automation/auto-integrations.md
+        quiz:
+          question: "Дашборд по вакансиям должен каждое утро показывать свежие данные из ATS. Что попросить у поставщика ATS?"
+          options:
+            - id: api-or-csv
+              text: "Доступ к API или выгрузку в CSV по расписанию"
+              correct: true
+            - id: manual
+              text: "Закрепить менеджера поддержки, который будет присылать выгрузку по утрам"
+              explanation: "Это «интеграция» через человека: она ломается в его отпуск, болезнь и загруженное утро — именно от ручного звена мы и уходим."
+            - id: admin
+              text: "Логин администратора ATS, чтобы выгружать данные самостоятельно"
+              explanation: "Выгрузка остаётся ручной — просто теперь её делаете вы; а административные права, которые не нужны задаче, — лишний риск."
+            - id: once
+              text: "Полную выгрузку всей базы кандидатов одним файлом"
+              explanation: "Разовая выгрузка устареет уже назавтра: задача — в регулярной доставке свежих данных, а не в архиве на сегодня."
+      - id: auto-practice-spec
+        title: "Практика: ТЗ на автоматизацию отчёта по текучести"
+        content: lessons/automation/auto-practice-spec.md
+  - id: privacy
+    title: "Модуль 6. Приватность и защита данных сотрудников"
+    lessons:
+      - id: privacy-case
+        title: "Кейс: можно ли отправить эту таблицу коллеге?"
+        content: lessons/privacy/privacy-case.md
+      - id: privacy-152fz
+        title: "152-ФЗ простыми словами"
+        content: lessons/privacy/privacy-152fz.md
+        quiz:
+          multiple: true
+          question: "Отметьте всё, что является персональными данными."
+          options:
+            - id: fio-birth
+              text: "ФИО сотрудника вместе с его датой рождения"
+              correct: true
+            - id: salary-name
+              text: "Оклад в связке с фамилией сотрудника"
+              correct: true
+            - id: work-email
+              text: "Рабочая почта сотрудника вида фамилия@romashka.ru"
+              correct: true
+            - id: avg-salary
+              text: "Средний оклад по компании — 83 967 ₽"
+              explanation: "Число похоже на «данные о зарплатах», но это итог по 120 людям сразу: определить по нему конкретного человека нельзя."
+            - id: term-count
+              text: "Число уволившихся за 2025 год — 23 человека"
+              explanation: "Это счёт событий по компании в целом: цифра 23 не относится ни к одному определённому человеку."
+      - id: privacy-anonymization
+        title: "Обезличивание и агрегация"
+        content: lessons/privacy/privacy-anonymization.md
+        practice:
+          type: answer
+          prompt: >-
+            Посмотрите на таблицу «отдел × пол» в тексте урока и примените порог
+            k = 5. Отвечайте целыми числами.
+          fields:
+            - id: groups-under-5
+              label: "Сколько групп в таблице меньше 5 человек?"
+              kind: number
+              expected: 6
+              tolerance: 0
+            - id: min-group-size
+              label: "Сколько человек в самой маленькой группе?"
+              kind: number
+              expected: 2
+              tolerance: 0
+      - id: privacy-ai-tools
+        title: "Данные и ИИ-сервисы: что нельзя отправлять во внешние модели"
+        content: lessons/privacy/privacy-ai-tools.md
+        quiz:
+          multiple: true
+          question: "Отметьте всё, что можно вставить в запрос к внешнему облачному ИИ-сервису."
+          options:
+            - id: schema
+              text: "Названия таблиц и столбцов вашей базы, без единой строки данных"
+              correct: true
+            - id: formula
+              text: "Формулу текучести и просьбу написать по ней SQL-запрос"
+              correct: true
+            - id: fio-salary
+              text: "Таблицу «ФИО — оклад» по одному отделу с просьбой найти аномалии"
+              explanation: "Размер таблицы не имеет значения: это передача персональных данных на чужой сервер — пусть ИИ напишет запрос, а выполните его вы у себя."
+            - id: candidates
+              text: "Выгрузку кандидатов из ATS с телефонами — они ведь ещё не сотрудники"
+              explanation: "Кандидаты — такие же люди, и их данные такие же персональные: отсутствие трудового договора не даёт права их пересылать."
+            - id: contract
+              text: "Текст трудового договора сотрудника с просьбой кратко его пересказать"
+              explanation: "Договор целиком состоит из данных конкретного человека — от ФИО до оклада, и просьба «просто пересказать» этого не меняет."
+      - id: privacy-practice-checklist
+        title: "Практика: чек-лист приватности для отчёта"
+        content: lessons/privacy/privacy-practice-checklist.md
+        quiz:
+          multiple: true
+          question: "Файл к собранию: ФИО уволившихся за квартал, причины, оклады, возраст; уходит по корпоративной почте всем начальникам отделов. Отметьте всё, что нужно исправить перед отправкой."
+          options:
+            - id: aggregate
+              text: "Убрать ФИО, оклады и возраст: для разговора о причинах ухода достаточно итогов по отделам"
+              correct: true
+            - id: small-groups
+              text: "Проверить размеры групп: отдел, где уволился один человек, раскрывает его даже без ФИО"
+              correct: true
+            - id: recipients
+              text: "Пересмотреть рассылку: каждому начальнику — его отдел, а не данные всей компании"
+              correct: true
+            - id: ask-delete
+              text: "Отправить файл как есть, но попросить получателей удалить его после собрания"
+              explanation: "Передача происходит в момент отправки, а не огласки: просьба удалить ничего не отменяет и не заменяет исправление самого файла."
+            - id: percent
+              text: "Пересчитать оклады из рублей в проценты от среднего по компании"
+              explanation: "Связка «человек — его значение» никуда не делась: пересчёт единиц не мешает определить, чей это оклад."
+            - id: paper
+              text: "Отказаться от почты и раздать бумажные копии на собрании"
+              explanation: "Канал здесь не проблема — корпоративная почта допустима, а бумага передаёт ровно те же данные тому же кругу."
+  - id: forecasting
+    title: "Модуль 7 (по желанию). Прогнозы и эксперименты"
+    lessons:
+      - id: forecast-case
+        title: "Кейс: кто уйдёт следующим?"
+        content: lessons/forecasting/forecast-case.md
+      - id: forecast-trends
+        title: "Тренды и сезонность"
+        content: lessons/forecasting/forecast-trends.md
+        quiz:
+          question: "Перед вами четыре наблюдения за увольнениями. В каком из них виден именно тренд?"
+          options:
+            - id: rolling-up
+              text: "Скользящее среднее увольнений за 12 месяцев растёт третий год подряд"
+              correct: true
+            - id: january-peak
+              text: "Каждый январь увольнений заметно больше, чем в среднем за месяц, — и так все три года"
+              explanation: "Повторяющийся из года в год рисунок внутри года — это сезонность: устойчивого движения от года к году здесь нет."
+            - id: single-spike
+              text: "В одном месяце уволилось втрое больше обычного, а в следующем — снова как всегда"
+              explanation: "Одиночный всплеск без продолжения — это шум: на малых числах такое случается само собой и ничего не предвещает."
+            - id: neighbor-months
+              text: "В этом месяце на одно увольнение больше, чем в прошлом месяце"
+              explanation: "Разница в одно событие между соседними месяцами — обычное случайное колебание; по нему нельзя судить ни о тренде, ни о сезонности."
+      - id: forecast-cohorts
+        title: "Когортный анализ: удержание по волнам найма"
+        content: lessons/forecasting/forecast-cohorts.md
+        quiz:
+          question: "По таблице урока: когорта 2023 года — 24 нанятых, до года дожили 18 (75,0 %); когорта 2024 года — 25 нанятых, дожили 18 (72,0 %). Какой вывод корректен?"
+          options:
+            - id: retention-similar
+              text: "Удержание первого года почти не изменилось: 75,0 % против 72,0 %, разница — один человек"
+              correct: true
+            - id: company-turnover
+              text: "Текучесть компании за 2024 год составила 28,0 % — это следует прямо из таблицы"
+              explanation: "28,0 % — это доля ушедших за первый год из одной волны найма; текучесть компании считается по всем сотрудникам через среднесписочную численность — это другая метрика."
+            - id: still-working-now
+              text: "Из 49 нанятых за эти два года на конец 2025 года в компании работают ровно 36"
+              explanation: "Таблица говорит, кто дожил до стажа 365 дней, а не кто работает сейчас: часть из этих 36 могла уйти уже после первой годовщины."
+            - id: hiring-got-worse
+              text: "В 2024 году нанимать стали хуже: людей взяли больше, а до года дожило столько же"
+              explanation: "Разница между когортами — один человек на выборке в 25, это шум, а не доказательство ухудшения найма (вспомните малые выборки из модуля 1)."
+      - id: forecast-experiments
+        title: "Эксперименты и пилоты: A/B в HR без иллюзий"
+        content: lessons/forecasting/forecast-experiments.md
+        quiz:
+          multiple: true
+          question: "«Ромашка» запускает пилот наставничества в одном отделе. Отметьте всё, что верно про такой пилот."
+          options:
+            - id: criteria-first
+              text: "Критерий успеха записывается до старта: какая метрика, за какой срок, с чем сравниваем"
+              correct: true
+            - id: compare-peers
+              text: "Отдел с пилотом сравнивают не только с самим собой «до», но и с другими отделами за тот же период"
+              correct: true
+            - id: small-numbers
+              text: "Снижение текучести на пару увольнений за квартал ещё не доказывает, что помог именно пилот"
+              correct: true
+            - id: before-after
+              text: "Если после запуска текучесть в отделе упала, причина найдена — можно внедрять во всей компании"
+              explanation: "«После» не значит «вследствие»: за то же время могли измениться оклады, руководитель или сезон — сравнение «до/после» не отделяет пилот от всего остального."
+            - id: salary-experiment
+              text: "Для чистоты сравнения можно повысить оклады половине отдела и посмотреть на текучесть второй половины"
+              explanation: "Эксперименты с зарплатой на живых людях недопустимы: вторая половина узнает о разнице и получит настоящую причину уйти — вред реален, а не статистический."
+            - id: shorter-better
+              text: "Чем короче пилот, тем надёжнее вывод: меньше успеет измениться вокруг"
+              explanation: "На малых числах короткий пилот ловит шум, а не эффект: пара случайных увольнений перевешивает любую пользу наставничества, поэтому наблюдать нужно дольше, а не меньше."
+      - id: forecast-risk-models
+        title: "Простые модели риска: правила и веса, без машинного обучения"
+        content: lessons/forecasting/forecast-risk-models.md
+        practice:
+          type: answer
+          prompt: >-
+            Посчитайте балл риска каждого из трёх сотрудников из таблицы урока
+            по модели из четырёх правил. Срез — 31 декабря 2025 года; ответ —
+            целое число баллов.
+          fields:
+            - id: score-a
+              label: "Балл риска сотрудника А (менеджер по продажам)"
+              kind: number
+              expected: 5
+              tolerance: 0
+            - id: score-b
+              label: "Балл риска сотрудника Б (наладчик)"
+              kind: number
+              expected: 3
+              tolerance: 0
+            - id: score-c
+              label: "Балл риска сотрудника В (бухгалтер)"
+              kind: number
+              expected: 0
+              tolerance: 0
+      - id: forecast-practice-cohorts
+        title: "Практика: когорты удержания SQL-запросом"
+        content: lessons/forecasting/forecast-practice-cohorts.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            По сотрудникам, нанятым с 1 января 2023 года по 31 декабря 2024
+            года, посчитайте по каждому году найма: сам год, сколько человек
+            нанято, сколько из них доработало минимум до 365 дней стажа или
+            работает до сих пор. Столбцы по порядку: cohort_year (год числом),
+            hired, kept. Строки — по возрастанию года.
+          # Порядок строк — часть условия («по возрастанию года»), поэтому
+          # ordered: true. Прогон на scratch: 2023|24|18, 2024|25|18.
+          expected: >-
+            select extract(year from hire_date) as cohort_year,
+                   count(*) as hired,
+                   sum(case when termination_date is null
+                             or termination_date - hire_date >= 365
+                        then 1 else 0 end) as kept
+            from employees
+            where hire_date between date '2023-01-01' and date '2024-12-31'
+            group by 1
+            order by 1
+          ordered: true
+  - id: capstone
+    title: "Итоговый проект"
+    lessons:
+      - id: capstone-brief
+        title: "Задание: вопрос от директора «Ромашки»"
+        content: lessons/capstone/capstone-brief.md
+      - id: capstone-data
+        title: "Этап 1: достаём и проверяем данные (SQL)"
+        content: lessons/capstone/capstone-data.md
+        practice:
+          sandbox: romashka
+          prompt: >-
+            По каждому отделу «Ромашки» посчитайте: название отдела, число
+            работающих на 31 декабря 2025 года, число уволившихся за 2025 год,
+            число нанятых за 2025 год. Столбцы по порядку: name, headcount,
+            terms_2025, hires_2025. Строки — по алфавиту названия отдела
+            (латинское «HR» идёт первым).
+          # Порядок строк — часть условия, ordered: true. Сортировка по name
+          # проверена на scratch (латиница раньше кириллицы): HR,
+          # Администрация, ИТ, Маркетинг, Продажи, Производство,
+          # Склад и логистика, Финансы — 8 строк.
+          expected: >-
+            with headcount as (
+              select department_id, count(*) as headcount
+              from employees
+              where hire_date <= date '2025-12-31'
+                and (termination_date is null or termination_date >= date '2025-12-31')
+              group by department_id
+            ),
+            terms as (
+              select e.department_id, count(*) as terms_2025
+              from terminations t
+              join employees e on e.id = t.employee_id
+              where t.term_date between date '2025-01-01' and date '2025-12-31'
+              group by e.department_id
+            ),
+            hires as (
+              select department_id, count(*) as hires_2025
+              from employees
+              where hire_date between date '2025-01-01' and date '2025-12-31'
+              group by department_id
+            )
+            select d.name,
+                   coalesce(h.headcount, 0) as headcount,
+                   coalesce(t.terms_2025, 0) as terms_2025,
+                   coalesce(r.hires_2025, 0) as hires_2025
+            from departments d
+            left join headcount h on h.department_id = d.id
+            left join terms t on t.department_id = d.id
+            left join hires r on r.department_id = d.id
+            order by d.name
+          ordered: true
+      - id: capstone-metrics
+        title: "Этап 2: считаем метрики и проверяем на здравый смысл"
+        content: lessons/capstone/capstone-metrics.md
+        practice:
+          type: answer
+          prompt: >-
+            Посчитайте четыре показателя за 2025 год по данным «Ромашки» —
+            SQL-запросами в песочнице или по CSV из courses/hr-analytics/data/
+            (каталог лежит там, куда распакована платформа). Проценты и дни —
+            с округлением до одного знака после запятой.
+          fields:
+            - id: turnover-sales
+              label: "Текучесть отдела Продажи за 2025 год, %"
+              kind: number
+              expected: 30.5
+              tolerance: 0.5
+            - id: turnover-it
+              label: "Текучесть отдела ИТ за 2025 год, %"
+              kind: number
+              expected: 7.2
+              tolerance: 0.4
+            - id: ttf-it
+              label: "Средний time-to-fill отдела ИТ по вакансиям, закрытым в 2025 году, в днях"
+              kind: number
+              expected: 91.5
+              tolerance: 1
+            - id: voluntary-share
+              label: "Доля уволившихся по собственному желанию за 2025 год, %"
+              kind: number
+              expected: 65.2
+              tolerance: 0.5
+      - id: capstone-dashboard
+        title: "Этап 3: дашборд"
+        content: lessons/capstone/capstone-dashboard.md
+      - id: capstone-story
+        title: "Этап 4: три вывода для директора"
+        content: lessons/capstone/capstone-story.md

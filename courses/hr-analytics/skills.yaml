@@ -1,0 +1,707 @@
+# План курса «HR-аналитика с нуля»: какие умения он строит, в каком
+# порядке и чем проверяется каждый урок.
+#
+# Движок этот файл не читает — он нужен только линту
+# (`npm run course:lint -- courses/hr-analytics`). Формат — courses/README.md.
+version: 1
+
+skills:
+  # Введение
+  - id: use-platform
+    title: "Двигаться по курсу: сдавать квизы, практику и самоотметки"
+  # Модуль 1 — метрики и статистика
+  - id: define-metric
+    title: "Определить метрику до расчёта: формула, период, кто включён"
+  - id: headcount-kinds
+    title: "Посчитать списочную и среднесписочную численность и FTE"
+    requires: [define-metric]
+  - id: turnover-formula
+    title: "Посчитать текучесть через среднесписочную численность"
+    requires: [headcount-kinds]
+  - id: recruiting-metrics
+    title: "Посчитать воронку найма, time-to-fill и cost-per-hire"
+    requires: [define-metric]
+  - id: early-turnover
+    title: "Выделить раннюю текучесть и связать её с адаптацией"
+    requires: [turnover-formula]
+  - id: engagement-metrics
+    title: "Посчитать eNPS и абсентеизм по данным опроса и табеля"
+    requires: [define-metric]
+  - id: training-metrics
+    title: "Оценить обучение: завершаемость, оценка, окупаемость"
+    requires: [define-metric]
+  - id: descriptive-stats
+    title: "Описать распределение: медиана, разброс, перцентили"
+  - id: stats-caution
+    title: "Не обмануться малой выборкой и сравнением несравнимого"
+    requires: [descriptive-stats]
+  - id: ru-hr-context
+    title: "Учитывать российскую специфику: основания увольнения, декрет, срочные договоры"
+    requires: [turnover-formula]
+  # Модуль 2 — Excel
+  - id: tidy-data
+    title: "Держать данные плоской таблицей: одна строка — одна запись"
+  - id: clean-data
+    title: "Вычистить выгрузку: дубликаты, пропуски, ошибки в датах"
+    requires: [tidy-data]
+  - id: conditional-formulas
+    title: "Посчитать по условию: СЧЁТЕСЛИМН, СУММЕСЛИМН, даты"
+    requires: [tidy-data]
+  - id: lookup-functions
+    title: "Подтянуть данные из другой таблицы: ВПР, ИНДЕКС/ПОИСКПОЗ"
+    requires: [tidy-data]
+  - id: pivot-tables
+    title: "Собрать разрез по группам сводной таблицей"
+    requires: [tidy-data]
+  - id: excel-charts
+    title: "Подсветить главное: условное форматирование и диаграмма"
+    requires: [pivot-tables]
+  - id: power-query
+    title: "Сделать чистку повторяемой через Power Query"
+    requires: [clean-data]
+  # Модуль 3 — SQL
+  - id: relational-basics
+    title: "Читать реляционную схему: таблицы, ключи, связи"
+  - id: romashka-schema
+    title: "Ориентироваться в схеме данных «Ромашки»"
+    requires: [relational-basics]
+  - id: sql-select
+    title: "Выбрать нужные столбцы запросом SELECT"
+    requires: [romashka-schema]
+  - id: sql-filter
+    title: "Отобрать строки условием WHERE"
+    requires: [sql-select]
+  - id: sql-order
+    title: "Упорядочить и ограничить выдачу: ORDER BY, LIMIT"
+    requires: [sql-select]
+  - id: sql-aggregate
+    title: "Свернуть столбец в число: COUNT, SUM, AVG, MIN, MAX"
+    requires: [sql-select]
+  - id: sql-group
+    title: "Посчитать разрез по группам: GROUP BY и HAVING"
+    requires: [sql-aggregate]
+  - id: sql-dates
+    title: "Работать с датами: стаж, периоды, усечение к месяцу"
+    requires: [sql-filter]
+  - id: sql-join
+    title: "Соединить таблицы через JOIN"
+    requires: [sql-select]
+  - id: sql-case-null
+    title: "Разложить значения по категориям: CASE и работа с NULL"
+    requires: [sql-filter]
+  - id: sql-cte
+    title: "Разбить расчёт на шаги: подзапросы и CTE"
+    requires: [sql-group]
+  - id: sql-data-quality
+    title: "Найти в таблице дубли, пропуски и аномалии запросом"
+    requires: [sql-group]
+  - id: sql-modify
+    title: "Аккуратно изменить данные: INSERT и UPDATE с условием"
+    requires: [sql-filter]
+  - id: ai-sql-check
+    title: "Использовать ИИ для черновика запроса и проверить его руками"
+    requires: [sql-select]
+  # Модуль 4 — DataLens
+  - id: chart-choice
+    title: "Выбрать тип графика под вопрос"
+  - id: datalens-basics
+    title: "Подключить данные в DataLens"
+  - id: datalens-datasets
+    title: "Собрать датасет и вычисляемое поле"
+    requires: [datalens-basics]
+  - id: datalens-charts
+    title: "Построить чарт: линия, столбцы, таблица, индикатор"
+    requires: [datalens-datasets, chart-choice]
+  - id: dashboards
+    title: "Собрать дашборд с фильтрами и селекторами"
+    requires: [datalens-charts]
+  - id: data-story
+    title: "Сформулировать по дашборду выводы, а не пересказ графиков"
+    requires: [dashboards]
+  # Модуль 5 — автоматизация
+  - id: hr-systems-map
+    title: "Понимать, в какой системе рождается каждое HR-данное"
+  - id: automation-choice
+    title: "Решить, что автоматизировать, а что оставить руками"
+    requires: [hr-systems-map]
+  - id: write-requirements
+    title: "Написать проверяемые функциональные требования"
+    requires: [automation-choice]
+  - id: integration-basics
+    title: "Объяснить, как системы обмениваются данными без ручной выгрузки"
+    requires: [hr-systems-map]
+  # Модуль 6 — приватность
+  - id: pd-law
+    title: "Понимать, что считается персональными данными и что требует 152-ФЗ"
+  - id: anonymization
+    title: "Обезличить отчёт агрегацией и проверить его на узкие группы"
+    requires: [pd-law]
+  - id: ai-data-hygiene
+    title: "Решить, какие данные нельзя отправлять во внешние ИИ-сервисы"
+    requires: [pd-law]
+  # Модуль 7 — прогнозы
+  - id: seasonality
+    title: "Отличить сезонность от тренда и от шума"
+    requires: [stats-caution]
+  - id: cohort-analysis
+    title: "Посчитать удержание когорт по волнам найма"
+    requires: [turnover-formula]
+  - id: hr-experiments
+    title: "Спланировать пилот с контрольной группой без иллюзии причинности"
+    requires: [stats-caution]
+  - id: risk-scoring
+    title: "Собрать простую модель риска ухода из правил и весов"
+    requires: [early-turnover, cohort-analysis]
+
+terms:
+  # --- Модуль 1 ---
+  - term: метрика
+    introduced_in: metrics-what-is-metric
+    mentioned_before: [metrics-case]
+  - term: среднесписочная численность
+    forms: ["среднесписочной", "среднесписочную"]
+    introduced_in: metrics-headcount
+  - term: списочная численность
+    introduced_in: metrics-headcount
+  - term: FTE
+    introduced_in: metrics-headcount
+  - term: текучесть
+    introduced_in: metrics-turnover
+    mentioned_before: [metrics-case, metrics-what-is-metric]
+  - term: воронка найма
+    forms: ["воронка", "воронку", "воронке"]
+    introduced_in: metrics-recruiting
+  - term: time-to-fill
+    introduced_in: metrics-recruiting
+  - term: time-to-hire
+    introduced_in: metrics-recruiting
+  - term: cost-per-hire
+    introduced_in: metrics-recruiting
+  - term: ATS
+    introduced_in: metrics-recruiting
+    mentioned_before: [intro-romashka]
+  - term: адаптация
+    introduced_in: metrics-onboarding
+  - term: вовлечённость
+    introduced_in: metrics-engagement
+  - term: eNPS
+    introduced_in: metrics-engagement
+  - term: абсентеизм
+    introduced_in: metrics-engagement
+  - term: медиана
+    introduced_in: metrics-stats-basics
+  - term: перцентиль
+    forms: ["перцентили", "перцентилей"]
+    introduced_in: metrics-stats-basics
+  - term: корреляция
+    introduced_in: metrics-stats-traps
+  # --- Модуль 2 ---
+  - term: сводная таблица
+    forms: ["сводной таблицей", "сводные таблицы", "сводных таблиц"]
+    introduced_in: excel-pivots
+    mentioned_before: [excel-case]
+  - term: ВПР
+    introduced_in: excel-lookup
+  - term: Power Query
+    introduced_in: excel-power-query
+  - term: СЧЁТЕСЛИМН
+    introduced_in: excel-formulas
+  - term: СУММЕСЛИМН
+    introduced_in: excel-formulas
+  # --- Модуль 3 ---
+  - term: SQL
+    introduced_in: sql-case
+    mentioned_before: [intro-how-it-works, intro-romashka]
+  - term: первичный ключ
+    forms: ["первичного ключа", "первичным ключом"]
+    introduced_in: sql-db-basics
+  - term: внешний ключ
+    forms: ["внешнего ключа", "внешним ключом", "внешние ключи"]
+    introduced_in: sql-db-basics
+  - term: SELECT
+    introduced_in: sql-select
+    grants: [sql:select]
+    mentioned_before: [sql-case, sql-db-basics, sql-romashka-schema]
+  - term: WHERE
+    introduced_in: sql-where
+    grants: [sql:where]
+    mentioned_before: [sql-select]
+  - term: ORDER BY
+    introduced_in: sql-order-limit
+    grants: [sql:order-by]
+    mentioned_before: [sql-select]
+  - term: LIMIT
+    introduced_in: sql-order-limit
+    grants: [sql:limit]
+  - term: агрегатная функция
+    forms: ["агрегатные функции", "агрегатных функций", "агрегат", "агрегаты"]
+    introduced_in: sql-aggregates
+    grants: [sql:aggregate]
+  - term: DISTINCT
+    introduced_in: sql-aggregates
+    grants: [sql:distinct]
+  - term: GROUP BY
+    introduced_in: sql-group-by
+    grants: [sql:group-by]
+    mentioned_before: [sql-aggregates]
+  - term: HAVING
+    introduced_in: sql-group-by
+    grants: [sql:having]
+  - term: "NULL"
+    introduced_in: sql-romashka-schema
+    grants: [sql:null-check]
+  - term: JOIN
+    introduced_in: sql-joins
+    grants: [sql:join]
+    mentioned_before: [sql-db-basics, sql-romashka-schema]
+  - term: CASE
+    introduced_in: sql-case-null
+    grants: [sql:case]
+  - term: подзапрос
+    forms: ["подзапросы", "подзапросов", "подзапросом"]
+    introduced_in: sql-subqueries-cte
+    grants: [sql:subquery]
+  - term: CTE
+    forms: ["WITH"]
+    introduced_in: sql-subqueries-cte
+    grants: [sql:cte]
+  - term: INSERT
+    forms: ["INSERT INTO"]
+    introduced_in: sql-modify
+    grants: [sql:insert]
+  - term: UPDATE
+    introduced_in: sql-modify
+    grants: [sql:update]
+  - term: DATE_TRUNC
+    introduced_in: sql-dates
+    grants: [sql:date-function]
+  - term: LIKE
+    introduced_in: sql-where
+    grants: [sql:like]
+  - term: BETWEEN
+    introduced_in: sql-where
+    grants: [sql:between]
+  - term: IN
+    introduced_in: sql-where
+    grants: [sql:in]
+  # --- Модуль 4 ---
+  - term: дашборд
+    forms: ["дашборды", "дашбордов"]
+    introduced_in: viz-case
+    mentioned_before: [intro-romashka]
+  - term: датасет
+    forms: ["датасеты", "датасетов"]
+    introduced_in: viz-datasets
+    mentioned_before: [viz-datalens-start]
+  - term: чарт
+    forms: ["чарты", "чартов"]
+    introduced_in: viz-charts
+    mentioned_before: [viz-datalens-start, viz-datasets]
+  - term: вычисляемое поле
+    forms: ["вычисляемые поля", "вычисляемых полей"]
+    introduced_in: viz-datasets
+  - term: селектор
+    forms: ["селекторы", "селекторов"]
+    introduced_in: viz-dashboard
+  # --- Модуль 5 ---
+  - term: API
+    introduced_in: auto-integrations
+    mentioned_before: [auto-hr-systems]
+  - term: ТЗ
+    introduced_in: auto-requirements
+    mentioned_before: [auto-case, auto-what-to-automate]
+  - term: HRIS
+    introduced_in: auto-hr-systems
+  # --- Модуль 6 ---
+  - term: персональные данные
+    forms: ["персональных данных", "персональными данными"]
+    introduced_in: privacy-152fz
+    mentioned_before: [privacy-case]
+  - term: 152-ФЗ
+    introduced_in: privacy-152fz
+    mentioned_before: [privacy-case]
+  - term: обезличивание
+    forms: ["обезличить", "обезличенный", "обезличенных"]
+    introduced_in: privacy-anonymization
+  - term: k-анонимность
+    forms: ["k-анонимности"]
+    introduced_in: privacy-anonymization
+  # --- Модуль 7 ---
+  - term: сезонность
+    forms: ["сезонности", "сезонностью"]
+    introduced_in: forecast-trends
+    mentioned_before: [metrics-stats-traps]
+  - term: когорта
+    forms: ["когорты", "когорт", "когортой", "когортный", "когортного"]
+    introduced_in: forecast-cohorts
+    mentioned_before: [forecast-case]
+  - term: контрольная группа
+    forms: ["контрольной группы", "контрольную группу"]
+    introduced_in: forecast-experiments
+
+lessons:
+  # Введение
+  - id: intro-how-it-works
+    teaches: [use-platform]
+    verify: quiz
+    hours: 0.5
+  - id: intro-romashka
+    requires: [intro-how-it-works]
+    verify: self
+    hours: 0.5
+  # Модуль 1
+  - id: metrics-case
+    verify: self
+    hours: 0.5
+  - id: metrics-what-is-metric
+    teaches: [define-metric]
+    requires: [metrics-case]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-headcount
+    teaches: [headcount-kinds]
+    requires: [metrics-what-is-metric]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-turnover
+    teaches: [turnover-formula]
+    requires: [metrics-headcount]
+    verify: quiz
+    hours: 2
+  - id: metrics-turnover-practice
+    requires: [metrics-turnover]
+    verify: answer
+    hours: 2
+  - id: metrics-recruiting
+    teaches: [recruiting-metrics]
+    requires: [metrics-what-is-metric]
+    verify: quiz
+    hours: 2
+  - id: metrics-onboarding
+    teaches: [early-turnover]
+    requires: [metrics-turnover]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-engagement
+    teaches: [engagement-metrics]
+    requires: [metrics-what-is-metric]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-training
+    teaches: [training-metrics]
+    requires: [metrics-what-is-metric]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-stats-basics
+    teaches: [descriptive-stats]
+    requires: [metrics-what-is-metric]
+    verify: answer
+    hours: 2
+  - id: metrics-stats-traps
+    teaches: [stats-caution]
+    requires: [metrics-stats-basics]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-ru-specifics
+    teaches: [ru-hr-context]
+    requires: [metrics-turnover]
+    verify: quiz
+    hours: 1.5
+  - id: metrics-practice-set
+    requires: [metrics-turnover-practice, metrics-recruiting, metrics-stats-basics]
+    verify: answer
+    hours: 2.5
+  # Модуль 2
+  - id: excel-case
+    verify: self
+    hours: 0.5
+  - id: excel-tidy-data
+    teaches: [tidy-data]
+    requires: [excel-case]
+    verify: quiz
+    hours: 1.5
+  - id: excel-cleaning
+    teaches: [clean-data]
+    requires: [excel-tidy-data]
+    verify: answer
+    hours: 1.5
+  - id: excel-formulas
+    teaches: [conditional-formulas]
+    requires: [excel-tidy-data]
+    verify: answer
+    hours: 2
+  - id: excel-lookup
+    teaches: [lookup-functions]
+    requires: [excel-tidy-data]
+    verify: quiz
+    hours: 2
+  - id: excel-pivots
+    teaches: [pivot-tables]
+    requires: [excel-tidy-data]
+    verify: quiz
+    hours: 2
+  - id: excel-formatting-charts
+    teaches: [excel-charts]
+    requires: [excel-pivots]
+    verify: quiz
+    hours: 1
+  - id: excel-power-query
+    teaches: [power-query]
+    requires: [excel-cleaning]
+    verify: quiz
+    hours: 1.5
+  - id: excel-practice-hiring
+    requires: [excel-formulas, excel-lookup]
+    verify: answer
+    hours: 1.5
+  - id: excel-practice-turnover
+    requires: [excel-pivots, metrics-turnover]
+    verify: answer
+    hours: 1.5
+  # Модуль 3
+  - id: sql-case
+    verify: self
+    hours: 0.5
+  - id: sql-db-basics
+    teaches: [relational-basics]
+    requires: [sql-case]
+    verify: quiz
+    hours: 1.5
+  - id: sql-romashka-schema
+    teaches: [romashka-schema]
+    requires: [sql-db-basics]
+    verify: quiz
+    hours: 1.5
+  - id: sql-select
+    teaches: [sql-select]
+    requires: [sql-romashka-schema]
+    verify: sql-result
+    hours: 1.5
+  - id: sql-where
+    teaches: [sql-filter]
+    requires: [sql-select]
+    verify: sql-result
+    hours: 2
+  - id: sql-order-limit
+    teaches: [sql-order]
+    requires: [sql-where]
+    verify: sql-result
+    hours: 1
+  - id: sql-aggregates
+    teaches: [sql-aggregate]
+    requires: [sql-where]
+    verify: sql-result
+    hours: 2
+  - id: sql-group-by
+    teaches: [sql-group]
+    requires: [sql-aggregates]
+    verify: sql-result
+    hours: 2.5
+  - id: sql-dates
+    teaches: [sql-dates]
+    requires: [sql-where]
+    verify: sql-result
+    hours: 2
+  - id: sql-joins
+    teaches: [sql-join]
+    requires: [sql-group-by]
+    verify: sql-result
+    hours: 3
+  - id: sql-case-null
+    teaches: [sql-case-null]
+    requires: [sql-joins]
+    verify: sql-result
+    hours: 2
+  - id: sql-subqueries-cte
+    teaches: [sql-cte]
+    requires: [sql-group-by]
+    verify: sql-result
+    hours: 2.5
+  - id: sql-turnover-query
+    requires: [sql-subqueries-cte, sql-dates, metrics-turnover]
+    verify: sql-result
+    hours: 2
+  - id: sql-recruiting-query
+    requires: [sql-joins, sql-dates, metrics-recruiting]
+    verify: sql-result
+    hours: 2
+  - id: sql-data-quality
+    teaches: [sql-data-quality]
+    requires: [sql-group-by]
+    verify: sql-result
+    hours: 2
+  - id: sql-modify
+    teaches: [sql-modify]
+    requires: [sql-where]
+    verify: sql-state
+    hours: 1.5
+  - id: sql-with-ai
+    teaches: [ai-sql-check]
+    requires: [sql-joins]
+    verify: quiz
+    hours: 2
+  - id: sql-final-practice
+    requires: [sql-turnover-query, sql-case-null]
+    verify: sql-result
+    hours: 2.5
+  # Модуль 4
+  - id: viz-case
+    verify: self
+    hours: 0.5
+  - id: viz-principles
+    teaches: [chart-choice]
+    requires: [viz-case]
+    verify: quiz
+    hours: 2
+  - id: viz-datalens-start
+    teaches: [datalens-basics]
+    requires: [viz-case]
+    verify: quiz
+    hours: 2
+  - id: viz-datasets
+    teaches: [datalens-datasets]
+    requires: [viz-datalens-start]
+    verify: quiz
+    hours: 2
+  - id: viz-charts
+    teaches: [datalens-charts]
+    requires: [viz-datasets, viz-principles]
+    verify: quiz
+    hours: 2
+  - id: viz-dashboard
+    teaches: [dashboards]
+    requires: [viz-charts]
+    verify: quiz
+    hours: 2
+  - id: viz-practice-turnover
+    requires: [viz-dashboard, metrics-turnover]
+    verify: answer
+    hours: 2.5
+  - id: viz-practice-recruiting
+    requires: [viz-dashboard, metrics-recruiting]
+    verify: answer
+    hours: 2.5
+  - id: viz-storytelling
+    teaches: [data-story]
+    requires: [viz-dashboard]
+    verify: quiz
+    hours: 1.5
+  # Модуль 5
+  - id: auto-case
+    verify: self
+    hours: 0.5
+  - id: auto-hr-systems
+    teaches: [hr-systems-map]
+    requires: [auto-case]
+    verify: quiz
+    hours: 2.5
+  - id: auto-what-to-automate
+    teaches: [automation-choice]
+    requires: [auto-hr-systems]
+    verify: quiz
+    hours: 1.5
+  - id: auto-requirements
+    teaches: [write-requirements]
+    requires: [auto-what-to-automate]
+    verify: quiz
+    hours: 2
+  - id: auto-integrations
+    teaches: [integration-basics]
+    requires: [auto-hr-systems]
+    verify: quiz
+    hours: 2
+  - id: auto-practice-spec
+    requires: [auto-requirements]
+    verify: self
+    hours: 2.5
+  # Модуль 6
+  - id: privacy-case
+    verify: self
+    hours: 0.5
+  - id: privacy-152fz
+    teaches: [pd-law]
+    requires: [privacy-case]
+    verify: quiz
+    hours: 1.5
+  - id: privacy-anonymization
+    teaches: [anonymization]
+    requires: [privacy-152fz]
+    verify: answer
+    hours: 1.5
+  - id: privacy-ai-tools
+    teaches: [ai-data-hygiene]
+    requires: [privacy-152fz]
+    verify: quiz
+    hours: 1
+  - id: privacy-practice-checklist
+    requires: [privacy-anonymization, privacy-ai-tools]
+    verify: quiz
+    hours: 1
+  # Модуль 7
+  - id: forecast-case
+    verify: self
+    hours: 0.5
+  - id: forecast-trends
+    teaches: [seasonality]
+    requires: [forecast-case, metrics-stats-traps]
+    verify: quiz
+    hours: 2
+  - id: forecast-cohorts
+    teaches: [cohort-analysis]
+    requires: [forecast-trends, metrics-turnover]
+    verify: quiz
+    hours: 2.5
+  - id: forecast-experiments
+    teaches: [hr-experiments]
+    requires: [metrics-stats-traps]
+    verify: quiz
+    hours: 2.5
+  - id: forecast-risk-models
+    teaches: [risk-scoring]
+    requires: [forecast-cohorts, metrics-onboarding]
+    verify: answer
+    hours: 2.5
+  - id: forecast-practice-cohorts
+    requires: [forecast-cohorts, sql-subqueries-cte]
+    verify: sql-result
+    hours: 3
+  # Итоговый проект
+  - id: capstone-brief
+    verify: self
+    hours: 0.5
+  - id: capstone-data
+    requires: [capstone-brief, sql-final-practice]
+    verify: sql-result
+    hours: 3
+  - id: capstone-metrics
+    requires: [capstone-data, metrics-practice-set]
+    verify: answer
+    hours: 2.5
+  - id: capstone-dashboard
+    requires: [capstone-metrics, viz-dashboard]
+    verify: self
+    hours: 3
+  - id: capstone-story
+    requires: [capstone-dashboard, viz-storytelling]
+    verify: self
+    hours: 2
+
+modules:
+  - id: intro
+    budget_hours: 1.5
+  - id: metrics
+    budget_hours: 23
+  - id: excel
+    budget_hours: 16
+  - id: sql
+    budget_hours: 35
+  - id: viz
+    budget_hours: 18
+  - id: automation
+    budget_hours: 11.5
+  - id: privacy
+    budget_hours: 6
+  - id: forecasting
+    budget_hours: 13.5
+  - id: capstone
+    budget_hours: 11.5
