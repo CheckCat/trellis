@@ -280,7 +280,7 @@ modules:
               expected: 49.9
               tolerance: 0.5
             - id: enps
-              label: "eNPS весеннего опроса (целое число)"
+              label: "eNPS декабрьского опроса (целое число)"
               kind: number
               expected: 12
               tolerance: 0
